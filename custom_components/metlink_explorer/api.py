@@ -35,6 +35,33 @@ class MetlinkApiClient:
                 for route in filtered
             ]
 
+    async def get_trips(self, route_id):
+        url = f"{API_BASE_URL}/gtfs/trips"
+        headers = {"x-api-key": self.api_key}
+        params = {"route_id": route_id}
+        async with self.session.get(url, headers=headers, params=params) as resp:
+            if resp.status != 200:
+                return []
+            return await resp.json()
+
+    async def get_stop_times(self, trip_id):
+        url = f"{API_BASE_URL}/gtfs/stop_times"
+        headers = {"x-api-key": self.api_key}
+        params = {"trip_id": trip_id}
+        async with self.session.get(url, headers=headers, params=params) as resp:
+            if resp.status != 200:
+                return []
+            return await resp.json()
+
+    async def get_stops_by_ids(self, stop_ids):
+        url = f"{API_BASE_URL}/gtfs/stops"
+        headers = {"x-api-key": self.api_key}
+        async with self.session.get(url, headers=headers) as resp:
+            if resp.status != 200:
+                return []
+            stops = await resp.json()
+            return [stop for stop in stops if stop["stop_id"] in stop_ids]
+
     async def get_calendar(self, route_id):
         url = f"{API_BASE_URL}/gtfs/calendar"
         headers = {"x-api-key": self.api_key}
@@ -42,34 +69,12 @@ class MetlinkApiClient:
             if resp.status != 200:
                 return []
             data = await resp.json()
-            # Filter by route_id if possible (GTFS calendar may not have route_id, so return all)
             return data
 
     async def get_calendar_dates(self, route_id):
         url = f"{API_BASE_URL}/gtfs/calendar_dates"
         headers = {"x-api-key": self.api_key}
         async with self.session.get(url, headers=headers) as resp:
-            if resp.status != 200:
-                return []
-            data = await resp.json()
-            # Filter by route_id if possible (GTFS calendar_dates may not have route_id, so return all)
-            return data
-
-    async def get_stop_times(self, route_id):
-        url = f"{API_BASE_URL}/gtfs/stop_times"
-        headers = {"x-api-key": self.api_key}
-        params = {"route_id": route_id}
-        async with self.session.get(url, headers=headers, params=params) as resp:
-            if resp.status != 200:
-                return []
-            data = await resp.json()
-            return data
-
-    async def get_stops(self, route_id):
-        url = f"{API_BASE_URL}/gtfs/stops"
-        headers = {"x-api-key": self.api_key}
-        params = {"route_id": route_id}
-        async with self.session.get(url, headers=headers, params=params) as resp:
             if resp.status != 200:
                 return []
             data = await resp.json()

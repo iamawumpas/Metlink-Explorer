@@ -11,6 +11,7 @@ ENTITY_TYPES = {
 }
 
 PLACEHOLDER = "--- Select a route or start typing ---"
+STOP_PLACEHOLDER = "--- Select a stop ---"
 
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
@@ -57,7 +58,6 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "no_routes"
                 self.route_options = []
             else:
-                # Build selector options: value=route_id, label=friendly name
                 self.route_options = [
                     {"value": "", "label": PLACEHOLDER}
                 ] + [
@@ -71,17 +71,9 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 # Find the friendly name for the selected route_id
                 route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
-                entity_title = f"{ENTITY_TYPES[self.entity_type]} :: {route_name}"
-                return self.async_create_entry(
-                    title=entity_title,
-                    data={
-                        CONF_API_KEY: self.api_key,
-                        "entity_type": self.entity_type,
-                        "route_id": route_id,
-                        "route_name": route_name,
-                    },
-                )
-        # Use "route_name" as the key for correct value handling
+                self.route_id = route_id
+                self.route_name = route_name
+                return await self.async_step_stops()
         return self.async_show_form(
             step_id="route",
             data_schema=vol.Schema({
@@ -91,6 +83,72 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         mode=selector.SelectSelectorMode.DROPDOWN
                     )
                 )
+            }),
+            errors=errors,
+        )
+
+    async def async_step_stops(self, user_input=None):
+        errors = {}
+        if not hasattr(self, "stop_options"):
+            # Get trips for the selected route
+            client = MetlinkApiClient(self.api_key)
+            trips = await client.get_trips(self.route_id)
+            await client.close()
+            if not trips:
+                errors["base"] = "no_trips"
+                self.stop_options = []
+            else:
+                # Use the first trip as representative
+                trip_id = trips[0]["trip_id"]
+                client = MetlinkApiClient(self.api_key)
+                stop_times = await client.get_stop_times(trip_id)
+                await client.close()
+                stop_ids = [st["stop_id"] for st in stop_times]
+                client = MetlinkApiClient(self.api_key)
+                stops = await client.get_stops_by_ids(stop_ids)
+                await client.close()
+                # Build selector options: value=stop_id, label=stop_name
+                self.stop_options = [
+                    {"value": "", "label": STOP_PLACEHOLDER}
+                ] + [
+                    {"value": stop["stop_id"], "label": stop["stop_name"]}
+                    for stop in stops
+                ]
+        if user_input is not None and self.stop_options:
+            departure_stop = user_input["departure_stop"]
+            destination_stop = user_input["destination_stop"]
+            if not departure_stop or not destination_stop:
+                if not departure_stop:
+                    errors["departure_stop"] = "select_departure_stop"
+                if not destination_stop:
+                    errors["destination_stop"] = "select_destination_stop"
+            else:
+                return self.async_create_entry(
+                    title=f"{ENTITY_TYPES[self.entity_type]} :: {self.route_name}",
+                    data={
+                        CONF_API_KEY: self.api_key,
+                        "entity_type": self.entity_type,
+                        "route_id": self.route_id,
+                        "route_name": self.route_name,
+                        "departure_stop": departure_stop,
+                        "destination_stop": destination_stop,
+                    },
+                )
+        return self.async_show_form(
+            step_id="stops",
+            data_schema=vol.Schema({
+                vol.Required("departure_stop", default=""): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self.stop_options if hasattr(self, "stop_options") else [],
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                ),
+                vol.Required("destination_stop", default=""): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self.stop_options if hasattr(self, "stop_options") else [],
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                ),
             }),
             errors=errors,
         )
