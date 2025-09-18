@@ -10,7 +10,7 @@ ENTITY_TYPES = {
     "ferry": "Ferry"
 }
 
-PLACEHOLDER = "--- Select a route ---"
+PLACEHOLDER = "--- Select a route or start typing ---"
 
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
@@ -48,50 +48,34 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_route(self, user_input=None):
         errors = {}
-        if not hasattr(self, "routes"):
+        if not hasattr(self, "route_options"):
             # Fetch routes from API
             client = MetlinkApiClient(self.api_key)
             routes = await client.get_routes(self.entity_type)
             await client.close()
             if not routes:
                 errors["base"] = "no_routes"
-                self.routes = {}
+                self.route_options = []
             else:
-                # Friendly name as key, route_id as value
-                route_dict = {
-                    f"{route['route_short_name']} - {route['route_long_name']}": route["route_id"]
-                    for route in sorted(routes, key=lambda r: r["route_long_name"])
-                }
-                # Insert placeholder at the top
-                self.routes = {PLACEHOLDER: ""}  # Non-selectable value
-                self.routes.update(route_dict)
-                # For selector, build a list of options (excluding placeholder)
+                # Build selector options: value=route_id, label=friendly name
                 self.route_options = [
-                    {"value": route_id, "label": name}
-                    for name, route_id in self.routes.items()
-                    if name != PLACEHOLDER
+                    {"value": route["route_id"], "label": f"{route['route_short_name']} - {route['route_long_name']}"}
+                    for route in sorted(routes, key=lambda r: r["route_long_name"])
                 ]
-        if user_input is not None and self.routes:
+        if user_input is not None and self.route_options:
             route_id = user_input["route_name"]
-            if not route_id or route_id == "":
-                errors["route_name"] = "select_route"
-            else:
-                # Find the friendly name for the selected route_id
-                route_name = next((name for name, rid in self.routes.items() if rid == route_id), route_id)
-                entity_title = (
-                    f"{ENTITY_TYPES[self.entity_type]} :: {route_name}"
-                    if self.entity_type == "ferry"
-                    else f"{ENTITY_TYPES[self.entity_type]} {route_name}"
-                )
-                return self.async_create_entry(
-                    title=entity_title,
-                    data={
-                        CONF_API_KEY: self.api_key,
-                        "entity_type": self.entity_type,
-                        "route_id": route_id,
-                        "route_name": route_name,
-                    },
-                )
+            # Find the friendly name for the selected route_id
+            route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
+            entity_title = f"{ENTITY_TYPES[self.entity_type]} :: {route_name}"
+            return self.async_create_entry(
+                title=entity_title,
+                data={
+                    CONF_API_KEY: self.api_key,
+                    "entity_type": self.entity_type,
+                    "route_id": route_id,
+                    "route_name": route_name,
+                },
+            )
         # Always use selector for dropdown
         return self.async_show_form(
             step_id="route",
