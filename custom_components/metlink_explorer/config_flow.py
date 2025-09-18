@@ -15,6 +15,9 @@ PLACEHOLDER = "--- Select a route or start typing ---"
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
 
+    def __init__(self):
+        self.entries = []
+
     async def async_step_user(self, user_input=None):
         errors = {}
         if user_input is not None:
@@ -120,10 +123,8 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             }
                         })
                     if entries:
-                        return self.async_create_entry(
-                            title=f"{ENTITY_TYPES[self.entity_type]} :: {route_name}",
-                            data={"entities": entries}
-                        )
+                        self.entries.extend(entries)
+                        return await self.async_step_add_another()
                     else:
                         errors["base"] = "no_direction_trips"
         return self.async_show_form(
@@ -137,4 +138,25 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             }),
             errors=errors,
+        )
+
+    async def async_step_add_another(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            if user_input["add_another"]:
+                return await self.async_step_entity_type()
+            else:
+                # Finish and create entry with all selected routes
+                return self.async_create_entry(
+                    title="Metlink Explorer",
+                    data={"entities": self.entries}
+                )
+        return self.async_show_form(
+            step_id="add_another",
+            data_schema=vol.Schema({
+                vol.Required("add_another", default=False): selector.BooleanSelector()
+            }),
+            description_placeholders={
+                "question": "Do you want to add another route?"
+            }
         )
