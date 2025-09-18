@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Metlink Explorer Setup",
+        "description": "Enter your Metlink API key."
+      }
+    },
+    "error": {
+      "invalid_api_key": "Invalid API key. Please check and try again."
+    }
+  }
+}
