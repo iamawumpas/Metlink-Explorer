@@ -29,14 +29,11 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_api_key"
         return self.async_show_form(
             step_id="user",
-            data_schema=self._user_schema(),
+            data_schema=vol.Schema({
+                vol.Required(CONF_API_KEY): str
+            }),
             errors=errors,
         )
-
-    def _user_schema(self):
-        return {
-            vol.Required(CONF_API_KEY): str
-        }
 
     async def async_step_entity_type(self, user_input=None):
         errors = {}
@@ -45,19 +42,11 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_route()
         return self.async_show_form(
             step_id="entity_type",
-            data_schema=self._entity_type_schema(),
+            data_schema=vol.Schema({
+                vol.Required("entity_type", default="train"): vol.In(ENTITY_TYPES)
+            }),
             errors=errors,
         )
-
-    def _entity_type_schema(self):
-        return {
-            "entity_type": selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[{"value": k, "label": v} for k, v in ENTITY_TYPES.items()],
-                    mode=selector.SelectSelectorMode.DROPDOWN
-                )
-            )
-        }
 
     async def async_step_route(self, user_input=None):
         errors = {}
@@ -138,16 +127,13 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         errors["base"] = "no_direction_trips"
         return self.async_show_form(
             step_id="route",
-            data_schema=self._route_schema(),
+            data_schema=vol.Schema({
+                vol.Required("route_name", default=""): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self.route_options if hasattr(self, "route_options") else [],
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                )
+            }),
             errors=errors,
         )
-
-    def _route_schema(self):
-        return {
-            "route_name": selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=self.route_options if hasattr(self, "route_options") else [],
-                    mode=selector.SelectSelectorMode.DROPDOWN
-                )
-            )
-        }
