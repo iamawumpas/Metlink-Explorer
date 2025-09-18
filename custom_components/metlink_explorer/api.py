@@ -62,6 +62,14 @@ class MetlinkApiClient:
             stops = await resp.json()
             return [stop for stop in stops if stop["stop_id"] in stop_ids]
 
+    async def get_stops(self):
+        url = f"{API_BASE_URL}/gtfs/stops"
+        headers = {"x-api-key": self.api_key}
+        async with self.session.get(url, headers=headers) as resp:
+            if resp.status != 200:
+                return []
+            return await resp.json()
+
     async def get_calendar(self, route_id):
         url = f"{API_BASE_URL}/gtfs/calendar"
         headers = {"x-api-key": self.api_key}
