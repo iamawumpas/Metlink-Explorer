@@ -81,11 +81,11 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "route_name": route_name,
                     },
                 )
-        # Always use selector for dropdown, with placeholder as first option
+        # Use "route_name" as the key for correct value handling
         return self.async_show_form(
             step_id="route",
             data_schema=vol.Schema({
-                vol.Required("", default=""): selector.SelectSelector(
+                vol.Required("route_name", default=""): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=self.route_options if hasattr(self, "route_options") else [],
                         mode=selector.SelectSelectorMode.DROPDOWN
