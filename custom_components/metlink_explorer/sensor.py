@@ -62,30 +62,29 @@ class MetlinkExplorerSensor(Entity):
             predictions = [predictions]
         elif predictions is None:
             predictions = []
-        # Filter predictions for this route only (should already be filtered by API)
         predictions = [p for p in predictions if p.get("route_id") == self._route_id]
-
         pred_lookup = {}
         for pred in predictions:
             pred_lookup.setdefault(pred["stop_id"], []).append(pred)
 
-        # 5. Get alerts for this route only
+        # 5. Get alerts for this route only and normalize to a list of alert objects
         alerts = await self._client.get_service_alerts(self._route_id)
-        if isinstance(alerts, list):
-            alerts = [
-                a for a in alerts
-                if any(ent.get("route_id") == self._route_id for ent in a.get("alert", {}).get("informed_entity", []))
-            ]
+        if isinstance(alerts, dict) and "entity" in alerts:
+            # GTFS-RT format: {'header': {...}, 'entity': [{...}, {...}]}
+            alerts = [e["alert"] for e in alerts["entity"] if "alert" in e]
+        elif isinstance(alerts, list):
+            alerts = [a["alert"] if "alert" in a else a for a in alerts]
         elif isinstance(alerts, dict) and "alert" in alerts:
-            informed = alerts["alert"].get("informed_entity", [])
-            if not any(ent.get("route_id") == self._route_id for ent in informed):
-                alerts = []
-            else:
-                alerts = [alerts["alert"]]
+            alerts = [alerts["alert"]]
         elif isinstance(alerts, dict):
             alerts = [alerts]
         elif alerts is None:
             alerts = []
+        # Filter alerts for this route only
+        alerts = [
+            a for a in alerts
+            if any(ent.get("route_id") == self._route_id for ent in a.get("informed_entity", []))
+        ] if alerts else []
         self._extra_state_attributes["alerts"] = alerts
 
         # 6. Get trip updates for this route only
@@ -131,6 +130,9 @@ class MetlinkExplorerSensor(Entity):
                 "realtime_predictions": realtime,
             })
         self._extra_state_attributes["route_stops"] = route_stops
+
+        # 10. Add route_name as a top-level attribute for markdown cards
+        self._extra_state_attributes["route_name"] = self._route_name
 
         self._state = len(route_stops)
         _LOGGER.info("Route stops: %s", route_stops)
