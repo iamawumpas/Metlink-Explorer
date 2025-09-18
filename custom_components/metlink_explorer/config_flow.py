@@ -12,6 +12,12 @@ ENTITY_TYPES = {
 
 PLACEHOLDER = "--- Select a route or start typing ---"
 
+# Friendly step names for UI
+STEP_USER = "API Key"
+STEP_ENTITY_TYPE = "Transport Type"
+STEP_ROUTE = "Route Selection"
+STEP_ADD_ANOTHER = "Add Another Route"
+
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
 
@@ -31,11 +37,12 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 errors["base"] = "invalid_api_key"
         return self.async_show_form(
-            step_id="user",
+            step_id=STEP_USER,
             data_schema=vol.Schema({
                 vol.Required(CONF_API_KEY): str
             }),
             errors=errors,
+            description="Enter your Metlink API Key."
         )
 
     async def async_step_entity_type(self, user_input=None):
@@ -44,7 +51,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.entity_type = user_input["entity_type"]
             return await self.async_step_route()
         return self.async_show_form(
-            step_id="entity_type",
+            step_id=STEP_ENTITY_TYPE,
             data_schema=vol.Schema({
                 vol.Required("entity_type", default="train"): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -54,6 +61,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             }),
             errors=errors,
+            description="Select the type of transport."
         )
 
     async def async_step_route(self, user_input=None):
@@ -128,7 +136,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     else:
                         errors["base"] = "no_direction_trips"
         return self.async_show_form(
-            step_id="route",
+            step_id=STEP_ROUTE,
             data_schema=vol.Schema({
                 vol.Required("route_name", default=""): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -138,6 +146,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             }),
             errors=errors,
+            description="Select the route you want to add."
         )
 
     async def async_step_add_another(self, user_input=None):
@@ -152,11 +161,9 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={"entities": self.entries}
                 )
         return self.async_show_form(
-            step_id="add_another",
+            step_id=STEP_ADD_ANOTHER,
             data_schema=vol.Schema({
                 vol.Required("add_another", default=False): selector.BooleanSelector()
             }),
-            description_placeholders={
-                "question": "Do you want to add another route?"
-            }
+            description="Do you want to add another route?"
         )
