@@ -1,5 +1,4 @@
 from homeassistant import config_entries
-from homeassistant.helpers import selector
 import voluptuous as vol
 from .const import DOMAIN, CONF_API_KEY
 from .api import MetlinkApiClient
@@ -43,7 +42,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="entity_type",
             data_schema=vol.Schema({
-                vol.Required("entity_type", default="train"): vol.In(ENTITY_TYPES)
+                vol.Required("entity_type", default="train"): vol.In(list(ENTITY_TYPES.keys()))
             }),
             errors=errors,
         )
@@ -70,14 +69,12 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["route_name"] = "select_route"
             else:
                 route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
-                # Fetch trips for both directions and create two entities
                 client = MetlinkApiClient(self.api_key)
                 trips = await client.get_trips(route_id)
                 await client.close()
                 if not trips:
                     errors["base"] = "no_trips"
                 else:
-                    # Group trips by direction_id
                     dir_trips = {0: None, 1: None}
                     for trip in trips:
                         dir_id = trip.get("direction_id")
@@ -94,7 +91,6 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         await client.close()
                         if not stop_times or not stops:
                             continue
-                        # Get first and last stop
                         first_stop_id = stop_times[0]["stop_id"]
                         last_stop_id = stop_times[-1]["stop_id"]
                         stop_lookup = {stop["stop_id"]: stop["stop_name"] for stop in stops}
@@ -118,22 +114,18 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             }
                         })
                     if entries:
-                        # Create a group entry with both directions
                         return self.async_create_entry(
                             title=f"{ENTITY_TYPES[self.entity_type]} :: {route_name}",
                             data={"entities": entries}
                         )
                     else:
                         errors["base"] = "no_direction_trips"
+        # Only show non-empty options in the dropdown
+        valid_options = [opt["value"] for opt in self.route_options if opt["value"]]
         return self.async_show_form(
             step_id="route",
             data_schema=vol.Schema({
-                vol.Required("route_name", default=""): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=self.route_options if hasattr(self, "route_options") else [],
-                        mode=selector.SelectSelectorMode.DROPDOWN
-                    )
-                )
+                vol.Required("route_name", default=""): vol.In(valid_options)
             }),
             errors=errors,
         )
