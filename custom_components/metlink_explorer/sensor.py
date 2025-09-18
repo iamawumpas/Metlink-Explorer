@@ -1,51 +1,55 @@
-from homeassistant.helpers.entity import Entity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from .const import DOMAIN
-from .api import MetlinkApiClient
+import logging
+_LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    api_key = entry.data["api_key"]
-    entity_type = entry.data["entity_type"]
-    route_id = entry.data["route_id"]
-    route_name = entry.data["route_name"]
-    departure_stop = entry.data.get("departure_stop")
-    destination_stop = entry.data.get("destination_stop")
-    client = MetlinkApiClient(api_key)
-    async_add_entities([
-        MetlinkExplorerSensor(client, entity_type, route_id, route_name, departure_stop, destination_stop)
-    ])
+async def async_update(self):
+    # 1. Get all trips for the route
+    trips = await self._client.get_trips(self._route_id)
+    if not trips:
+        self._extra_state_attributes["route_stops"] = []
+        self._state = 0
+        return
 
-class MetlinkExplorerSensor(Entity):
-    def __init__(self, client, entity_type, route_id, route_name, departure_stop, destination_stop):
-        self._client = client
-        self._entity_type = entity_type
-        self._route_id = route_id
-        self._route_name = route_name
-        self._departure_stop = departure_stop
-        self._destination_stop = destination_stop
-        self._attr_name = f"{entity_type.title()} :: {route_name}"
-        self._attr_unique_id = f"{entity_type}_{route_id}".replace(" ", "_").lower()
-        self._state = None
-        self._extra_state_attributes = {}
+    # 2. Pick the first trip (or improve logic to select the right one)
+    trip_id = trips[0]["trip_id"]
 
-    @property
-    def state(self):
-        return self._state
+    # 3. Get stop times for the trip (ordered)
+    stop_times = await self._client.get_stop_times(trip_id)
+    stop_ids = [st["stop_id"] for st in stop_times]
 
-    @property
-    def extra_state_attributes(self):
-        return self._extra_state_attributes
+    # 4. Get stop details
+    stops = await self._client.get_stops_by_ids(stop_ids)
+    stop_lookup = {stop["stop_id"]: stop for stop in stops}
 
-    async def async_update(self):
-        # Example: fetch and expose some attributes
-        self._extra_state_attributes["calendar"] = await self._client.get_calendar(self._route_id)
-        self._extra_state_attributes["calendar_dates"] = await self._client.get_calendar_dates(self._route_id)
-        self._extra_state_attributes["service_alerts"] = await self._client.get_service_alerts(self._route_id)
-        self._extra_state_attributes["trip_updates"] = await self._client.get_trip_updates(self._route_id)
-        self._extra_state_attributes["trip_cancellations"] = await self._client.get_trip_cancellations(self._route_id)
-        self._extra_state_attributes["departure_predictions"] = await self._client.get_departure_predictions(self._route_id)
-        # Optionally, fetch stops for the route
-        self._extra_state_attributes["stops"] = await self._client.get_stops()
-        # Set state to something meaningful, e.g. number of predictions
-        self._state = len(self._extra_state_attributes["departure_predictions"]) if self._extra_state_attributes["departure_predictions"] else 0
+    # 5. Get real-time predictions for each stop
+    predictions = await self._client.get_departure_predictions(self._route_id)
+    pred_lookup = {}
+    for pred in predictions:
+        pred_lookup.setdefault(pred["stop_id"], []).append(pred)
+
+    # 6. Get alerts and trip updates
+    alerts = await self._client.get_service_alerts(self._route_id)
+    trip_updates = await self._client.get_trip_updates(self._route_id)
+    cancellations = await self._client.get_trip_cancellations(self._route_id)
+
+    # 7. Build the route info
+    route_stops = []
+    for st in stop_times:
+        stop_id = st["stop_id"]
+        stop_info = stop_lookup.get(stop_id, {})
+        scheduled_time = st.get("departure_time")
+        realtime = pred_lookup.get(stop_id, [])
+        route_stops.append({
+            "stop_id": stop_id,
+            "stop_name": stop_info.get("stop_name"),
+            "scheduled_departure": scheduled_time,
+            "realtime_predictions": realtime,
+        })
+
+    self._extra_state_attributes["route_stops"] = route_stops
+    self._extra_state_attributes["alerts"] = alerts
+    self._extra_state_attributes["trip_updates"] = trip_updates
+    self._extra_state_attributes["cancellations"] = cancellations
+
+    # Set state to number of stops or next departure, as you wish
+    self._state = len(route_stops)
+    _LOGGER.info("Route stops: %s", route_stops)
