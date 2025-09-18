@@ -1,5 +1,6 @@
 from homeassistant import config_entries
 from homeassistant.helpers import selector
+import voluptuous as vol
 from .const import DOMAIN, CONF_API_KEY
 from .api import MetlinkApiClient
 
