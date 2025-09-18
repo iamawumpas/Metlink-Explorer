@@ -50,7 +50,6 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_route(self, user_input=None):
         errors = {}
         if not hasattr(self, "route_options"):
-            # Fetch routes from API
             client = MetlinkApiClient(self.api_key)
             routes = await client.get_routes(self.entity_type)
             await client.close()
@@ -69,7 +68,6 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not route_id:
                 errors["route_name"] = "select_route"
             else:
-                # Find the friendly name for the selected route_id
                 route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
                 self.route_id = route_id
                 self.route_name = route_name
@@ -90,7 +88,6 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_stops(self, user_input=None):
         errors = {}
         if not hasattr(self, "stop_options"):
-            # Get trips for the selected route
             client = MetlinkApiClient(self.api_key)
             trips = await client.get_trips(self.route_id)
             await client.close()
@@ -98,21 +95,20 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "no_trips"
                 self.stop_options = []
             else:
-                # Use the first trip as representative
                 trip_id = trips[0]["trip_id"]
                 client = MetlinkApiClient(self.api_key)
                 stop_times = await client.get_stop_times(trip_id)
                 await client.close()
-                stop_ids = [st["stop_id"] for st in stop_times]
+                stop_ids_in_order = [st["stop_id"] for st in stop_times]
                 client = MetlinkApiClient(self.api_key)
-                stops = await client.get_stops_by_ids(stop_ids)
+                stops = await client.get_stops_by_ids(stop_ids_in_order)
                 await client.close()
-                # Build selector options: value=stop_id, label=stop_name
+                stop_lookup = {stop["stop_id"]: stop["stop_name"] for stop in stops}
                 self.stop_options = [
                     {"value": "", "label": STOP_PLACEHOLDER}
                 ] + [
-                    {"value": stop["stop_id"], "label": stop["stop_name"]}
-                    for stop in stops
+                    {"value": stop_id, "label": stop_lookup.get(stop_id, stop_id)}
+                    for stop_id in stop_ids_in_order
                 ]
         if user_input is not None and self.stop_options:
             departure_stop = user_input["departure_stop"]

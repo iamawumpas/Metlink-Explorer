@@ -19,13 +19,11 @@ class MetlinkApiClient:
             if resp.status != 200:
                 return []
             data = await resp.json()
-            # Filter by entity type
             type_map = {"bus": 3, "train": 2, "ferry": 4}
             filtered = [
                 route for route in data
                 if route.get("route_type") == type_map[entity_type]
             ]
-            # Only return routes with required fields
             return [
                 {
                     "route_id": route.get("route_id"),
@@ -76,8 +74,7 @@ class MetlinkApiClient:
         async with self.session.get(url, headers=headers) as resp:
             if resp.status != 200:
                 return []
-            data = await resp.json()
-            return data
+            return await resp.json()
 
     async def get_calendar_dates(self, route_id):
         url = f"{API_BASE_URL}/gtfs/calendar_dates"
@@ -85,8 +82,7 @@ class MetlinkApiClient:
         async with self.session.get(url, headers=headers) as resp:
             if resp.status != 200:
                 return []
-            data = await resp.json()
-            return data
+            return await resp.json()
 
     async def get_service_alerts(self, route_id):
         url = f"{API_BASE_URL}/gtfs-rt/servicealerts"
@@ -95,8 +91,7 @@ class MetlinkApiClient:
         async with self.session.get(url, headers=headers, params=params) as resp:
             if resp.status != 200:
                 return []
-            data = await resp.json()
-            return data
+            return await resp.json()
 
     async def get_departure_predictions(self, route_id):
         url = f"{API_BASE_URL}/stop-predictions"
@@ -105,8 +100,7 @@ class MetlinkApiClient:
         async with self.session.get(url, headers=headers, params=params) as resp:
             if resp.status != 200:
                 return []
-            data = await resp.json()
-            return data
+            return await resp.json()
 
     async def get_trip_updates(self, route_id):
         url = f"{API_BASE_URL}/gtfs-rt/tripupdates"
@@ -115,8 +109,7 @@ class MetlinkApiClient:
         async with self.session.get(url, headers=headers, params=params) as resp:
             if resp.status != 200:
                 return []
-            data = await resp.json()
-            return data
+            return await resp.json()
 
     async def get_trip_cancellations(self, route_id):
         url = f"{API_BASE_URL}/trip-cancellations"
@@ -125,8 +118,7 @@ class MetlinkApiClient:
         async with self.session.get(url, headers=headers, params=params) as resp:
             if resp.status != 200:
                 return []
-            data = await resp.json()
-            return data
+            return await resp.json()
 
     async def close(self):
         await self.session.close()
