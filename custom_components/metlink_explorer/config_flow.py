@@ -126,11 +126,15 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         )
                     else:
                         errors["base"] = "no_direction_trips"
-        valid_options = [opt["value"] for opt in self.route_options if opt["value"]]
         return self.async_show_form(
             step_id="route",
             data_schema=vol.Schema({
-                vol.Required("route_name", default=""): vol.In(valid_options)
+                vol.Required("route_name", default=""): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self.route_options if hasattr(self, "route_options") else [],
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                )
             }),
             errors=errors,
         )
