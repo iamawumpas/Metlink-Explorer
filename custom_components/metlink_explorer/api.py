@@ -21,7 +21,19 @@ class MetlinkApiClient:
             data = await resp.json()
             # Filter by entity type
             type_map = {"bus": 3, "train": 2, "ferry": 4}
-            return [route for route in data if route.get("route_type") == type_map[entity_type]]
+            filtered = [
+                route for route in data
+                if route.get("route_type") == type_map[entity_type]
+            ]
+            # Only return routes with required fields
+            return [
+                {
+                    "route_id": route.get("route_id"),
+                    "route_short_name": route.get("route_short_name", ""),
+                    "route_long_name": route.get("route_long_name", "")
+                }
+                for route in filtered
+            ]
 
     async def close(self):
         await self.session.close()

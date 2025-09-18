@@ -9,6 +9,8 @@ ENTITY_TYPES = {
     "ferry": "Ferry"
 }
 
+PLACEHOLDER = "--- Select a route ---"
+
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
 
@@ -55,31 +57,37 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.routes = {}
             else:
                 # Friendly name as key, route_id as value
-                self.routes = {
+                route_dict = {
                     f"{route['route_short_name']} - {route['route_long_name']}": route["route_id"]
                     for route in sorted(routes, key=lambda r: r["route_long_name"])
                 }
+                # Insert placeholder at the top
+                self.routes = {PLACEHOLDER: ""}  # Non-selectable value
+                self.routes.update(route_dict)
         if user_input is not None and self.routes:
             route_name = user_input["route_name"]
-            route_id = self.routes[route_name]
-            entity_title = (
-                f"{ENTITY_TYPES[self.entity_type]} :: {route_name}"
-                if self.entity_type == "ferry"
-                else f"{ENTITY_TYPES[self.entity_type]} {route_name}"
-            )
-            return self.async_create_entry(
-                title=entity_title,
-                data={
-                    CONF_API_KEY: self.api_key,
-                    "entity_type": self.entity_type,
-                    "route_id": route_id,
-                    "route_name": route_name,
-                },
-            )
+            if route_name == PLACEHOLDER:
+                errors["route_name"] = "select_route"
+            else:
+                route_id = self.routes[route_name]
+                entity_title = (
+                    f"{ENTITY_TYPES[self.entity_type]} :: {route_name}"
+                    if self.entity_type == "ferry"
+                    else f"{ENTITY_TYPES[self.entity_type]} {route_name}"
+                )
+                return self.async_create_entry(
+                    title=entity_title,
+                    data={
+                        CONF_API_KEY: self.api_key,
+                        "entity_type": self.entity_type,
+                        "route_id": route_id,
+                        "route_name": route_name,
+                    },
+                )
         return self.async_show_form(
             step_id="route",
             data_schema=vol.Schema({
-                vol.Required("route_name"): vol.In(list(self.routes.keys())) if self.routes else str
+                vol.Required("route_name", default=PLACEHOLDER): vol.In(list(self.routes.keys()))
             }),
             errors=errors,
         )
