@@ -40,56 +40,84 @@ class MetlinkExplorerSensor(Entity):
         return self._extra_state_attributes
 
     async def async_update(self):
+        # 1. Get all trips for the route
         trips = await self._client.get_trips(self._route_id)
         if not trips:
             self._extra_state_attributes["route_stops"] = []
             self._state = 0
             return
 
+        # 2. Pick the first trip (or improve logic to select the right one)
         trip_id = trips[0]["trip_id"]
+
+        # 3. Get stop times for the trip (ordered)
         stop_times = await self._client.get_stop_times(trip_id)
         stop_ids = [st["stop_id"] for st in stop_times]
         stops = await self._client.get_stops_by_ids(stop_ids)
         stop_lookup = {stop["stop_id"]: stop for stop in stops}
+
+        # 4. Get real-time predictions for this route only
         predictions = await self._client.get_departure_predictions(self._route_id)
+        if isinstance(predictions, dict):
+            predictions = [predictions]
+        elif predictions is None:
+            predictions = []
+        # Filter predictions for this route only (should already be filtered by API)
+        predictions = [p for p in predictions if p.get("route_id") == self._route_id]
+
         pred_lookup = {}
         for pred in predictions:
             pred_lookup.setdefault(pred["stop_id"], []).append(pred)
 
-        # Normalize alerts to always be a list and use 'alerts'
+        # 5. Get alerts for this route only
         alerts = await self._client.get_service_alerts(self._route_id)
-        if isinstance(alerts, dict) and "alert" in alerts:
-            alerts = [alerts["alert"]]
+        if isinstance(alerts, list):
+            alerts = [
+                a for a in alerts
+                if any(ent.get("route_id") == self._route_id for ent in a.get("alert", {}).get("informed_entity", []))
+            ]
+        elif isinstance(alerts, dict) and "alert" in alerts:
+            informed = alerts["alert"].get("informed_entity", [])
+            if not any(ent.get("route_id") == self._route_id for ent in informed):
+                alerts = []
+            else:
+                alerts = [alerts["alert"]]
         elif isinstance(alerts, dict):
             alerts = [alerts]
         elif alerts is None:
             alerts = []
         self._extra_state_attributes["alerts"] = alerts
 
-        # Normalize trip_updates to always be a list and use 'trip_updates'
+        # 6. Get trip updates for this route only
         trip_updates = await self._client.get_trip_updates(self._route_id)
-        if isinstance(trip_updates, dict):
-            trip_updates = [trip_updates]
+        if isinstance(trip_updates, list):
+            trip_updates = [t for t in trip_updates if t.get("route_id") == self._route_id]
+        elif isinstance(trip_updates, dict):
+            if trip_updates.get("route_id") == self._route_id:
+                trip_updates = [trip_updates]
+            else:
+                trip_updates = []
         elif trip_updates is None:
             trip_updates = []
         self._extra_state_attributes["trip_updates"] = trip_updates
 
-        # Normalize cancellations to always be a list and use 'cancellations'
+        # 7. Get cancellations for this route only
         cancellations = await self._client.get_trip_cancellations(self._route_id)
-        if isinstance(cancellations, dict):
-            cancellations = [cancellations]
+        if isinstance(cancellations, list):
+            cancellations = [c for c in cancellations if c.get("route_id") == self._route_id]
+        elif isinstance(cancellations, dict):
+            if cancellations.get("route_id") == self._route_id:
+                cancellations = [cancellations]
+            else:
+                cancellations = []
         elif cancellations is None:
             cancellations = []
         self._extra_state_attributes["cancellations"] = cancellations
 
-        # Normalize departure_predictions to always be a list and use 'departure_predictions'
-        if isinstance(predictions, dict):
-            predictions = [predictions]
-        elif predictions is None:
-            predictions = []
+        # 8. Departure predictions (already filtered above)
         self._extra_state_attributes["departure_predictions"] = predictions
 
-        # Route stops (ordered)
+        # 9. Route stops (ordered)
         route_stops = []
         for st in stop_times:
             stop_id = st["stop_id"]
