@@ -13,10 +13,10 @@ ENTITY_TYPES = {
 PLACEHOLDER = "--- Select a route or start typing ---"
 
 # Friendly step names for UI
-STEP_USER = "Add your API Key"
-STEP_ENTITY_TYPE = "Select Transport Type"
+STEP_USER = "API Key"
+STEP_ENTITY_TYPE = "Transport Type"
 STEP_ROUTE = "Route Selection"
-STEP_ADD_ANOTHER = "Do you want to add another route?"
+STEP_ADD_ANOTHER = "Add Another Route"
 
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
