@@ -1,5 +1,6 @@
 from homeassistant import config_entries
 import voluptuous as vol
+from homeassistant.helpers import selector
 from .const import DOMAIN, CONF_API_KEY
 from .api import MetlinkApiClient
 
@@ -64,12 +65,19 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Insert placeholder at the top
                 self.routes = {PLACEHOLDER: ""}  # Non-selectable value
                 self.routes.update(route_dict)
+                # For selector, build a list of options (excluding placeholder)
+                self.route_options = [
+                    {"value": route_id, "label": name}
+                    for name, route_id in self.routes.items()
+                    if name != PLACEHOLDER
+                ]
         if user_input is not None and self.routes:
-            route_name = user_input["route_name"]
-            if route_name == PLACEHOLDER:
+            route_id = user_input["route_name"]
+            if not route_id or route_id == "":
                 errors["route_name"] = "select_route"
             else:
-                route_id = self.routes[route_name]
+                # Find the friendly name for the selected route_id
+                route_name = next((name for name, rid in self.routes.items() if rid == route_id), route_id)
                 entity_title = (
                     f"{ENTITY_TYPES[self.entity_type]} :: {route_name}"
                     if self.entity_type == "ferry"
@@ -84,10 +92,16 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "route_name": route_name,
                     },
                 )
+        # Always use selector for dropdown
         return self.async_show_form(
             step_id="route",
             data_schema=vol.Schema({
-                vol.Required("route_name", default=PLACEHOLDER): vol.In(list(self.routes.keys()))
+                vol.Required("route_name"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self.route_options if hasattr(self, "route_options") else [],
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                )
             }),
             errors=errors,
         )
