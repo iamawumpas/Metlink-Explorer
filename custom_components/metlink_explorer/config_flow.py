@@ -1,4 +1,5 @@
 from homeassistant import config_entries
+from homeassistant.helpers import selector
 import voluptuous as vol
 from .const import DOMAIN, CONF_API_KEY
 from .api import MetlinkApiClient
@@ -42,7 +43,12 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="entity_type",
             data_schema=vol.Schema({
-                vol.Required("entity_type", default="train"): vol.In(list(ENTITY_TYPES.keys()))
+                vol.Required("entity_type", default="train"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[{"value": k, "label": v} for k, v in ENTITY_TYPES.items()],
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                )
             }),
             errors=errors,
         )
@@ -120,7 +126,6 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         )
                     else:
                         errors["base"] = "no_direction_trips"
-        # Only show non-empty options in the dropdown
         valid_options = [opt["value"] for opt in self.route_options if opt["value"]]
         return self.async_show_form(
             step_id="route",
