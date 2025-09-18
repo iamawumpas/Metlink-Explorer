@@ -77,4 +77,9 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
         return self.async_show_form(
-           
+            step_id="route",
+            data_schema=vol.Schema({
+                vol.Required("route_name"): vol.In(self.routes) if self.routes else str
+            }),
+            errors=errors,
+        )
