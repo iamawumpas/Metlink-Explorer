@@ -55,10 +55,41 @@ class MetlinkExplorerSensor(Entity):
         pred_lookup = {}
         for pred in predictions:
             pred_lookup.setdefault(pred["stop_id"], []).append(pred)
-        alerts = await self._client.get_service_alerts(self._route_id)
-        trip_updates = await self._client.get_trip_updates(self._route_id)
-        cancellations = await self._client.get_trip_cancellations(self._route_id)
 
+        # Normalize alerts to always be a list and use 'alerts'
+        alerts = await self._client.get_service_alerts(self._route_id)
+        if isinstance(alerts, dict) and "alert" in alerts:
+            alerts = [alerts["alert"]]
+        elif isinstance(alerts, dict):
+            alerts = [alerts]
+        elif alerts is None:
+            alerts = []
+        self._extra_state_attributes["alerts"] = alerts
+
+        # Normalize trip_updates to always be a list and use 'trip_updates'
+        trip_updates = await self._client.get_trip_updates(self._route_id)
+        if isinstance(trip_updates, dict):
+            trip_updates = [trip_updates]
+        elif trip_updates is None:
+            trip_updates = []
+        self._extra_state_attributes["trip_updates"] = trip_updates
+
+        # Normalize cancellations to always be a list and use 'cancellations'
+        cancellations = await self._client.get_trip_cancellations(self._route_id)
+        if isinstance(cancellations, dict):
+            cancellations = [cancellations]
+        elif cancellations is None:
+            cancellations = []
+        self._extra_state_attributes["cancellations"] = cancellations
+
+        # Normalize departure_predictions to always be a list and use 'departure_predictions'
+        if isinstance(predictions, dict):
+            predictions = [predictions]
+        elif predictions is None:
+            predictions = []
+        self._extra_state_attributes["departure_predictions"] = predictions
+
+        # Route stops (ordered)
         route_stops = []
         for st in stop_times:
             stop_id = st["stop_id"]
@@ -71,10 +102,7 @@ class MetlinkExplorerSensor(Entity):
                 "scheduled_departure": scheduled_time,
                 "realtime_predictions": realtime,
             })
-
         self._extra_state_attributes["route_stops"] = route_stops
-        self._extra_state_attributes["alerts"] = alerts
-        self._extra_state_attributes["trip_updates"] = trip_updates
-        self._extra_state_attributes["cancellations"] = cancellations
+
         self._state = len(route_stops)
         _LOGGER.info("Route stops: %s", route_stops)
