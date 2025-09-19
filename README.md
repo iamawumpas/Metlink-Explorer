@@ -10,7 +10,24 @@ This integration is a PPP (Personal Passion Project) for me and is currently not
 To use the Metlink Wellington schedules you will need to create a account on the [Metlink Open Data Developer Portal](https://opendata.metlink.org.nz/). Once signed in, an API key will be creatted for you and you can copy and paste this key into the integration. For more information, log onto the Metlink Open Data Developer Portal and read *Getting Started*.
 
 
+## Installation
+This integration is installed using HACS (Home Assistant Community Store). Follow these instructions: 
 
+1. **Open Home Assistant.**
+2. Go to **HACS** in the sidebar. If you haven’t installed HACS yet, follow the [official HACS installation guide](https://hacs.xyz/docs/setup/download/).
+3. Click on **Integrations**.
+4. Click the **three dots menu** (⋮) in the top right and select **Custom repositories**.
+5. Enter the URL of this repository (`https://github.com/iamawumpas/Metlink-Explorer`) and select **Integration** as the category.
+6. Click **Add**.
+7. Find **Metlink Explorer** in the list of integrations and click **Install**.
+8. **Restart Home Assistant** after installation.
+9. Go to **Settings → Devices & Services → Add Integration** and search for **Metlink Explorer**.
+10. Follow the prompts to configure your API key and select your routes.
+
+---
+
+**Note:**  
+If you do not see the integration after installation, clear your browser cache and restart Home Assistant again.
 
 
 ### Available Attributes 
