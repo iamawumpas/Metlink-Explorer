@@ -22,8 +22,37 @@ This integration is installed using HACS (Home Assistant Community Store). Follo
 7. Find **Metlink Explorer** in the list of integrations and click **Install**.
 8. **Restart Home Assistant** after installation.
 9. Go to **Settings → Devices & Services → Add Integration** and search for **Metlink Explorer**.
-10. Follow the prompts to configure your API key and select your routes.
+10. Follow the prompts to configure your API key and select your routes. More details are below.
 
+## How to use Metlink Explorer
+
+1. **Add the Integration:**
+   - Go to **Settings → Devices & Services → Add Integration** in Home Assistant.
+   - Search for **Metlink Explorer** and select it.
+
+2. **Enter Your API Key:**
+   - When prompted, paste your Metlink API key (see "Before Installing" above if you need to get one).
+
+3. **Choose a Transport Type:**
+   - Select whether you want to add a **Train**, **Bus**, or **Ferry** route.
+
+4. **Select a Route:**
+   - Pick the specific route you want to monitor from the dropdown list.
+   - Only routes that you haven’t already added will be shown.
+
+5. **Finish Setup:**
+   - Complete the setup. The integration will create a sensor for the selected route.
+
+6. **Add More Routes (Optional):**
+   - To monitor additional routes, repeat the steps above. Each route will appear as a separate sensor.
+
+7. **View Your Data:**
+   - Go to **Developer Tools → States** or add the sensor to your dashboard to see real-time departures, alerts, cancellations, and more.
+
+---
+
+**Tip:**  
+You can use the sensor’s attributes in dashboards, automations, and templates. See the table above for available attributes.
 ---
 
 **Note:**  
