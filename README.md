@@ -49,6 +49,13 @@ This integration is installed using HACS (Home Assistant Community Store). Follo
 7. **View Your Data:**
    - Go to **Developer Tools → States** or add the sensor to your dashboard to see real-time departures, alerts, cancellations, and more.
 
+Each integration entry will contain a maximum of two entities. These represent the outbound and inbound directions for the selected route.
+
+Each entity is labelled using this format:
+vehicle type :: route number - route naae
+
+*Example:* Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
+
 ---
 
 **Tip:**  
@@ -57,7 +64,7 @@ You can use the sensor’s attributes in dashboards, automations, and templates.
 
 **Note:**  
 If you do not see the integration after installation, clear your browser cache and restart Home Assistant again.
-
+<hr>
 
 ### Available Attributes 
 
