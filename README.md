@@ -58,16 +58,14 @@ vehicle type :: route number - route name
 - Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
 - Ferry ::  QDF - Days Bay - Queens Wharf
 - Train :: KPL - Kāpiti Line (Waikanae - Wellington)
-
-<hr> 
-
+ 
+ 
+ 
 **Tip:**
-
 You can use the sensor’s attributes in dashboards, automations, and templates. See the table below for available attributes.
-<hr>
 
+ 
 **Note:**
-
 If you do not see the integration after installation, clear your browser cache and restart Home Assistant again.
 <hr>
 
