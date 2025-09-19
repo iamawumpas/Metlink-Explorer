@@ -52,19 +52,19 @@ This integration is installed using HACS (Home Assistant Community Store). Follo
 Each integration entry will contain a maximum of two entities. These represent the outbound and inbound directions for the selected route.
 
 Each entity is labelled using this format:
-vehicle type :: route number - route naae
+vehicle type :: route number - route name
 
 *Examples:*
 - Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
 - Ferry ::  QDF - Days Bay - Queens Wharf
 - Train :: KPL - Kāpiti Line (Waikanae - Wellington)
 
-
-**Tip:**
+<hr> 
+###Tip:###
 You can use the sensor’s attributes in dashboards, automations, and templates. See the table below for available attributes.
----
+<hr>
 
-**Note:**  
+###Note:### 
 If you do not see the integration after installation, clear your browser cache and restart Home Assistant again.
 <hr>
 
