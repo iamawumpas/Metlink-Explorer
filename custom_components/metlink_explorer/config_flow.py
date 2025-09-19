@@ -17,6 +17,20 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if not hasattr(self, "_entries"):
             self._entries = []
+
+        # Check for existing API key in config entries
+        existing_api_key = None
+        for entry in self._async_current_entries():
+            api_key = entry.data.get(CONF_API_KEY)
+            if api_key:
+                existing_api_key = api_key
+                break
+
+        if existing_api_key:
+            self.api_key = existing_api_key
+            return await self.async_step_entity_type()
+
+        # If no API key found, ask for it
         if user_input is not None:
             api_key = user_input[CONF_API_KEY]
             client = MetlinkApiClient(api_key)
