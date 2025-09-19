@@ -24,7 +24,7 @@ This integration is installed using HACS (Home Assistant Community Store). Follo
 9. Go to **Settings → Devices & Services → Add Integration** and search for **Metlink Explorer**.
 10. Follow the prompts to configure your API key and select your routes. More details are below.
 
-## How to use Metlink Explorer
+## How to use the Metlink Explorer integration
 
 1. **Add the Integration:**
    - Go to **Settings → Devices & Services → Add Integration** in Home Assistant.
