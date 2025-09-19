@@ -10,14 +10,6 @@ ENTITY_TYPES = {
     "ferry": "Ferry"
 }
 
-PLACEHOLDER = "--- Select a route or start typing ---"
-
-# Friendly step names for UI
-STEP_USER = "API Key"
-STEP_ENTITY_TYPE = "Transport Type"
-STEP_ROUTE = "Route Selection"
-STEP_ADD_ANOTHER = "Add Another Route"
-
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
 
@@ -37,12 +29,12 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 errors["base"] = "invalid_api_key"
         return self.async_show_form(
-            step_id=STEP_USER,
+            step_id="user",
             data_schema=vol.Schema({
                 vol.Required(CONF_API_KEY): str
             }),
             errors=errors,
-            description="Enter your Metlink API Key."
+            description="Enter your Metlink API key to get started."
         )
 
     async def async_step_entity_type(self, user_input=None):
@@ -51,7 +43,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.entity_type = user_input["entity_type"]
             return await self.async_step_route()
         return self.async_show_form(
-            step_id=STEP_ENTITY_TYPE,
+            step_id="entity_type",
             data_schema=vol.Schema({
                 vol.Required("entity_type", default="train"): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -61,7 +53,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             }),
             errors=errors,
-            description="Select the type of transport."
+            description="Select the type of transport you want to monitor (Train, Bus, or Ferry)."
         )
 
     async def async_step_route(self, user_input=None):
@@ -75,22 +67,20 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.route_options = []
             else:
                 self.route_options = [
-                    {"value": "", "label": PLACEHOLDER}
-                ] + [
                     {"value": route["route_id"], "label": f"{route['route_short_name']} - {route['route_long_name']}"}
                     for route in sorted(routes, key=lambda r: r["route_long_name"])
                 ]
         if user_input is not None and self.route_options:
             route_id = user_input["route_name"]
             if not route_id:
-                errors["route_name"] = "select_route"
+                errors["route_name"] = "Please select a route."
             else:
                 route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
                 client = MetlinkApiClient(self.api_key)
                 trips = await client.get_trips(route_id)
                 await client.close()
                 if not trips:
-                    errors["base"] = "no_trips"
+                    errors["base"] = "No trips found for this route."
                 else:
                     dir_trips = {0: None, 1: None}
                     for trip in trips:
@@ -134,9 +124,9 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         self.entries.extend(entries)
                         return await self.async_step_add_another()
                     else:
-                        errors["base"] = "no_direction_trips"
+                        errors["base"] = "No valid directions found for this route."
         return self.async_show_form(
-            step_id=STEP_ROUTE,
+            step_id="route",
             data_schema=vol.Schema({
                 vol.Required("route_name", default=""): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -146,7 +136,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             }),
             errors=errors,
-            description="Select the route you want to add."
+            description="Select the specific route you want to monitor from the dropdown list."
         )
 
     async def async_step_add_another(self, user_input=None):
@@ -155,15 +145,14 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if user_input["add_another"]:
                 return await self.async_step_entity_type()
             else:
-                # Finish and create entry with all selected routes
                 return self.async_create_entry(
                     title="Metlink Explorer",
                     data={"entities": self.entries}
                 )
         return self.async_show_form(
-            step_id=STEP_ADD_ANOTHER,
+            step_id="add_another",
             data_schema=vol.Schema({
                 vol.Required("add_another", default=False): selector.BooleanSelector()
             }),
-            description="Do you want to add another route?"
+            description="Would you like to add another route to monitor? Select 'Yes' to add more, or 'No' to finish setup."
         )
