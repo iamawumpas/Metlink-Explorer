@@ -54,15 +54,15 @@ Each integration entry will contain a maximum of two entities. These represent t
 Each entity is labelled using this format:
 vehicle type :: route number - route naae
 
-*Examples:* 
+*Examples:*
+
 Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
 Ferry ::  QDF - Days Bay - Queens Wharf
 Train :: KPL - Kāpiti Line (Waikanae - Wellington)
 
----
 
 **Tip:**  
-You can use the sensor’s attributes in dashboards, automations, and templates. See the table above for available attributes.
+You can use the sensor’s attributes in dashboards, automations, and templates. See the table below for available attributes.
 ---
 
 **Note:**  
