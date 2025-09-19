@@ -10,13 +10,25 @@ ENTITY_TYPES = {
     "ferry": "Ferry"
 }
 
-PLACEHOLDER = "--- Select a route or start typing ---"
-
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
 
     async def async_step_user(self, user_input=None):
         errors = {}
+
+        # Check for existing API key in config entries
+        existing_api_key = None
+        for entry in self._async_current_entries():
+            api_key = entry.data.get(CONF_API_KEY)
+            if api_key:
+                existing_api_key = api_key
+                break
+
+        if existing_api_key:
+            self.api_key = existing_api_key
+            return await self.async_step_entity_type()
+
+        # If no API key found, ask for it
         if user_input is not None:
             api_key = user_input[CONF_API_KEY]
             client = MetlinkApiClient(api_key)
@@ -64,11 +76,10 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.route_options = []
             else:
                 self.route_options = [
-                    {"value": "", "label": PLACEHOLDER}
-                ] + [
                     {"value": route["route_id"], "label": f"{route['route_short_name']} - {route['route_long_name']}"}
                     for route in sorted(routes, key=lambda r: r["route_long_name"])
                 ]
+        route_default = self.route_options[0]["value"] if self.route_options else None
         if user_input is not None and self.route_options:
             route_id = user_input["route_name"]
             if not route_id:
@@ -129,7 +140,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="route",
             data_schema=vol.Schema({
-                vol.Required("route_name", default=""): selector.SelectSelector(
+                vol.Required("route_name", default=route_default): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=self.route_options if hasattr(self, "route_options") else [],
                         mode=selector.SelectSelectorMode.DROPDOWN
