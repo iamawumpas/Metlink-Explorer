@@ -10,25 +10,13 @@ ENTITY_TYPES = {
     "ferry": "Ferry"
 }
 
+PLACEHOLDER = "--- Select a route or start typing ---"
+
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
 
     async def async_step_user(self, user_input=None):
         errors = {}
-
-        # Check for existing API key in config entries
-        existing_api_key = None
-        for entry in self._async_current_entries():
-            api_key = entry.data.get(CONF_API_KEY)
-            if api_key:
-                existing_api_key = api_key
-                break
-
-        if existing_api_key:
-            self.api_key = existing_api_key
-            return await self.async_step_entity_type()
-
-        # If no API key found, ask for it
         if user_input is not None:
             api_key = user_input[CONF_API_KEY]
             client = MetlinkApiClient(api_key)
@@ -44,7 +32,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(CONF_API_KEY): str
             }),
-            errors=errors
+            errors=errors,
         )
 
     async def async_step_entity_type(self, user_input=None):
@@ -62,7 +50,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 )
             }),
-            errors=errors
+            errors=errors,
         )
 
     async def async_step_route(self, user_input=None):
@@ -76,22 +64,22 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.route_options = []
             else:
                 self.route_options = [
+                    {"value": "", "label": PLACEHOLDER}
+                ] + [
                     {"value": route["route_id"], "label": f"{route['route_short_name']} - {route['route_long_name']}"}
                     for route in sorted(routes, key=lambda r: r["route_long_name"])
                 ]
-        route_default = self.route_options[0]["value"] if self.route_options else None
         if user_input is not None and self.route_options:
             route_id = user_input["route_name"]
             if not route_id:
-                errors["route_name"] = "Please select a route."
+                errors["route_name"] = "select_route"
             else:
-                route_obj = next((opt for opt in self.route_options if opt["value"] == route_id), None)
-                route_label = route_obj["label"] if route_obj else route_id
+                route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
                 client = MetlinkApiClient(self.api_key)
                 trips = await client.get_trips(route_id)
                 await client.close()
                 if not trips:
-                    errors["base"] = "No trips found for this route."
+                    errors["base"] = "no_trips"
                 else:
                     dir_trips = {0: None, 1: None}
                     for trip in trips:
@@ -123,7 +111,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 CONF_API_KEY: self.api_key,
                                 "entity_type": self.entity_type,
                                 "route_id": route_id,
-                                "route_name": route_label,
+                                "route_name": route_name,
                                 "direction_id": dir_id,
                                 "departure_stop": departure_stop,
                                 "destination_stop": destination_stop,
@@ -131,28 +119,22 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 "destination_name": destination_name,
                             }
                         })
-                    # Set a friendly integration title
-                    if self.entity_type == "train":
-                        integration_title = f"Train: {route_label.split('-', 1)[-1].strip()}"
-                    elif self.entity_type == "bus":
-                        integration_title = f"Bus: #{route_label.split('-', 1)[0].strip()}"
-                    elif self.entity_type == "ferry":
-                        integration_title = f"Ferry: {route_label.split('-', 1)[-1].strip()}"
+                    if entries:
+                        return self.async_create_entry(
+                            title=f"{ENTITY_TYPES[self.entity_type]} :: {route_name}",
+                            data={"entities": entries}
+                        )
                     else:
-                        integration_title = route_label
-                    return self.async_create_entry(
-                        title=integration_title,
-                        data={"entities": entries}
-                    )
+                        errors["base"] = "no_direction_trips"
         return self.async_show_form(
             step_id="route",
             data_schema=vol.Schema({
-                vol.Required("route_name", default=route_default): selector.SelectSelector(
+                vol.Required("route_name", default=""): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=self.route_options if hasattr(self, "route_options") else [],
                         mode=selector.SelectSelectorMode.DROPDOWN
                     )
                 )
             }),
-            errors=errors
+            errors=errors,
         )
