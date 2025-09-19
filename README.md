@@ -1,7 +1,9 @@
-<div style="display: flex; align-items: center; justify-content: flex-start;">
-  <img src="assets/logo.png" alt="Metlink Explorer Logo" style="height: 80px; margin-right: 24px;">
-    <span style="margin-bottom: 0;">Metlink Explorer</span><br>
-    <span style="margin-top: 0; font-weight: normal;">a Home Assistant integration</span>
+<div style="display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 24px;">
+  <img src="assets/logo.png" alt="Metlink Explorer Logo" style="height: 80px;">
+  <div>
+    <h1 style="margin-bottom: 0;">Metlink Explorer</h1>
+    <h2 style="margin-top: 0; font-weight: normal;">a Home Assistant integration</h2>
+  </div>
 </div>
 
 
