@@ -16,12 +16,21 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         errors = {}
 
-        # Check for existing API key in config entries
+        # Check for existing API key in config entries/entities
         existing_api_key = None
         for entry in self._async_current_entries():
+            # Try top-level key
             api_key = entry.data.get(CONF_API_KEY)
             if api_key:
                 existing_api_key = api_key
+                break
+            # Try inside entities
+            for entity in entry.data.get("entities", []):
+                api_key = entity["data"].get(CONF_API_KEY)
+                if api_key:
+                    existing_api_key = api_key
+                    break
+            if existing_api_key:
                 break
 
         if existing_api_key:
