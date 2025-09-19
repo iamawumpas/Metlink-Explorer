@@ -1,19 +1,18 @@
 # ![Metlink Explorer Logo](assets/logo.png) Metlink Explorer: a Home Assistant integration
-This is a custom component for Home Assistant to update Metlink Wellington, NZ departure info in real time. It provides bus, train, and ferry schedules, as well as general alerts, alternative transportation alerts, anf cancellations. 
+This is a custom component for Home Assistant to update Metlink Wellington, NZ departure info in real time. It provides bus, train, and ferry schedules, as well as general alerts, alternative transportation alerts, and cancellations.
 
-This integration can be used with most Lovelace Cards (Entity, entities, tile, markdown, and maybe others), but not all of the attributes (see the table below) may be available. This integration also installs a custom card that shows Tube/Metro style route information for your selected route. See ***How to use the Metro Card*** for instructions. 
+This integration can be used with most Lovelace Cards (Entity, entities, tile, markdown, and maybe others), but not all of the attributes (see the table below) may be available. This integration also installs a custom card that shows Tube/Metro style route information for your selected route. See ***How to use the Metro Card*** for instructions.
 <hr><br><br>
 
 ## $${\color{red} NOT \space IN \space PRODUCTION}$$
-This integration is a PPP (Personal Passion Project) for me and is currently not suitable for use in Home Assistant.....yet! Watch this space.
+This integration is a PPP (Personal Passion Project) for me and is currently not suitable for use in Home Assistant... yet! Watch this space.
 <hr><br><br>
 
-## Before Installing 
-To use the Metlink Wellington schedules you will need to create a account on the [Metlink Open Data Developer Portal](https://opendata.metlink.org.nz/). Once signed in, an API key will be creatted for you and you can copy and paste this key into the integration. For more information, log onto the Metlink Open Data Developer Portal and read *Getting Started*.
-
+## Before Installing
+To use the Metlink Wellington schedules you will need to create an account on the [Metlink Open Data Developer Portal](https://opendata.metlink.org.nz/). Once signed in, an API key will be created for you and you can copy and paste this key into the integration. For more information, log in to the Metlink Open Data Developer Portal and read *Getting Started*.
 
 ## Installation
-This integration is installed using HACS (Home Assistant Community Store). Follow these instructions: 
+This integration is installed using HACS (Home Assistant Community Store). Follow these instructions:
 
 1. **Open Home Assistant.**
 2. Go to **HACS** in the sidebar. If you haven’t installed HACS yet, follow the [official HACS installation guide](https://hacs.xyz/docs/setup/download/).
@@ -51,27 +50,24 @@ This integration is installed using HACS (Home Assistant Community Store). Follo
 7. **View Your Data:**
    - Go to **Developer Tools → States** or add the sensor to your dashboard to see real-time departures, alerts, cancellations, and more.
 
-Each integration entry will contain a maximum of two entities. These represent the outbound and inbound directions for the selected route.
+Each integration entry will contain a maximum of two entities, representing the outbound and inbound directions for the selected route.
 
 Each entity is labelled using this format:
-vehicle type :: route number - route name
+**Vehicle type :: route number - route name**
 
 *Examples:*
 - Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
-- Ferry ::  QDF - Days Bay - Queens Wharf
+- Ferry :: QDF - Days Bay - Queens Wharf
 - Train :: KPL - Kāpiti Line (Waikanae - Wellington)
- 
- 
- 
+
 **Tip:**
 You can use the sensor’s attributes in dashboards, automations, and templates. See the table below for available attributes.
 
- 
 **Note:**
-If you do not see the integration after installation, clear your browser cache and restart Home Assistant again.
+If you do not see the integration after installation, clear your browser cache and restart Home Assistant.
 <hr>
 
-### Available Attributes 
+### Available Attributes
 
 | Attribute Name          | Description                                                                                          |
 |------------------------ |------------------------------------------------------------------------------------------------------|
