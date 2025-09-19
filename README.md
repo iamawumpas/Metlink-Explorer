@@ -15,7 +15,7 @@ To use the Metlink Wellington schedules you will need to create an account on th
 This integration is installed using HACS (Home Assistant Community Store). Follow these instructions:
 
 1. **Open Home Assistant.**
-2. Go to **HACS** in the sidebar. If you haven’t installed HACS yet, follow the [official HACS installation guide](https://hacs.xyz/docs/setup/download/).
+2. Go to **HACS** in the sidebar. If you haven’t installed HACS yet, follow the [official HACS installation guide](https://hacs.xyz/docs/use/).
 3. Click on **Integrations**.
 4. Click the **three dots menu** (⋮) in the top right and select **Custom repositories**.
 5. Enter the URL of this repository (`https://github.com/iamawumpas/Metlink-Explorer`) and select **Integration** as the category.
