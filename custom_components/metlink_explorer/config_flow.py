@@ -77,7 +77,8 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not route_id:
                 errors["route_name"] = "Please select a route."
             else:
-                route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
+                route_obj = next((opt for opt in self.route_options if opt["value"] == route_id), None)
+                route_label = route_obj["label"] if route_obj else route_id
                 client = MetlinkApiClient(self.api_key)
                 trips = await client.get_trips(route_id)
                 await client.close()
@@ -114,7 +115,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 CONF_API_KEY: self.api_key,
                                 "entity_type": self.entity_type,
                                 "route_id": route_id,
-                                "route_name": route_name,
+                                "route_name": route_label,
                                 "direction_id": dir_id,
                                 "departure_stop": departure_stop,
                                 "destination_stop": destination_stop,
@@ -123,7 +124,11 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             }
                         })
                     if entries:
-                        self._entries.extend(entries)
+                        self._entries.append({
+                            "route_label": route_label,
+                            "entity_type": self.entity_type,
+                            "entities": entries
+                        })
                         return await self.async_step_add_another()
                     else:
                         errors["base"] = "No valid directions found for this route."
@@ -148,9 +153,28 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if user_input["add_another"]:
                 return await self.async_step_entity_type()
             else:
+                # Create a separate config entry for each route pair with a friendly name
+                for entry in self._entries:
+                    entity_type = entry["entity_type"]
+                    route_label = entry["route_label"]
+                    if entity_type == "train":
+                        title = f"Train: {route_label.split('-', 1)[-1].strip()}"
+                    elif entity_type == "bus":
+                        title = f"Bus: #{route_label.split('-', 1)[0].strip()}"
+                    elif entity_type == "ferry":
+                        title = f"Ferry: {route_label.split('-', 1)[-1].strip()}"
+                    else:
+                        title = route_label
+                    self.hass.async_create_task(
+                        self.hass.config_entries.flow.async_init(
+                            DOMAIN,
+                            context={"source": config_entries.SOURCE_IMPORT},
+                            data={"entities": entry["entities"], "title": title}
+                        )
+                    )
                 return self.async_create_entry(
-                    title="Metlink Explorer",
-                    data={"entities": self._entries}
+                    title="Metlink Explorer (Multiple Routes)",
+                    data={}
                 )
         return self.async_show_form(
             step_id="add_another",
