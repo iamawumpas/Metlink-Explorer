@@ -60,7 +60,7 @@ vehicle type :: route number - route naae
 - Train :: KPL - Kāpiti Line (Waikanae - Wellington)
 
 
-**Tip:**  
+**Tip:**
 You can use the sensor’s attributes in dashboards, automations, and templates. See the table below for available attributes.
 ---
 
