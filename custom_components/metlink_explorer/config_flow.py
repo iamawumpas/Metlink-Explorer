@@ -32,8 +32,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(CONF_API_KEY): str
             }),
-            errors=errors,
-            description="Enter your Metlink API key to get started."
+            errors=errors
         )
 
     async def async_step_entity_type(self, user_input=None):
@@ -53,8 +52,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 )
             }),
-            errors=errors,
-            description="Select the type of transport you want to monitor (Train, Bus, or Ferry)."
+            errors=errors
         )
 
     async def async_step_route(self, user_input=None):
@@ -139,8 +137,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 )
             }),
-            errors=errors,
-            description="Select the specific route you want to monitor from the dropdown list."
+            errors=errors
         )
 
     async def async_step_add_another(self, user_input=None):
@@ -160,5 +157,4 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required("add_another", default=False): selector.BooleanSelector()
             }),
-            description="Would you like to add another route to monitor? Select 'Yes' to add more, or 'No' to finish setup."
         )
