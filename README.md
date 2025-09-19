@@ -54,7 +54,10 @@ Each integration entry will contain a maximum of two entities. These represent t
 Each entity is labelled using this format:
 vehicle type :: route number - route naae
 
-*Example:* Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
+*Examples:* 
+Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
+Ferry ::  QDF - Days Bay - Queens Wharf
+Train :: KPL - Kāpiti Line (Waikanae - Wellington)
 
 ---
 
