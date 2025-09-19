@@ -49,15 +49,40 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_entity_type(self, user_input=None):
         errors = {}
+
+        # Collect all used route IDs from existing config entries
+        used_route_ids = set()
+        for entry in self._async_current_entries():
+            for entity in entry.data.get("entities", []):
+                route_id = entity["data"].get("route_id")
+                if route_id:
+                    used_route_ids.add(route_id)
+
+        # Only show types with at least one unused route
+        available_types = []
+        for type_key, type_label in ENTITY_TYPES.items():
+            client = MetlinkApiClient(self.api_key)
+            routes = await client.get_routes(type_key)
+            await client.close()
+            if routes and any(route["route_id"] not in used_route_ids for route in routes):
+                available_types.append({"value": type_key, "label": type_label})
+
+        if not available_types:
+            errors["base"] = "no_types"
+            # Optionally, you could abort the flow here
+
         if user_input is not None:
             self.entity_type = user_input["entity_type"]
             return await self.async_step_route()
         return self.async_show_form(
             step_id="entity_type",
             data_schema=vol.Schema({
-                vol.Required("entity_type", default="train"): selector.SelectSelector(
+                vol.Required(
+                    "entity_type",
+                    default=available_types[0]["value"] if available_types else None
+                ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=[{"value": k, "label": v} for k, v in ENTITY_TYPES.items()],
+                        options=available_types,
                         mode=selector.SelectSelectorMode.DROPDOWN
                     )
                 )
