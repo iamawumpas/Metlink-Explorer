@@ -1,4 +1,5 @@
-# ![Metlink Explorer Logo](assets/logo.png) Metlink Explorer: a Home Assistant integration
+# ![Metlink Explorer Logo](assets/logo.png) Metlink Explorer: 
+# a Home Assistant integration
 This is a custom component for Home Assistant to update Metlink Wellington, NZ departure info in real time. It provides bus, train, and ferry schedules, as well as general alerts, alternative transportation alerts, and cancellations.
 
 This integration can be used with most Lovelace Cards (Entity, entities, tile, markdown, and maybe others), but not all of the attributes (see the table below) may be available. This integration also installs a custom card that shows Tube/Metro style route information for your selected route. See ***How to use the Metro Card*** for instructions.
