@@ -61,12 +61,12 @@ vehicle type :: route number - route name
 
 <hr> 
 
-###Tip:
+**Tip:**
 
 You can use the sensor’s attributes in dashboards, automations, and templates. See the table below for available attributes.
 <hr>
 
-###Note:
+**Note:**
 
 If you do not see the integration after installation, clear your browser cache and restart Home Assistant again.
 <hr>
