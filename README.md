@@ -55,10 +55,9 @@ Each entity is labelled using this format:
 vehicle type :: route number - route naae
 
 *Examples:*
-
-Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
-Ferry ::  QDF - Days Bay - Queens Wharf
-Train :: KPL - Kāpiti Line (Waikanae - Wellington)
+- Bus :: 83 - Eastbourne - Lower Hutt - Petone - Wellington
+- Ferry ::  QDF - Days Bay - Queens Wharf
+- Train :: KPL - Kāpiti Line (Waikanae - Wellington)
 
 
 **Tip:**  
