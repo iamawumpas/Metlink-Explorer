@@ -67,6 +67,16 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_route(self, user_input=None):
         errors = {}
+
+        # Collect all used route IDs from existing config entries
+        used_route_ids = set()
+        for entry in self._async_current_entries():
+            for entity in entry.data.get("entities", []):
+                route_id = entity["data"].get("route_id")
+                if route_id:
+                    used_route_ids.add(route_id)
+
+        # Build route_options, skipping used routes
         if not hasattr(self, "route_options"):
             client = MetlinkApiClient(self.api_key)
             routes = await client.get_routes(self.entity_type)
@@ -76,10 +86,15 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self.route_options = []
             else:
                 self.route_options = [
-                    {"value": route["route_id"], "label": f"{route['route_short_name']} - {route['route_long_name']}"}
+                    {
+                        "value": route["route_id"],
+                        "label": f"{route['route_short_name']} - {route['route_long_name']}"
+                    }
                     for route in sorted(routes, key=lambda r: r["route_long_name"])
+                    if route["route_id"] not in used_route_ids
                 ]
         route_default = self.route_options[0]["value"] if self.route_options else None
+
         if user_input is not None and self.route_options:
             route_id = user_input["route_name"]
             if not route_id:
