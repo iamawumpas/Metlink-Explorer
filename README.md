@@ -8,3 +8,22 @@ This integration is a PPP (Personal Passion Project) for me and is currently not
 
 ## Before Installing 
 To use the Metlink Wellington schedules you will need to create a account on the [Metlink Open Data Developer Portal](https://opendata.metlink.org.nz/). Once signed in, an API key will be creatted for you and you can copy and paste this key into the integration. For more information, log onto the Metlink Open Data Developer Portal and read *Getting Started*.
+
+
+
+
+
+### Available Attributes 
+
+| Attribute Name          | Description                                                                                          |
+|------------------------ |------------------------------------------------------------------------------------------------------|
+| `route_stops`           | List of all stops for the selected route, including stop name, scheduled departure, and real-time predictions. |
+| `alerts`                | List of active service alerts affecting this route (e.g., disruptions, delays, notices).             |
+| `trip_updates`          | List of real-time trip updates for this route (e.g., delays, changes in schedule).                   |
+| `cancellations`         | List of trip cancellations for this route.                                                           |
+| `departure_predictions` | List of real-time departure predictions for each stop on this route.                                 |
+| `route_name`            | The name of the route (e.g., "WRL - Wairarapa Line (Masterton - Wellington)").                       |
+| `departure_name`        | The name of the departure (first) stop for this route.                                               |
+| `destination_name`      | The name of the destination (last) stop for this route.                                              |
+| `trip_start_time`       | Scheduled departure time from the first stop of the trip.                                            |
+| `trip_end_time`         | Scheduled (or real-time, if available) arrival time at the last stop of the trip.                    |
