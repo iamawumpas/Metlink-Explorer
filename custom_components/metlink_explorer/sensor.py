@@ -167,5 +167,10 @@ class MetlinkExplorerSensor(Entity):
         self._extra_state_attributes["departure_name"] = self._departure_name
         self._extra_state_attributes["destination_name"] = self._destination_name
 
+        # 10. Add trip start/end times as attributes
+        if stop_times:
+            self._extra_state_attributes["trip_start_time"] = stop_times[0].get("departure_time")
+            self._extra_state_attributes["trip_end_time"] = stop_times[-1].get("arrival_time") or stop_times[-1].get("departure_time")
+
         self._state = len(route_stops)
         _LOGGER.info("Route stops: %s", route_stops)

@@ -1,176 +1,200 @@
-import logging
-from homeassistant.helpers.entity import Entity
-from homeassistant.config_entries import ConfigEntry
-from .const import DOMAIN
+from homeassistant import config_entries
+from homeassistant.helpers import selector
+import voluptuous as vol
+from .const import DOMAIN, CONF_API_KEY
 from .api import MetlinkApiClient
 
-_LOGGER = logging.getLogger(__name__)
+ENTITY_TYPES = {
+    "train": "Train",
+    "bus": "Bus",
+    "ferry": "Ferry"
+}
 
-async def async_setup_entry(hass, entry: ConfigEntry, async_add_entities):
-    entities = entry.data.get("entities")
-    if entities:
-        sensors = []
-        for ent in entities:
-            data = ent["data"]
-            client = MetlinkApiClient(data["api_key"])
-            sensors.append(
-                MetlinkExplorerSensor(
-                    client,
-                    data["entity_type"],
-                    data["route_id"],
-                    data["route_name"],
-                    data["departure_stop"],
-                    data["destination_stop"],
-                    data.get("direction_id"),
-                    data.get("departure_name"),
-                    data.get("destination_name"),
+class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    VERSION = 2
+
+    async def async_step_user(self, user_input=None):
+        errors = {}
+
+        # Check for existing API key in config entries/entities
+        existing_api_key = None
+        for entry in self._async_current_entries():
+            # Try top-level key
+            api_key = entry.data.get(CONF_API_KEY)
+            if api_key:
+                existing_api_key = api_key
+                break
+            # Try inside entities
+            for entity in entry.data.get("entities", []):
+                api_key = entity["data"].get(CONF_API_KEY)
+                if api_key:
+                    existing_api_key = api_key
+                    break
+            if existing_api_key:
+                break
+
+        if existing_api_key:
+            self.api_key = existing_api_key
+            return await self.async_step_entity_type()
+
+        # If no API key found, ask for it
+        if user_input is not None:
+            api_key = user_input[CONF_API_KEY]
+            client = MetlinkApiClient(api_key)
+            valid = await client.validate_api_key()
+            await client.close()
+            if valid:
+                self.api_key = api_key
+                return await self.async_step_entity_type()
+            else:
+                errors["base"] = "invalid_api_key"
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required(CONF_API_KEY): str
+            }),
+            errors=errors,
+        )
+
+    async def async_step_entity_type(self, user_input=None):
+        errors = {}
+
+        # Collect all used route IDs from existing config entries
+        used_route_ids = set()
+        for entry in self._async_current_entries():
+            for entity in entry.data.get("entities", []):
+                route_id = entity["data"].get("route_id")
+                if route_id:
+                    used_route_ids.add(route_id)
+
+        # Only show types with at least one unused route
+        available_types = []
+        for type_key, type_label in ENTITY_TYPES.items():
+            client = MetlinkApiClient(self.api_key)
+            routes = await client.get_routes(type_key)
+            await client.close()
+            if routes and any(route["route_id"] not in used_route_ids for route in routes):
+                available_types.append({"value": type_key, "label": type_label})
+
+        if not available_types:
+            errors["base"] = "no_types"
+            # Optionally, you could abort the flow here
+
+        if user_input is not None:
+            self.entity_type = user_input["entity_type"]
+            return await self.async_step_route()
+        return self.async_show_form(
+            step_id="entity_type",
+            data_schema=vol.Schema({
+                vol.Required(
+                    "entity_type",
+                    default=available_types[0]["value"] if available_types else None
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=available_types,
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
                 )
-            )
-        async_add_entities(sensors)
-    else:
-        # fallback for single entity config
-        api_key = entry.data["api_key"]
-        entity_type = entry.data["entity_type"]
-        route_id = entry.data["route_id"]
-        route_name = entry.data["route_name"]
-        departure_stop = entry.data.get("departure_stop")
-        destination_stop = entry.data.get("destination_stop")
-        direction_id = entry.data.get("direction_id")
-        departure_name = entry.data.get("departure_name")
-        destination_name = entry.data.get("destination_name")
-        client = MetlinkApiClient(api_key)
-        async_add_entities([
-            MetlinkExplorerSensor(
-                client, entity_type, route_id, route_name,
-                departure_stop, destination_stop, direction_id,
-                departure_name, destination_name
-            )
-        ])
+            }),
+            errors=errors,
+        )
 
-class MetlinkExplorerSensor(Entity):
-    def __init__(self, client, entity_type, route_id, route_name, departure_stop, destination_stop, direction_id=None, departure_name=None, destination_name=None):
-        self._client = client
-        self._entity_type = entity_type
-        self._route_id = route_id
-        self._route_name = route_name
-        self._departure_stop = departure_stop
-        self._destination_stop = destination_stop
-        self._direction_id = direction_id
-        self._departure_name = departure_name
-        self._destination_name = destination_name
-        self._attr_name = f"{entity_type.title()} :: {departure_name} - {destination_name}" if departure_name and destination_name else f"{entity_type.title()} :: {route_name}"
-        self._attr_unique_id = f"{entity_type}_{route_id}_{direction_id}".replace(" ", "_").lower() if direction_id is not None else f"{entity_type}_{route_id}".replace(" ", "_").lower()
-        self._state = None
-        self._extra_state_attributes = {}
+    async def async_step_route(self, user_input=None):
+        errors = {}
 
-    @property
-    def state(self):
-        return self._state
+        # Collect all used route IDs from existing config entries
+        used_route_ids = set()
+        for entry in self._async_current_entries():
+            for entity in entry.data.get("entities", []):
+                route_id = entity["data"].get("route_id")
+                if route_id:
+                    used_route_ids.add(route_id)
 
-    @property
-    def extra_state_attributes(self):
-        return self._extra_state_attributes
-
-    async def async_update(self):
-        # 1. Get all trips for the route and filter by direction_id
-        trips = await self._client.get_trips(self._route_id)
-        if not trips:
-            self._extra_state_attributes["route_stops"] = []
-            self._state = 0
-            return
-
-        # Select the trip with the correct direction_id
-        trip = next((t for t in trips if t.get("direction_id") == self._direction_id), trips[0])
-        trip_id = trip["trip_id"]
-
-        # 2. Get stop times for the trip (ordered)
-        stop_times = await self._client.get_stop_times(trip_id)
-        stop_ids = [st["stop_id"] for st in stop_times]
-        stops = await self._client.get_stops_by_ids(stop_ids)
-        stop_lookup = {stop["stop_id"]: stop for stop in stops}
-
-        # 3. Get real-time predictions for this route only
-        predictions = await self._client.get_departure_predictions(self._route_id)
-        if isinstance(predictions, dict):
-            predictions = [predictions]
-        elif predictions is None:
-            predictions = []
-        predictions = [p for p in predictions if p.get("route_id") == self._route_id]
-        pred_lookup = {}
-        for pred in predictions:
-            pred_lookup.setdefault(pred["stop_id"], []).append(pred)
-
-        # 4. Get alerts for this route only and normalize to a list of alert objects
-        alerts = await self._client.get_service_alerts(self._route_id)
-        if isinstance(alerts, dict) and "entity" in alerts:
-            alerts = [e["alert"] for e in alerts["entity"] if "alert" in e]
-        elif isinstance(alerts, list):
-            alerts = [a["alert"] if "alert" in a else a for a in alerts]
-        elif isinstance(alerts, dict) and "alert" in alerts:
-            alerts = [alerts["alert"]]
-        elif isinstance(alerts, dict):
-            alerts = [alerts]
-        elif alerts is None:
-            alerts = []
-        alerts = [
-            a for a in alerts
-            if any(ent.get("route_id") == self._route_id for ent in a.get("informed_entity", []))
-        ] if alerts else []
-        self._extra_state_attributes["alerts"] = alerts
-
-        # 5. Get trip updates for this route only
-        trip_updates = await self._client.get_trip_updates(self._route_id)
-        if isinstance(trip_updates, list):
-            trip_updates = [t for t in trip_updates if t.get("route_id") == self._route_id]
-        elif isinstance(trip_updates, dict):
-            if trip_updates.get("route_id") == self._route_id:
-                trip_updates = [trip_updates]
+        # Build route_options, skipping used routes
+        if not hasattr(self, "route_options"):
+            client = MetlinkApiClient(self.api_key)
+            routes = await client.get_routes(self.entity_type)
+            await client.close()
+            if not routes:
+                errors["base"] = "no_routes"
+                self.route_options = []
             else:
-                trip_updates = []
-        elif trip_updates is None:
-            trip_updates = []
-        self._extra_state_attributes["trip_updates"] = trip_updates
+                self.route_options = [
+                    {
+                        "value": route["route_id"],
+                        "label": f"{route['route_short_name']} - {route['route_long_name']}"
+                    }
+                    for route in sorted(routes, key=lambda r: r["route_long_name"])
+                    if route["route_id"] not in used_route_ids
+                ]
+        route_default = self.route_options[0]["value"] if self.route_options else None
 
-        # 6. Get cancellations for this route only
-        cancellations = await self._client.get_trip_cancellations(self._route_id)
-        if isinstance(cancellations, list):
-            cancellations = [c for c in cancellations if c.get("route_id") == self._route_id]
-        elif isinstance(cancellations, dict):
-            if cancellations.get("route_id") == self._route_id:
-                cancellations = [cancellations]
+        if user_input is not None and self.route_options:
+            route_id = user_input["route_name"]
+            if not route_id:
+                errors["route_name"] = "select_route"
             else:
-                cancellations = []
-        elif cancellations is None:
-            cancellations = []
-        self._extra_state_attributes["cancellations"] = cancellations
-
-        # 7. Departure predictions (already filtered above)
-        self._extra_state_attributes["departure_predictions"] = predictions
-
-        # 8. Route stops (ordered)
-        route_stops = []
-        for st in stop_times:
-            stop_id = st["stop_id"]
-            stop_info = stop_lookup.get(stop_id, {})
-            scheduled_time = st.get("departure_time")
-            realtime = pred_lookup.get(stop_id, [])
-            route_stops.append({
-                "stop_id": stop_id,
-                "stop_name": stop_info.get("stop_name"),
-                "scheduled_departure": scheduled_time,
-                "realtime_predictions": realtime,
-            })
-        self._extra_state_attributes["route_stops"] = route_stops
-
-        # 9. Add route_name, departure_name, and destination_name as top-level attributes
-        self._extra_state_attributes["route_name"] = self._route_name
-        self._extra_state_attributes["departure_name"] = self._departure_name
-        self._extra_state_attributes["destination_name"] = self._destination_name
-
-        # 10. Add trip start/end times as attributes
-        if stop_times:
-            self._extra_state_attributes["trip_start_time"] = stop_times[0].get("departure_time")
-            self._extra_state_attributes["trip_end_time"] = stop_times[-1].get("arrival_time") or stop_times[-1].get("departure_time")
-
-        self._state = len(route_stops)
-        _LOGGER.info("Route stops: %s", route_stops)
+                route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
+                client = MetlinkApiClient(self.api_key)
+                trips = await client.get_trips(route_id)
+                await client.close()
+                if not trips:
+                    errors["base"] = "no_trips"
+                else:
+                    dir_trips = {0: None, 1: None}
+                    for trip in trips:
+                        dir_id = trip.get("direction_id")
+                        if dir_id in dir_trips and dir_trips[dir_id] is None:
+                            dir_trips[dir_id] = trip
+                    entries = []
+                    for dir_id, trip in dir_trips.items():
+                        if trip is None:
+                            continue
+                        trip_id = trip["trip_id"]
+                        client = MetlinkApiClient(self.api_key)
+                        stop_times = await client.get_stop_times(trip_id)
+                        stops = await client.get_stops_by_ids([st["stop_id"] for st in stop_times])
+                        await client.close()
+                        if not stop_times or not stops:
+                            continue
+                        first_stop_id = stop_times[0]["stop_id"]
+                        last_stop_id = stop_times[-1]["stop_id"]
+                        stop_lookup = {stop["stop_id"]: stop["stop_name"] for stop in stops}
+                        departure_stop = first_stop_id
+                        destination_stop = last_stop_id
+                        departure_name = stop_lookup.get(departure_stop, departure_stop)
+                        destination_name = stop_lookup.get(destination_stop, destination_stop)
+                        friendly_name = f"{ENTITY_TYPES[self.entity_type]} :: {departure_name} - {destination_name}"
+                        entries.append({
+                            "title": friendly_name,
+                            "data": {
+                                CONF_API_KEY: self.api_key,
+                                "entity_type": self.entity_type,
+                                "route_id": route_id,
+                                "route_name": route_name,
+                                "direction_id": dir_id,
+                                "departure_stop": departure_stop,
+                                "destination_stop": destination_stop,
+                                "departure_name": departure_name,
+                                "destination_name": destination_name,
+                            }
+                        })
+                    if entries:
+                        return self.async_create_entry(
+                            title=f"{ENTITY_TYPES[self.entity_type]} :: {route_name}",
+                            data={"entities": entries}
+                        )
+                    else:
+                        errors["base"] = "no_direction_trips"
+        return self.async_show_form(
+            step_id="route",
+            data_schema=vol.Schema({
+                vol.Required("route_name", default=route_default): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self.route_options if hasattr(self, "route_options") else [],
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                )
+            }),
+            errors=errors,
+        )
