@@ -1,12 +1,3 @@
-<div style="display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 24px;">
-  <img src="assets/logo.png" alt="Metlink Explorer Logo" style="height: 80px;">
-  <div>
-    <h1 style="margin-bottom: 0;">Metlink Explorer</h1>
-    <h2 style="margin-top: 0; font-weight: normal;">a Home Assistant integration</h2>
-  </div>
-</div>
-
-
 # ![Metlink Explorer Logo](assets/logo.png) Metlink Explorer: a Home Assistant integration
 This is a custom component for Home Assistant to update Metlink Wellington, NZ departure info in real time. It provides bus, train, and ferry schedules, as well as general alerts, alternative transportation alerts, and cancellations.
 
