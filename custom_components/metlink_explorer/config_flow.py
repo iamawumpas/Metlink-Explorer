@@ -13,11 +13,10 @@ ENTITY_TYPES = {
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 2
 
-    def __init__(self):
-        self.entries = []
-
     async def async_step_user(self, user_input=None):
         errors = {}
+        if not hasattr(self, "_entries"):
+            self._entries = []
         if user_input is not None:
             api_key = user_input[CONF_API_KEY]
             client = MetlinkApiClient(api_key)
@@ -39,6 +38,8 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_entity_type(self, user_input=None):
         errors = {}
+        if not hasattr(self, "_entries"):
+            self._entries = []
         if user_input is not None:
             self.entity_type = user_input["entity_type"]
             return await self.async_step_route()
@@ -58,6 +59,8 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_route(self, user_input=None):
         errors = {}
+        if not hasattr(self, "_entries"):
+            self._entries = []
         if not hasattr(self, "route_options"):
             client = MetlinkApiClient(self.api_key)
             routes = await client.get_routes(self.entity_type)
@@ -121,7 +124,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             }
                         })
                     if entries:
-                        self.entries.extend(entries)
+                        self._entries.extend(entries)
                         return await self.async_step_add_another()
                     else:
                         errors["base"] = "No valid directions found for this route."
@@ -141,13 +144,15 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_add_another(self, user_input=None):
         errors = {}
+        if not hasattr(self, "_entries"):
+            self._entries = []
         if user_input is not None:
             if user_input["add_another"]:
                 return await self.async_step_entity_type()
             else:
                 return self.async_create_entry(
                     title="Metlink Explorer",
-                    data={"entities": self.entries}
+                    data={"entities": self._entries}
                 )
         return self.async_show_form(
             step_id="add_another",
