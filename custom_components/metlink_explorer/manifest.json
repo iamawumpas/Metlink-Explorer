@@ -1,7 +1,7 @@
 {
   "domain": "metlink_explorer",
   "name": "Metlink Explorer",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "documentation": "https://github.com/iamawumpas/Metlink-Explorer",
   "requirements": ["aiohttp"],
   "codeowners": ["@iamawumpas"],
