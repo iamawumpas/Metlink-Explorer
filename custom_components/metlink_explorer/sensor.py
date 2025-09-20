@@ -52,13 +52,16 @@ class MetlinkExplorerSensor(Entity):
         self._client = client
         self._entity_type = entity_type
         self._route_id = route_id
-        self._route_name = route_name
+        self._route_name = route_name  # This is "route_number - route_description"
         self._departure_stop = departure_stop
         self._destination_stop = destination_stop
         self._direction_id = direction_id
         self._departure_name = departure_name
         self._destination_name = destination_name
-        self._attr_name = f"{entity_type.title()} :: {departure_name} - {destination_name}" if departure_name and destination_name else f"{entity_type.title()} :: {route_name}"
+
+        # Always use "entity_type :: route_number - route_description" as the friendly name
+        self._attr_name = f"{entity_type.title()} :: {route_name}"
+
         self._attr_unique_id = f"{entity_type}_{route_id}_{direction_id}".replace(" ", "_").lower() if direction_id is not None else f"{entity_type}_{route_id}".replace(" ", "_").lower()
         self._state = None
         self._extra_state_attributes = {}
