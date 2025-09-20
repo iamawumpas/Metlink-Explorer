@@ -127,6 +127,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     for route in sorted(routes, key=lambda r: r["route_long_name"])
                     if route["route_id"] not in used_route_ids
                 ]
+                self._routes_cache = {route["route_id"]: route for route in routes}
         route_default = self.route_options[0]["value"] if self.route_options else None
 
         if user_input is not None and self.route_options:
@@ -134,7 +135,12 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not route_id:
                 errors["route_name"] = "select_route"
             else:
-                route_name = next((opt["label"] for opt in self.route_options if opt["value"] == route_id), route_id)
+                # Get route_short_name and route_long_name for the selected route
+                route_obj = self._routes_cache.get(route_id, {})
+                route_short_name = route_obj.get("route_short_name", "")
+                route_long_name = route_obj.get("route_long_name", "")
+                route_name_full = f"{route_short_name} - {route_long_name}"
+
                 client = MetlinkApiClient(self.api_key)
                 trips = await client.get_trips(route_id)
                 await client.close()
@@ -164,14 +170,14 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         destination_stop = last_stop_id
                         departure_name = stop_lookup.get(departure_stop, departure_stop)
                         destination_name = stop_lookup.get(destination_stop, destination_stop)
-                        friendly_name = f"{ENTITY_TYPES[self.entity_type]} :: {departure_name} - {destination_name}"
+                        friendly_name = f"{ENTITY_TYPES[self.entity_type]} :: {route_short_name} - {route_long_name}"
                         entries.append({
                             "title": friendly_name,
                             "data": {
                                 CONF_API_KEY: self.api_key,
                                 "entity_type": self.entity_type,
                                 "route_id": route_id,
-                                "route_name": route_name,
+                                "route_name": route_name_full,
                                 "direction_id": dir_id,
                                 "departure_stop": departure_stop,
                                 "destination_stop": destination_stop,
@@ -181,7 +187,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         })
                     if entries:
                         return self.async_create_entry(
-                            title=f"{ENTITY_TYPES[self.entity_type]} :: {route_name}",
+                            title=f"{ENTITY_TYPES[self.entity_type]} :: {route_name_full}",
                             data={"entities": entries}
                         )
                     else:
