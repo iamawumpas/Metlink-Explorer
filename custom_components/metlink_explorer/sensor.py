@@ -121,15 +121,18 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
         
         # Filter for this direction
-        direction_trips = [
-            trip for trip in trip_updates 
-            if trip.get("trip", {}).get("direction_id") == self._direction
-        ]
+        direction_trips = []
+        for update in trip_updates:
+            trip_update = update.get("trip_update", {})
+            trip = trip_update.get("trip", {})
+            if trip.get("direction_id") == self._direction:
+                direction_trips.append(update)
         
-        direction_vehicles = [
-            vehicle for vehicle in vehicle_positions 
-            if vehicle.get("trip", {}).get("direction_id") == self._direction
-        ]
+        direction_vehicles = []
+        for position in vehicle_positions:
+            trip = position.get("trip", {})
+            if trip.get("direction_id") == self._direction:
+                direction_vehicles.append(position)
         
         # Return status based on available data
         if direction_trips:
@@ -152,15 +155,18 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         last_updated = self.coordinator.data.get("last_updated")
         
         # Filter for this direction
-        direction_trips = [
-            trip for trip in trip_updates 
-            if trip.get("trip", {}).get("direction_id") == self._direction
-        ]
+        direction_trips = []
+        for update in trip_updates:
+            trip_update = update.get("trip_update", {})
+            trip = trip_update.get("trip", {})
+            if trip.get("direction_id") == self._direction:
+                direction_trips.append(update)
         
-        direction_vehicles = [
-            vehicle for vehicle in vehicle_positions 
-            if vehicle.get("trip", {}).get("direction_id") == self._direction
-        ]
+        direction_vehicles = []
+        for position in vehicle_positions:
+            trip = position.get("trip", {})
+            if trip.get("direction_id") == self._direction:
+                direction_vehicles.append(position)
         
         attributes = {
             "direction": self._direction,
@@ -181,16 +187,23 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         # Add trip information if available
         if direction_trips:
             next_trips = []
-            for trip in direction_trips[:3]:  # Show next 3 trips
+            for update in direction_trips[:3]:  # Show next 3 trips
+                trip_update = update.get("trip_update", {})
+                trip = trip_update.get("trip", {})
+                
                 trip_info = {
-                    "trip_id": trip.get("trip", {}).get("trip_id"),
-                    "delay": trip.get("delay", 0),
+                    "trip_id": trip.get("trip_id"),
+                    "delay": trip_update.get("delay", 0),
                     "schedule_relationship": trip.get("schedule_relationship", "SCHEDULED"),
                 }
                 
                 # Add stop time updates if available
-                if "stop_time_update" in trip:
-                    trip_info["stops"] = len(trip["stop_time_update"])
+                stop_time_update = trip_update.get("stop_time_update")
+                if stop_time_update:
+                    if isinstance(stop_time_update, list):
+                        trip_info["stops"] = len(stop_time_update)
+                    else:
+                        trip_info["stops"] = 1
                     
                 next_trips.append(trip_info)
                 
@@ -199,19 +212,23 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         # Add vehicle information if available
         if direction_vehicles:
             vehicles = []
-            for vehicle in direction_vehicles:
+            for position in direction_vehicles:
+                vehicle_data = position.get("vehicle", {})
+                trip = position.get("trip", {})
+                
                 vehicle_info = {
-                    "vehicle_id": vehicle.get("vehicle", {}).get("id"),
-                    "trip_id": vehicle.get("trip", {}).get("trip_id"),
-                    "timestamp": vehicle.get("timestamp"),
+                    "vehicle_id": vehicle_data.get("id"),
+                    "trip_id": trip.get("trip_id"),
+                    "timestamp": position.get("timestamp"),
                 }
                 
                 # Add position if available
-                if "position" in vehicle:
-                    vehicle_info["latitude"] = vehicle["position"].get("latitude")
-                    vehicle_info["longitude"] = vehicle["position"].get("longitude")
-                    vehicle_info["bearing"] = vehicle["position"].get("bearing")
-                    vehicle_info["speed"] = vehicle["position"].get("speed")
+                position_data = position.get("position", {})
+                if position_data:
+                    vehicle_info["latitude"] = position_data.get("latitude")
+                    vehicle_info["longitude"] = position_data.get("longitude")
+                    vehicle_info["bearing"] = position_data.get("bearing")
+                    vehicle_info["speed"] = position_data.get("speed")
                 
                 vehicles.append(vehicle_info)
                 
@@ -220,20 +237,27 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         # Add service alerts if available
         if service_alerts:
             alerts = []
-            for alert in service_alerts:
+            for alert_entity in service_alerts:
+                alert = alert_entity.get("alert", {})
                 alert_info = {
-                    "alert_id": alert.get("id"),
+                    "alert_id": alert_entity.get("id"),
                     "cause": alert.get("cause"),
                     "effect": alert.get("effect"),
                     "severity_level": alert.get("severity_level"),
                 }
                 
                 # Add header and description texts
-                if "header_text" in alert:
-                    alert_info["header"] = alert["header_text"].get("translation", [{}])[0].get("text", "")
+                header_text = alert.get("header_text", {})
+                if header_text and "translation" in header_text:
+                    translations = header_text["translation"]
+                    if translations and len(translations) > 0:
+                        alert_info["header"] = translations[0].get("text", "")
                 
-                if "description_text" in alert:
-                    alert_info["description"] = alert["description_text"].get("translation", [{}])[0].get("text", "")
+                description_text = alert.get("description_text", {})
+                if description_text and "translation" in description_text:
+                    translations = description_text["translation"]
+                    if translations and len(translations) > 0:
+                        alert_info["description"] = translations[0].get("text", "")
                 
                 alerts.append(alert_info)
                 

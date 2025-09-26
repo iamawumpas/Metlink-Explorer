@@ -44,23 +44,30 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
             service_alerts = await self.api_client.get_service_alerts()
             
             # Filter data for this route
-            route_trip_updates = [
-                update for update in trip_updates 
-                if update.get("trip", {}).get("route_id") == self.route_id
-            ]
+            # Convert route_id to string for comparison since API may return integers
+            route_id_str = str(self.route_id)
             
-            route_vehicle_positions = [
-                position for position in vehicle_positions 
-                if position.get("trip", {}).get("route_id") == self.route_id
-            ]
+            route_trip_updates = []
+            for update in trip_updates:
+                trip_update = update.get("trip_update", {})
+                trip = trip_update.get("trip", {})
+                if str(trip.get("route_id", "")) == route_id_str:
+                    route_trip_updates.append(update)
             
-            route_service_alerts = [
-                alert for alert in service_alerts 
-                if any(
-                    entity.get("route_id") == self.route_id 
-                    for entity in alert.get("informed_entity", [])
-                )
-            ]
+            route_vehicle_positions = []
+            for position in vehicle_positions:
+                trip = position.get("trip", {})
+                if str(trip.get("route_id", "")) == route_id_str:
+                    route_vehicle_positions.append(position)
+            
+            route_service_alerts = []
+            for alert in service_alerts:
+                alert_data = alert.get("alert", {})
+                informed_entities = alert_data.get("informed_entity", [])
+                for entity in informed_entities:
+                    if str(entity.get("route_id", "")) == route_id_str:
+                        route_service_alerts.append(alert)
+                        break
             
             return {
                 "route_data": route_data,

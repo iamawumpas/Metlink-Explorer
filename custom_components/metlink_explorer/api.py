@@ -86,12 +86,15 @@ class MetlinkApiClient:
 
     async def get_trip_updates(self) -> list[dict[str, Any]]:
         """Get real-time trip updates."""
-        return await self._request("gtfs-rt/tripupdates")
+        response = await self._request("gtfs-rt/tripupdates")
+        return response.get("entity", [])
 
     async def get_vehicle_positions(self) -> list[dict[str, Any]]:
         """Get real-time vehicle positions."""
-        return await self._request("gtfs-rt/vehiclepositions")
+        response = await self._request("gtfs-rt/vehiclepositions")
+        return response.get("entity", [])
 
     async def get_service_alerts(self) -> list[dict[str, Any]]:
         """Get service alerts."""
-        return await self._request("gtfs-rt/servicealerts")
+        response = await self._request("gtfs-rt/servicealerts")
+        return response.get("entity", [])
