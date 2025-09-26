@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.2.0 (2025-09-26) - MAJOR ARCHITECTURE CHANGE
+
+### Breaking Changes
+- **Complete Entity Restructure**: Changed from 2 route-based entities to individual stop-based entities
+  - **New Entity Pattern**: `transport_type :: route_number / route_name :: stop_id / stop_description`
+  - **Per-Stop Entities**: Creates one entity for each stop on the route (e.g., 23 entities for a 23-stop route)
+  - **Stop-Specific Data**: Each entity shows next departures only for that specific stop
+  - **Better User Experience**: Users can select specific stops without knowing stop IDs from website
+
+### Features
+- **Enhanced Config Flow**: Fixed API key validation logic for adding multiple routes
+  - Integration now checks for existing API keys before asking user
+  - Proper flow: Check existing key → Use existing OR ask for new → Select routes
+  - Multiple route support without re-entering API credentials
+
+- **Stop-Centric Data Model**: Each stop entity provides comprehensive stop-specific information
+  - **State**: Next departure time for that specific stop
+  - **Attributes**: Stop location, sequence, departures, real-time trip/vehicle data
+  - **Stop Details**: Coordinates, zone information, stop codes for each stop
+  - **Trip Tracking**: Real-time vehicle positions and delays for trips serving each stop
+
+### Use Cases Enabled
+- **Full Route Visualization**: Create cards displaying entire route with all stops
+- **Specific Stop Monitoring**: Focus on particular stops of interest
+- **Journey Planning**: See departures from origin stop to destination
+- **Real-time Tracking**: Monitor vehicle progress stop-by-stop along route
+
+### Technical Improvements
+- Simplified API architecture focusing on stop-specific data requests
+- Better error handling for stop-specific data failures
+- Enhanced entity organization with route-based device grouping
+- Improved debugging and logging for stop entity creation
+
 ## v0.1.2 (2025-09-26)
 
 ### Bug Fixes
