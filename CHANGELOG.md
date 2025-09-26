@@ -1,5 +1,65 @@
 # Changelog
 
+## v0.1.0 (2025-09-26)
+
+### Major Enhancement - Direction-Specific Stop Sequences
+- **Stop Sequence Integration**: Added complete stop sequences for both inbound and outbound routes
+  - New `get_route_stops()` API method fetches all stops organized by direction
+  - Enhanced `get_route_departures()` with direction filtering and stop sequence data
+  - Each direction now has its own distinct stop sequence with proper ordering
+  - Stop data includes coordinates, zone information, stop codes, and sequence positions
+
+- **Enhanced Departure Information**: Next 10 departures now include comprehensive stop details
+  - Departure times associated with specific stops and their position in route sequence
+  - Stop coordinates (latitude/longitude) for mapping and distance calculations
+  - Zone information for fare calculations
+  - Stop codes and names for passenger information
+  - Route stop sequence numbers for progress tracking
+
+- **Improved Sensor Display**: Direction-specific state and attributes
+  - State now shows: `"Next: 14:32:00 at Wellington Station (Stop 1)"`
+  - Complete stop sequence available in sensor attributes for route visualization
+  - Direction-specific departures ensure accurate inbound/outbound information
+  - Enhanced attributes include total stop count and complete route mapping data
+
+## v0.0.9 (2025-09-26)
+
+### Bug Fixes
+- **Sensor Unit Error**: Fixed ValueError preventing entity creation
+  - Removed `native_unit_of_measurement` causing Home Assistant to expect numeric values
+  - Added explicit `device_class = None` to indicate text-based sensor
+  - Sensors now properly display string states like "No upcoming departures"
+  - Fixed integration loading errors and entity registration issues
+
+## v0.0.8 (2025-09-26)
+
+### Features
+- **Departure Functionality**: Added next 10 departures for selected routes
+  - New `get_route_departures()` API method with time parsing and filtering
+  - Enhanced coordinator to fetch departure data alongside real-time updates
+  - Sensor state displays next departure time and stop name
+  - Comprehensive departure attributes including stop information and trip details
+  - Intelligent time filtering to show only upcoming departures
+  - Integration of static GTFS schedule data with real-time updates
+
+## v0.0.7 (2025-09-26)
+
+### Bug Fixes
+- **Coordinator DateTime**: Fixed AttributeError preventing entity creation
+  - Replaced non-existent `last_update_success_time` property with `dt_util.utcnow()`
+  - Fixed coordinator timestamp handling that was causing entity registration failures
+  - Corrected corrupted manifest.json from previous fix attempt
+  - Entities now properly register and display in Home Assistant
+
+## v0.0.6 (2025-09-26)
+
+### Bug Fixes
+- **DateTime Attribute Error**: Fixed sensor attribute timestamp issues
+  - Added defensive programming for datetime attribute handling in sensor.py
+  - Enhanced `extra_state_attributes` with `hasattr()` checks for datetime objects
+  - Fixed coordinator data access patterns to prevent AttributeError on timestamps
+  - Improved error handling for sensor attribute generation
+
 ## v0.0.5 (2025-09-26)
 
 ### Bug Fixes
