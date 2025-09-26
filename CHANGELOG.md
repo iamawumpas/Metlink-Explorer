@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.0.3 (2025-09-26)
+
+### Bug Fixes
+- **Config Flow**: Fixed KeyError crash during route selection step
+  - Route selection form only provided `route_id`, but code expected `route_short_name` and `route_long_name`
+  - Updated logic to look up route details via API when `route_id` is selected
+  - Simplified `_create_entry` method to avoid duplicate API calls
+  - Integration setup flow now completes successfully without errors
+
+## v0.0.2 (2025-09-26)
+
+### HACS Compatibility
+- Added `hacs.json` for proper HACS integration support
+- Fixed version format in `manifest.json` (removed 'v' prefix)
+- Added proper Git tags for version detection
+- HACS now correctly shows version instead of commit hash
+
 ## v0.0.1 (2025-09-26)
 
 ### Features
