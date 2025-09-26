@@ -131,18 +131,21 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         route_data = self.coordinator.data.get("route_data", {})
         trip_updates = self.coordinator.data.get("trip_updates", [])
         vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
-        departures = self.coordinator.data.get("departures", [])
         
-        # Filter departures for this direction (if we can determine direction from departure data)
-        # For now, we'll show all departures since direction info might not be in departure data
+        # Get direction-specific departures
+        departure_key = f"direction_{self._direction}_departures"
+        departures = self.coordinator.data.get(departure_key, [])
+        
+        # Show the next departure for this direction
         if departures:
-            # Show the next departure time as the state
             next_departure = departures[0]
             departure_time = next_departure.get("departure_time", "")
             stop_name = next_departure.get("stop_name", "Unknown Stop")
+            stop_sequence = next_departure.get("route_stop_sequence", "")
             
-            if departure_time:
-                return f"Next: {departure_time} at {stop_name}"
+            if departure_time and stop_name:
+                sequence_info = f" (Stop {stop_sequence})" if stop_sequence else ""
+                return f"Next: {departure_time} at {stop_name}{sequence_info}"
             else:
                 return f"Next departure at {stop_name}"
         
@@ -178,8 +181,12 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         trip_updates = self.coordinator.data.get("trip_updates", [])
         vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
         service_alerts = self.coordinator.data.get("service_alerts", [])
-        departures = self.coordinator.data.get("departures", [])
+        route_stops = self.coordinator.data.get("route_stops", {})
         last_updated = self.coordinator.data.get("last_updated")
+        
+        # Get direction-specific departures
+        departure_key = f"direction_{self._direction}_departures"
+        departures = self.coordinator.data.get(departure_key, [])
         
         # Filter for this direction
         direction_trips = []
@@ -211,6 +218,25 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "last_updated": last_updated.isoformat() if hasattr(last_updated, 'isoformat') else None,
         }
         
+        # Add stop sequence information for this direction
+        direction_stops = route_stops.get(self._direction, [])
+        if direction_stops:
+            stop_sequence_list = []
+            for stop in direction_stops:
+                stop_info = {
+                    "stop_id": stop.get("stop_id", ""),
+                    "stop_name": stop.get("stop_name", ""),
+                    "stop_sequence": stop.get("stop_sequence", 0),
+                    "stop_code": stop.get("stop_code", ""),
+                    "stop_lat": stop.get("stop_lat"),
+                    "stop_lon": stop.get("stop_lon"),
+                    "zone_id": stop.get("zone_id", ""),
+                }
+                stop_sequence_list.append(stop_info)
+            
+            attributes["stop_sequence"] = stop_sequence_list
+            attributes["total_stops"] = len(direction_stops)
+        
         # Add departure information if available
         if departures:
             departure_list = []
@@ -222,8 +248,13 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
                     "stop_id": departure.get("stop_id", ""),
                     "trip_id": departure.get("trip_id", ""),
                     "stop_sequence": departure.get("stop_sequence", 0),
+                    "route_stop_sequence": departure.get("route_stop_sequence", 0),
                     "pickup_type": departure.get("pickup_type", 0),
                     "drop_off_type": departure.get("drop_off_type", 0),
+                    "stop_lat": departure.get("stop_lat"),
+                    "stop_lon": departure.get("stop_lon"),
+                    "zone_id": departure.get("zone_id", ""),
+                    "stop_code": departure.get("stop_code", ""),
                 }
                 departure_list.append(departure_info)
             

@@ -44,8 +44,12 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
             vehicle_positions = await self.api_client.get_vehicle_positions()
             service_alerts = await self.api_client.get_service_alerts()
             
-            # Get next 10 departures for this route
-            departures = await self.api_client.get_route_departures(self.route_id, 10)
+            # Get stop sequences for both directions
+            route_stops = await self.api_client.get_route_stops(self.route_id)
+            
+            # Get departures for both directions separately
+            direction_0_departures = await self.api_client.get_route_departures(self.route_id, direction_id=0, limit=10)
+            direction_1_departures = await self.api_client.get_route_departures(self.route_id, direction_id=1, limit=10)
             
             # Filter data for this route
             # Convert route_id to string for comparison since API may return integers
@@ -78,7 +82,9 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
                 "trip_updates": route_trip_updates,
                 "vehicle_positions": route_vehicle_positions,
                 "service_alerts": route_service_alerts,
-                "departures": departures,
+                "route_stops": route_stops,
+                "direction_0_departures": direction_0_departures,
+                "direction_1_departures": direction_1_departures,
                 "last_updated": dt_util.utcnow(),
             }
             
