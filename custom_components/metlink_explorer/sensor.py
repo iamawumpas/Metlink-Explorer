@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CONF_ROUTE_ID,
     CONF_ROUTE_LONG_NAME,
     CONF_ROUTE_SHORT_NAME,
     CONF_TRANSPORT_TYPE,
@@ -39,33 +40,34 @@ async def async_setup_entry(
     entities = []
     
     # Direction 0 (normal direction)
-    entities.append(
-        MetlinkRouteSensor(
-            coordinator,
-            config_entry,
-            direction=0,
-            transport_type=transport_type,
-            route_short_name=route_short_name,
-            route_long_name=route_long_name,
-        )
+    direction_0_entity = MetlinkRouteSensor(
+        coordinator,
+        config_entry,
+        direction=0,
+        transport_type=transport_type,
+        route_short_name=route_short_name,
+        route_long_name=route_long_name,
     )
+    entities.append(direction_0_entity)
+    _LOGGER.info(f"Created direction 0 entity: {direction_0_entity.name} (ID: {direction_0_entity.unique_id})")
     
     # Direction 1 (reverse direction)
     # Reverse the route name by splitting on ' - ' and reversing
     route_parts = route_long_name.split(" - ")
     reversed_route_name = " - ".join(reversed(route_parts))
     
-    entities.append(
-        MetlinkRouteSensor(
-            coordinator,
-            config_entry,
-            direction=1,
-            transport_type=transport_type,
-            route_short_name=route_short_name,
-            route_long_name=reversed_route_name,
-        )
+    direction_1_entity = MetlinkRouteSensor(
+        coordinator,
+        config_entry,
+        direction=1,
+        transport_type=transport_type,
+        route_short_name=route_short_name,
+        route_long_name=reversed_route_name,
     )
+    entities.append(direction_1_entity)
+    _LOGGER.info(f"Created direction 1 entity: {direction_1_entity.name} (ID: {direction_1_entity.unique_id})")
     
+    _LOGGER.info(f"Adding {len(entities)} entities to Home Assistant")
     async_add_entities(entities, True)
 
 
@@ -94,18 +96,19 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         transport_type_name = TRANSPORT_TYPES.get(transport_type, "Unknown")
         direction_suffix = "outbound" if direction == 0 else "inbound"
         
-        # Entity ID
-        self._attr_unique_id = f"{DOMAIN}_{config_entry.entry_id}_{direction}"
+        # Entity ID - make it more descriptive
+        route_id = config_entry.data.get(CONF_ROUTE_ID, "unknown")
+        self._attr_unique_id = f"{DOMAIN}_{route_id}_{direction}"
         
         # Entity name using the schema: transport_type :: route_number / route_description
         self._attr_name = f"{transport_type_name} :: {route_short_name} / {route_long_name}"
         
-        # Device info
+        # Device info - use route-specific identifier but both entities share same device
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": f"{transport_type_name} :: {route_short_name} / {route_long_name}",
+            "identifiers": {(DOMAIN, f"{config_entry.entry_id}_{route_id}")},
+            "name": f"{transport_type_name} Route {route_short_name}",
             "manufacturer": "Metlink",
-            "model": transport_type_name,
+            "model": f"{transport_type_name} Route",
             "sw_version": "1.0",
         }
 
