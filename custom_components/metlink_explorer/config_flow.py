@@ -63,6 +63,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
+        
+        # Check if we already have an API key from existing entries
+        existing_entries = self._async_current_entries()
+        if existing_entries:
+            # Use API key from existing entry
+            existing_entry = existing_entries[0]
+            self._api_key = existing_entry.data.get(CONF_API_KEY)
+            if self._api_key:
+                _LOGGER.debug("Using existing API key from entry %s", existing_entry.entry_id)
+                # Skip to transport type selection
+                return await self.async_step_transport_type()
+        
+        # No existing entry or API key, ask for it
         if user_input is None:
             return self.async_show_form(
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA

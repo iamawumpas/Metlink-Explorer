@@ -42,80 +42,102 @@ async def async_setup_entry(
         
         _LOGGER.info(f"Config data - Type: {transport_type}, Route: {route_short_name}, Name: {route_long_name}")
         
-        # Create sensors for both directions
+        # Wait for initial data to be available
+        if not coordinator.data:
+            _LOGGER.warning("No data available from coordinator, waiting for first refresh")
+            await coordinator.async_request_refresh()
+        
+        # Get stop sequences from coordinator data
+        route_stops = coordinator.data.get("route_stops", {})
+        if not route_stops:
+            _LOGGER.error("No route stops data available")
+            return
+        
+        # Create entities for each stop in both directions
         entities = []
+        
+        for direction_id, stops in route_stops.items():
+            direction_name = "Outbound" if direction_id == 0 else "Inbound"
+            
+            for stop_info in stops:
+                stop_id = stop_info.get("stop_id")
+                stop_name = stop_info.get("stop_name", "Unknown Stop")
+                stop_sequence = stop_info.get("stop_sequence", 0)
+                
+                if not stop_id:
+                    _LOGGER.warning(f"Skipping stop without ID in direction {direction_id}")
+                    continue
+                
+                # Create stop-based entity
+                stop_entity = MetlinkStopSensor(
+                    coordinator=coordinator,
+                    config_entry=config_entry,
+                    direction_id=direction_id,
+                    direction_name=direction_name,
+                    transport_type=transport_type,
+                    route_short_name=route_short_name,
+                    route_long_name=route_long_name,
+                    stop_info=stop_info,
+                )
+                
+                entities.append(stop_entity)
+                _LOGGER.debug(f"Created stop entity: {stop_entity.name} (Stop {stop_sequence})")
+        
+        _LOGGER.info(f"Adding {len(entities)} stop-based entities to Home Assistant")
+        async_add_entities(entities, True)
+        
     except Exception as e:
-        _LOGGER.error(f"Error setting up sensor platform: {e}")
+        _LOGGER.error(f"Error setting up sensor platform: {e}", exc_info=True)
         raise
-    
-    # Direction 0 (normal direction)
-    direction_0_entity = MetlinkRouteSensor(
-        coordinator,
-        config_entry,
-        direction=0,
-        transport_type=transport_type,
-        route_short_name=route_short_name,
-        route_long_name=route_long_name,
-    )
-    entities.append(direction_0_entity)
-    _LOGGER.info(f"Created direction 0 entity: {direction_0_entity.name} (ID: {direction_0_entity.unique_id})")
-    
-    # Direction 1 (reverse direction)
-    # Reverse the route name by splitting on ' - ' and reversing
-    route_parts = route_long_name.split(" - ")
-    reversed_route_name = " - ".join(reversed(route_parts))
-    
-    direction_1_entity = MetlinkRouteSensor(
-        coordinator,
-        config_entry,
-        direction=1,
-        transport_type=transport_type,
-        route_short_name=route_short_name,
-        route_long_name=reversed_route_name,
-    )
-    entities.append(direction_1_entity)
-    _LOGGER.info(f"Created direction 1 entity: {direction_1_entity.name} (ID: {direction_1_entity.unique_id})")
-    
-    _LOGGER.info(f"Adding {len(entities)} entities to Home Assistant")
-    async_add_entities(entities, True)
 
 
-class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a Metlink route sensor."""
+class MetlinkStopSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Metlink stop sensor."""
 
     def __init__(
         self,
         coordinator: MetlinkDataUpdateCoordinator,
         config_entry: ConfigEntry,
-        direction: int,
+        direction_id: int,
+        direction_name: str,
         transport_type: int,
         route_short_name: str,
         route_long_name: str,
+        stop_info: dict[str, Any],
     ) -> None:
-        """Initialize the sensor."""
+        """Initialize the stop sensor."""
         super().__init__(coordinator)
         
         self._config_entry = config_entry
-        self._direction = direction
+        self._direction_id = direction_id
+        self._direction_name = direction_name
         self._transport_type = transport_type
         self._route_short_name = route_short_name
         self._route_long_name = route_long_name
+        self._stop_info = stop_info
         
-        # Create entity naming
-        transport_type_name = TRANSPORT_TYPES.get(transport_type, "Unknown")
-        direction_suffix = "outbound" if direction == 0 else "inbound"
+        # Extract stop details
+        self._stop_id = stop_info.get("stop_id")
+        self._stop_name = stop_info.get("stop_name", "Unknown Stop")
+        self._stop_sequence = stop_info.get("stop_sequence", 0)
+        self._stop_code = stop_info.get("stop_code", "")
         
-        # Entity ID - make it more descriptive
+        # Create entity naming following the pattern: 
+        # transport_type :: route_number / route_name :: stop_id / stop_description
+        transport_type_name = TRANSPORT_TYPES.get(transport_type, "Unknown").lower()
+        
+        # Entity name for display
+        self._attr_name = f"{transport_type_name.title()} :: {route_short_name} / {route_long_name} :: {self._stop_id} / {self._stop_name}"
+        
+        # Unique ID for internal use
         route_id = config_entry.data.get(CONF_ROUTE_ID, "unknown")
-        self._attr_unique_id = f"{DOMAIN}_{route_id}_{direction}"
+        self._attr_unique_id = f"{DOMAIN}_{route_id}_{direction_id}_{self._stop_id}"
         
-        # Entity name using the schema: transport_type :: route_number / route_description
-        self._attr_name = f"{transport_type_name} :: {route_short_name} / {route_long_name}"
-        
-        # Device info - use route-specific identifier but both entities share same device
+        # Device info - group stops by route for better organization
+        transport_type_name = TRANSPORT_TYPES.get(transport_type, "Unknown")
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{config_entry.entry_id}_{route_id}")},
-            "name": f"{transport_type_name} Route {route_short_name}",
+            "name": f"{transport_type_name} Route {route_short_name} - {route_long_name}",
             "manufacturer": "Metlink",
             "model": f"{transport_type_name} Route",
             "sw_version": "1.0",
@@ -123,57 +145,33 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> str | None:
-        """Return the state of the sensor."""
+        """Return the state of the sensor (next departure time for this stop)."""
         if not self.coordinator.data:
-            return None
+            return "No data"
             
-        # Get route data
-        route_data = self.coordinator.data.get("route_data", {})
-        trip_updates = self.coordinator.data.get("trip_updates", [])
-        vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
+        # Get departures for this direction
+        departure_key = f"direction_{self._direction_id}_departures"
+        all_departures = self.coordinator.data.get(departure_key, [])
         
-        # Get direction-specific departures
-        departure_key = f"direction_{self._direction}_departures"
-        departures = self.coordinator.data.get(departure_key, [])
+        # Filter departures for this specific stop
+        stop_departures = [
+            dep for dep in all_departures 
+            if dep.get("stop_id") == self._stop_id
+        ]
         
-        # Show the next departure for this direction
-        if departures:
-            next_departure = departures[0]
+        if stop_departures:
+            next_departure = stop_departures[0]
             departure_time = next_departure.get("departure_time", "")
-            stop_name = next_departure.get("stop_name", "Unknown Stop")
-            stop_sequence = next_departure.get("route_stop_sequence", "")
-            
-            if departure_time and stop_name:
-                sequence_info = f" (Stop {stop_sequence})" if stop_sequence else ""
-                return f"Next: {departure_time} at {stop_name}{sequence_info}"
+            if departure_time:
+                return f"Next: {departure_time}"
             else:
-                return f"Next departure at {stop_name}"
+                return "Departure scheduled"
         
-        # Filter for this direction from real-time data
-        direction_trips = []
-        for update in trip_updates:
-            trip_update = update.get("trip_update", {})
-            trip = trip_update.get("trip", {})
-            if trip.get("direction_id") == self._direction:
-                direction_trips.append(update)
-        
-        direction_vehicles = []
-        for position in vehicle_positions:
-            trip = position.get("trip", {})
-            if trip.get("direction_id") == self._direction:
-                direction_vehicles.append(position)
-        
-        # Return status based on available data
-        if direction_trips:
-            return "Active"
-        elif direction_vehicles:
-            return "In Service"
-        else:
-            return "No upcoming departures"
+        return "No upcoming departures"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the state attributes."""
+        """Return the state attributes for this stop."""
         if not self.coordinator.data:
             return {}
             
@@ -181,30 +179,23 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         trip_updates = self.coordinator.data.get("trip_updates", [])
         vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
         service_alerts = self.coordinator.data.get("service_alerts", [])
-        route_stops = self.coordinator.data.get("route_stops", {})
         last_updated = self.coordinator.data.get("last_updated")
         
-        # Get direction-specific departures
-        departure_key = f"direction_{self._direction}_departures"
-        departures = self.coordinator.data.get(departure_key, [])
-        
-        # Filter for this direction
-        direction_trips = []
-        for update in trip_updates:
-            trip_update = update.get("trip_update", {})
-            trip = trip_update.get("trip", {})
-            if trip.get("direction_id") == self._direction:
-                direction_trips.append(update)
-        
-        direction_vehicles = []
-        for position in vehicle_positions:
-            trip = position.get("trip", {})
-            if trip.get("direction_id") == self._direction:
-                direction_vehicles.append(position)
+        # Get departures for this specific stop
+        departure_key = f"direction_{self._direction_id}_departures"
+        all_departures = self.coordinator.data.get(departure_key, [])
+        stop_departures = [
+            dep for dep in all_departures 
+            if dep.get("stop_id") == self._stop_id
+        ]
         
         attributes = {
-            "direction": self._direction,
-            "direction_name": "Outbound" if self._direction == 0 else "Inbound",
+            "stop_id": self._stop_id,
+            "stop_name": self._stop_name,
+            "stop_code": self._stop_code,
+            "stop_sequence": self._stop_sequence,
+            "direction_id": self._direction_id,
+            "direction_name": self._direction_name,
             "transport_type": TRANSPORT_TYPES.get(self._transport_type, "Unknown"),
             "route_id": route_data.get("route_id"),
             "route_short_name": self._route_short_name,
@@ -212,133 +203,103 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "route_color": route_data.get("route_color"),
             "route_text_color": route_data.get("route_text_color"),
             "agency_id": route_data.get("agency_id"),
-            "trip_count": len(direction_trips),
-            "vehicle_count": len(direction_vehicles),
-            "alert_count": len(service_alerts),
             "last_updated": last_updated.isoformat() if hasattr(last_updated, 'isoformat') else None,
         }
         
-        # Add stop sequence information for this direction
-        direction_stops = route_stops.get(self._direction, [])
-        if direction_stops:
-            stop_sequence_list = []
-            for stop in direction_stops:
-                stop_info = {
-                    "stop_id": stop.get("stop_id", ""),
-                    "stop_name": stop.get("stop_name", ""),
-                    "stop_sequence": stop.get("stop_sequence", 0),
-                    "stop_code": stop.get("stop_code", ""),
-                    "stop_lat": stop.get("stop_lat"),
-                    "stop_lon": stop.get("stop_lon"),
-                    "zone_id": stop.get("zone_id", ""),
-                }
-                stop_sequence_list.append(stop_info)
-            
-            attributes["stop_sequence"] = stop_sequence_list
-            attributes["total_stops"] = len(direction_stops)
+        # Add stop location if available
+        if self._stop_info.get("stop_lat") is not None:
+            attributes["stop_latitude"] = self._stop_info.get("stop_lat")
+            attributes["stop_longitude"] = self._stop_info.get("stop_lon")
+            attributes["zone_id"] = self._stop_info.get("zone_id", "")
         
-        # Add departure information if available
-        if departures:
+        # Add next departures for this stop (up to 10)
+        if stop_departures:
             departure_list = []
-            for departure in departures:
+            for departure in stop_departures[:10]:  # Limit to 10 departures
                 departure_info = {
                     "departure_time": departure.get("departure_time", ""),
                     "arrival_time": departure.get("arrival_time", ""),
-                    "stop_name": departure.get("stop_name", ""),
-                    "stop_id": departure.get("stop_id", ""),
                     "trip_id": departure.get("trip_id", ""),
-                    "stop_sequence": departure.get("stop_sequence", 0),
-                    "route_stop_sequence": departure.get("route_stop_sequence", 0),
                     "pickup_type": departure.get("pickup_type", 0),
                     "drop_off_type": departure.get("drop_off_type", 0),
-                    "stop_lat": departure.get("stop_lat"),
-                    "stop_lon": departure.get("stop_lon"),
-                    "zone_id": departure.get("zone_id", ""),
-                    "stop_code": departure.get("stop_code", ""),
                 }
                 departure_list.append(departure_info)
             
             attributes["next_departures"] = departure_list
-            attributes["departure_count"] = len(departures)
+            attributes["departure_count"] = len(departure_list)
+        else:
+            attributes["next_departures"] = []
+            attributes["departure_count"] = 0
         
-        # Add trip information if available
-        if direction_trips:
-            next_trips = []
-            for update in direction_trips[:3]:  # Show next 3 trips
-                trip_update = update.get("trip_update", {})
-                trip = trip_update.get("trip", {})
-                
-                trip_info = {
-                    "trip_id": trip.get("trip_id"),
-                    "delay": trip_update.get("delay", 0),
-                    "schedule_relationship": trip.get("schedule_relationship", "SCHEDULED"),
-                }
-                
-                # Add stop time updates if available
-                stop_time_update = trip_update.get("stop_time_update")
-                if stop_time_update:
-                    if isinstance(stop_time_update, list):
-                        trip_info["stops"] = len(stop_time_update)
-                    else:
-                        trip_info["stops"] = 1
-                    
-                next_trips.append(trip_info)
-                
-            attributes["next_trips"] = next_trips
+        # Add trip and vehicle information for this stop
+        stop_trips = []
+        stop_vehicles = []
         
-        # Add vehicle information if available
-        if direction_vehicles:
-            vehicles = []
-            for position in direction_vehicles:
-                vehicle_data = position.get("vehicle", {})
-                trip = position.get("trip", {})
-                
-                vehicle_info = {
-                    "vehicle_id": vehicle_data.get("id"),
-                    "trip_id": trip.get("trip_id"),
-                    "timestamp": position.get("timestamp"),
-                }
-                
-                # Add position if available
-                position_data = position.get("position", {})
-                if position_data:
-                    vehicle_info["latitude"] = position_data.get("latitude")
-                    vehicle_info["longitude"] = position_data.get("longitude")
-                    vehicle_info["bearing"] = position_data.get("bearing")
-                    vehicle_info["speed"] = position_data.get("speed")
-                
-                vehicles.append(vehicle_info)
-                
-            attributes["vehicles"] = vehicles
+        for update in trip_updates:
+            trip_update = update.get("trip_update", {})
+            trip = trip_update.get("trip", {})
+            if trip.get("direction_id") == self._direction_id:
+                # Check if this trip stops at our stop
+                stop_time_updates = trip_update.get("stop_time_update", [])
+                if isinstance(stop_time_updates, list):
+                    for stu in stop_time_updates:
+                        if stu.get("stop_id") == self._stop_id:
+                            stop_trips.append({
+                                "trip_id": trip.get("trip_id"),
+                                "delay": trip_update.get("delay", 0),
+                                "arrival_delay": stu.get("arrival", {}).get("delay", 0),
+                                "departure_delay": stu.get("departure", {}).get("delay", 0),
+                            })
+                            break
         
-        # Add service alerts if available
-        if service_alerts:
-            alerts = []
-            for alert_entity in service_alerts:
-                alert = alert_entity.get("alert", {})
-                alert_info = {
-                    "alert_id": alert_entity.get("id"),
-                    "cause": alert.get("cause"),
-                    "effect": alert.get("effect"),
-                    "severity_level": alert.get("severity_level"),
-                }
-                
-                # Add header and description texts
-                header_text = alert.get("header_text", {})
-                if header_text and "translation" in header_text:
-                    translations = header_text["translation"]
-                    if translations and len(translations) > 0:
-                        alert_info["header"] = translations[0].get("text", "")
-                
-                description_text = alert.get("description_text", {})
-                if description_text and "translation" in description_text:
-                    translations = description_text["translation"]
-                    if translations and len(translations) > 0:
-                        alert_info["description"] = translations[0].get("text", "")
-                
-                alerts.append(alert_info)
-                
-            attributes["alerts"] = alerts
+        for position in vehicle_positions:
+            trip = position.get("trip", {})
+            if trip.get("direction_id") == self._direction_id and trip.get("trip_id"):
+                # If we have trip info for this vehicle and it matches our trips, include it
+                vehicle_trip_id = trip.get("trip_id")
+                if any(t.get("trip_id") == vehicle_trip_id for t in stop_trips):
+                    vehicle_data = position.get("vehicle", {})
+                    position_data = position.get("position", {})
+                    stop_vehicles.append({
+                        "vehicle_id": vehicle_data.get("id"),
+                        "trip_id": vehicle_trip_id,
+                        "latitude": position_data.get("latitude"),
+                        "longitude": position_data.get("longitude"),
+                        "bearing": position_data.get("bearing"),
+                        "speed": position_data.get("speed"),
+                    })
+        
+        attributes["trips"] = stop_trips
+        attributes["vehicles"] = stop_vehicles
+        attributes["trip_count"] = len(stop_trips)
+        attributes["vehicle_count"] = len(stop_vehicles)
+        
+        # Add service alerts
+        attributes["alerts"] = []
+        attributes["alert_count"] = len(service_alerts)
+        for alert_entity in service_alerts:
+            alert = alert_entity.get("alert", {})
+            alert_info = {
+                "alert_id": alert_entity.get("id"),
+                "cause": alert.get("cause"),
+                "effect": alert.get("effect"),
+                "severity_level": alert.get("severity_level"),
+            }
+            
+            # Add header and description texts
+            header_text = alert.get("header_text", {})
+            if header_text and "translation" in header_text:
+                translations = header_text["translation"]
+                if translations and len(translations) > 0:
+                    alert_info["header"] = translations[0].get("text", "")
+            
+            description_text = alert.get("description_text", {})
+            if description_text and "translation" in description_text:
+                translations = description_text["translation"]
+                if translations and len(translations) > 0:
+                    alert_info["description"] = translations[0].get("text", "")
+            
+            attributes["alerts"].append(alert_info)
         
         return attributes
 
@@ -357,4 +318,5 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             5: "mdi:gondola",    # Cable Car
             712: "mdi:school",   # School Services
         }
+        return transport_icons.get(self._transport_type, "mdi:transit-connection-variant")
         return transport_icons.get(self._transport_type, "mdi:transit-connection-variant")
