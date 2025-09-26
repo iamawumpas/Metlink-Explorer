@@ -122,11 +122,24 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle route selection."""
         if user_input is not None:
-            self._selected_route = {
-                CONF_ROUTE_ID: user_input[CONF_ROUTE_ID],
-                CONF_ROUTE_SHORT_NAME: user_input[CONF_ROUTE_SHORT_NAME],
-                CONF_ROUTE_LONG_NAME: user_input[CONF_ROUTE_LONG_NAME],
-            }
+            # Get the selected route ID and look up the route details
+            selected_route_id = user_input[CONF_ROUTE_ID]
+            
+            # Get the route details from the API
+            api_client = MetlinkApiClient(self.hass, self._api_key)
+            try:
+                route_data = await api_client.get_route_by_id(selected_route_id)
+                if not route_data:
+                    return self.async_abort(reason="route_not_found")
+                
+                self._selected_route = {
+                    CONF_ROUTE_ID: selected_route_id,
+                    CONF_ROUTE_SHORT_NAME: route_data.get("route_short_name", ""),
+                    CONF_ROUTE_LONG_NAME: route_data.get("route_long_name", ""),
+                }
+                
+            except MetlinkApiError:
+                return self.async_abort(reason="cannot_connect")
             
             # Create the config entry
             return await self._create_entry()
@@ -171,21 +184,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _create_entry(self) -> FlowResult:
         """Create the config entry."""
-        # Get the full route data for the selected route
-        api_client = MetlinkApiClient(self.hass, self._api_key)
-        
-        try:
-            route_data = await api_client.get_route_by_id(self._selected_route[CONF_ROUTE_ID])
-            if not route_data:
-                return self.async_abort(reason="route_not_found")
-                
-        except MetlinkApiError:
-            return self.async_abort(reason="cannot_connect")
-
         # Create the integration entry title
         transport_type_name = TRANSPORT_TYPES.get(self._transport_type, "Unknown")
-        route_short_name = route_data.get("route_short_name", "")
-        route_long_name = route_data.get("route_long_name", "")
+        route_short_name = self._selected_route[CONF_ROUTE_SHORT_NAME]
+        route_long_name = self._selected_route[CONF_ROUTE_LONG_NAME]
         
         title = f"{transport_type_name} :: {route_short_name} / {route_long_name}"
 
