@@ -74,7 +74,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
                 "trip_updates": route_trip_updates,
                 "vehicle_positions": route_vehicle_positions,
                 "service_alerts": route_service_alerts,
-                "last_updated": self.last_update_success,
+                "last_updated": self.last_update_success_time,
             }
             
         except MetlinkApiError as err:

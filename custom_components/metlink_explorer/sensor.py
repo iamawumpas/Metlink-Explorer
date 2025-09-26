@@ -29,15 +29,24 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Metlink Explorer sensor platform."""
-    coordinator: MetlinkDataUpdateCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    _LOGGER.info(f"Setting up Metlink Explorer sensor platform for entry: {config_entry.entry_id}")
     
-    # Get config data
-    transport_type = config_entry.data[CONF_TRANSPORT_TYPE]
-    route_short_name = config_entry.data[CONF_ROUTE_SHORT_NAME]
-    route_long_name = config_entry.data[CONF_ROUTE_LONG_NAME]
-    
-    # Create sensors for both directions
-    entities = []
+    try:
+        coordinator: MetlinkDataUpdateCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+        _LOGGER.info(f"Found coordinator: {coordinator}")
+        
+        # Get config data
+        transport_type = config_entry.data[CONF_TRANSPORT_TYPE]
+        route_short_name = config_entry.data[CONF_ROUTE_SHORT_NAME]
+        route_long_name = config_entry.data[CONF_ROUTE_LONG_NAME]
+        
+        _LOGGER.info(f"Config data - Type: {transport_type}, Route: {route_short_name}, Name: {route_long_name}")
+        
+        # Create sensors for both directions
+        entities = []
+    except Exception as e:
+        _LOGGER.error(f"Error setting up sensor platform: {e}")
+        raise
     
     # Direction 0 (normal direction)
     direction_0_entity = MetlinkRouteSensor(
@@ -184,7 +193,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "trip_count": len(direction_trips),
             "vehicle_count": len(direction_vehicles),
             "alert_count": len(service_alerts),
-            "last_updated": last_updated.isoformat() if last_updated else None,
+            "last_updated": last_updated.isoformat() if hasattr(last_updated, 'isoformat') else None,
         }
         
         # Add trip information if available
