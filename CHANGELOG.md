@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.1.2 (2025-09-26)
+
+### Bug Fixes
+- **Config Flow Error**: Fixed missing `async_step_init` method in OptionsFlowHandler
+  - Added proper OptionsFlowHandler implementation to prevent "Handler OptionsFlowHandler doesn't support step init" error
+  - Integration options flow now works correctly without throwing errors
+  
+- **Integration Initialization**: Enhanced setup error handling and debugging
+  - Added comprehensive logging throughout integration setup process
+  - Improved error handling in `async_setup_entry` to prevent silent failures
+  - Added debug messages for coordinator initialization and platform setup
+  - Fixed missing `integration_type: "hub"` in manifest.json
+
+## v0.1.1 (2025-09-26)
+
+### Bug Fixes
+- **API Error Handling**: Fixed 400 Bad Request errors for invalid/empty stops
+  - Enhanced `get_stop_times()` method with graceful error handling for stops without services
+  - Added defensive programming in `get_route_departures()` to handle API failures
+  - Individual stop failures no longer crash the entire departure lookup process
+  - Improved debugging with detailed logging for API requests and responses
+  - Integration now handles real-world API inconsistencies and invalid stop IDs
+
 ## v0.1.0 (2025-09-26)
 
 ### Major Enhancement - Direction-Specific Stop Sequences
