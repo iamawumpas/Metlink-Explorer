@@ -18,22 +18,31 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Metlink Explorer from a config entry."""
-    _LOGGER.debug("Setting up Metlink Explorer entry: %s", entry.entry_id)
+    _LOGGER.info("Setting up Metlink Explorer entry: %s", entry.entry_id)
     
-    # Initialize the data update coordinator
-    coordinator = MetlinkDataUpdateCoordinator(hass, entry)
-    
-    # Fetch initial data to ensure the API key works
-    await coordinator.async_config_entry_first_refresh()
-    
-    # Store coordinator in hass.data
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = coordinator
-    
-    # Setup platforms
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
-    return True
+    try:
+        # Initialize the data update coordinator
+        coordinator = MetlinkDataUpdateCoordinator(hass, entry)
+        
+        # Fetch initial data to ensure the API key works
+        _LOGGER.debug("Starting initial data refresh for coordinator...")
+        await coordinator.async_config_entry_first_refresh()
+        _LOGGER.info("Initial data refresh completed successfully")
+        
+        # Store coordinator in hass.data
+        hass.data.setdefault(DOMAIN, {})
+        hass.data[DOMAIN][entry.entry_id] = coordinator
+        
+        # Setup platforms
+        _LOGGER.debug("Setting up platforms: %s", PLATFORMS)
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        _LOGGER.info("Metlink Explorer setup completed successfully")
+        
+        return True
+        
+    except Exception as err:
+        _LOGGER.error("Error setting up Metlink Explorer: %s", err, exc_info=True)
+        return False
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
