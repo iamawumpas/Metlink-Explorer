@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import MetlinkApiClient, MetlinkApiError
 from .const import CONF_API_KEY, CONF_ROUTE_ID, DOMAIN, UPDATE_INTERVAL
@@ -74,7 +75,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
                 "trip_updates": route_trip_updates,
                 "vehicle_positions": route_vehicle_positions,
                 "service_alerts": route_service_alerts,
-                "last_updated": self.last_update_success_time,
+                "last_updated": dt_util.utcnow(),
             }
             
         except MetlinkApiError as err:
