@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.0.5 (2025-09-26)
+
+### Bug Fixes
+- **Entity Creation & Visibility**: Fixed dual entity creation issues
+  - Only one entity was being created/visible instead of two (inbound/outbound)
+  - Enhanced `unique_id` generation using `route_id` and `direction` for better uniqueness
+  - Fixed device info to use route-specific identifiers instead of generic config entry ID
+  - Removed manual `entity_id` assignment that could cause Home Assistant entity conflicts
+  - Added detailed logging for entity creation debugging and troubleshooting
+  - Fixed entity naming logic to ensure both directional entities are properly registered
+  - Both entities should now appear in Developer Tools > States with correct naming
+
 ## v0.0.4 (2025-09-26)
 
 ### Bug Fixes
