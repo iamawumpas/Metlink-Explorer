@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Metlink Explorer Setup",
+        "description": "Enter your Metlink API key to get started. You can get your API key from https://api.metlink.org.nz/",
+        "data": {
+          "api_key": "API Key"
+        }
+      },
+      "transport_type": {
+        "title": "Select Transport Type",
+        "description": "Choose the type of transport you want to monitor. Available transport types: {transport_types}",
+        "data": {
+          "transport_type": "Transport Type"
+        }
+      },
+      "route_selection": {
+        "title": "Select Route",
+        "description": "Choose the specific route you want to monitor for {transport_type}. Found {route_count} routes.",
+        "data": {
+          "route_id": "Route"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Metlink API",
+      "invalid_auth": "Invalid API key",
+      "unknown": "Unexpected error occurred",
+      "no_routes": "No routes found for the selected transport type",
+      "route_not_found": "Selected route not found"
+    },
+    "abort": {
+      "already_configured": "API key is already configured",
+      "cannot_connect": "Failed to connect to Metlink API",
+      "no_routes": "No routes found for the selected transport type",
+      "route_not_found": "Selected route not found"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Metlink Explorer Options",
+        "description": "Configure options for this Metlink Explorer integration."
+      }
+    }
+  }
+}
