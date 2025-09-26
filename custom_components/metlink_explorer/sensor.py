@@ -311,10 +311,10 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         
         return attributes
 
-    @property 
-    def native_unit_of_measurement(self) -> str | None:
-        """Return the unit of measurement for departures."""
-        return "departures"
+    @property
+    def device_class(self) -> str | None:
+        """Return device class for the sensor."""
+        return None  # This is a text-based sensor
 
     @property 
     def icon(self) -> str:
