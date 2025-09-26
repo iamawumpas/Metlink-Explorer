@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.0.4 (2025-09-26)
+
+### Bug Fixes
+- **GTFS-RT Data Handling**: Fixed AttributeError during data coordinator updates
+  - GTFS-RT APIs return `{header, entity}` structure, not direct arrays  
+  - Updated API client to properly extract `entity` arrays from GTFS-RT responses
+  - Fixed coordinator filtering logic for `trip_updates`, `vehicle_positions`, `service_alerts`
+  - Updated sensor.py to handle proper GTFS-RT entity structure access patterns
+  - Handle `route_id` as integer from API and convert to string for comparison
+  - Fixed `trip_update`, `vehicle`, and `alert` data access in entity attributes
+  - This resolves the `'str' object has no attribute 'get'` error during data updates
+
 ## v0.0.3 (2025-09-26)
 
 ### Bug Fixes
