@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, time
 from typing import Any
 
 import aiohttp
@@ -98,3 +99,49 @@ class MetlinkApiClient:
         """Get service alerts."""
         response = await self._request("gtfs-rt/servicealerts")
         return response.get("entity", [])
+
+    async def get_route_departures(self, route_id: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Get next departures for a specific route."""
+        # Get all stops for this route first
+        stops = await self.get_stops()
+        route_stops = [stop for stop in stops if any(
+            route.get("route_id") == route_id 
+            for route in stop.get("routes", [])
+        )]
+        
+        # Get stop times for all stops on this route
+        all_departures = []
+        for stop in route_stops:
+            stop_times = await self.get_stop_times(stop["stop_id"])
+            # Filter for this specific route and add stop info
+            route_departures = [
+                {**st, "stop_name": stop.get("stop_name", ""), "stop_id": stop["stop_id"]}
+                for st in stop_times 
+                if st.get("route_id") == route_id
+            ]
+            all_departures.extend(route_departures)
+        
+        # Sort by departure time and return next 10
+        now = datetime.now().time()
+        
+        # Filter for upcoming departures and sort
+        upcoming = [
+            dep for dep in all_departures 
+            if self._parse_time(dep.get("departure_time", "")) > now
+        ]
+        upcoming.sort(key=lambda x: self._parse_time(x.get("departure_time", "")))
+        
+        return upcoming[:limit]
+    
+    def _parse_time(self, time_str: str) -> time:
+        """Parse time string in HH:MM:SS format."""
+        try:
+            if not time_str:
+                return time.max
+            parts = time_str.split(":")
+            hour = int(parts[0]) % 24  # Handle 24+ hour format
+            minute = int(parts[1])
+            second = int(parts[2]) if len(parts) > 2 else 0
+            return time(hour, minute, second)
+        except (ValueError, IndexError):
+            return time.max

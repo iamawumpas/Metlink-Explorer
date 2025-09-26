@@ -131,8 +131,22 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         route_data = self.coordinator.data.get("route_data", {})
         trip_updates = self.coordinator.data.get("trip_updates", [])
         vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
+        departures = self.coordinator.data.get("departures", [])
         
-        # Filter for this direction
+        # Filter departures for this direction (if we can determine direction from departure data)
+        # For now, we'll show all departures since direction info might not be in departure data
+        if departures:
+            # Show the next departure time as the state
+            next_departure = departures[0]
+            departure_time = next_departure.get("departure_time", "")
+            stop_name = next_departure.get("stop_name", "Unknown Stop")
+            
+            if departure_time:
+                return f"Next: {departure_time} at {stop_name}"
+            else:
+                return f"Next departure at {stop_name}"
+        
+        # Filter for this direction from real-time data
         direction_trips = []
         for update in trip_updates:
             trip_update = update.get("trip_update", {})
@@ -152,7 +166,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         elif direction_vehicles:
             return "In Service"
         else:
-            return "Scheduled"
+            return "No upcoming departures"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -164,6 +178,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         trip_updates = self.coordinator.data.get("trip_updates", [])
         vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
         service_alerts = self.coordinator.data.get("service_alerts", [])
+        departures = self.coordinator.data.get("departures", [])
         last_updated = self.coordinator.data.get("last_updated")
         
         # Filter for this direction
@@ -195,6 +210,25 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "alert_count": len(service_alerts),
             "last_updated": last_updated.isoformat() if hasattr(last_updated, 'isoformat') else None,
         }
+        
+        # Add departure information if available
+        if departures:
+            departure_list = []
+            for departure in departures:
+                departure_info = {
+                    "departure_time": departure.get("departure_time", ""),
+                    "arrival_time": departure.get("arrival_time", ""),
+                    "stop_name": departure.get("stop_name", ""),
+                    "stop_id": departure.get("stop_id", ""),
+                    "trip_id": departure.get("trip_id", ""),
+                    "stop_sequence": departure.get("stop_sequence", 0),
+                    "pickup_type": departure.get("pickup_type", 0),
+                    "drop_off_type": departure.get("drop_off_type", 0),
+                }
+                departure_list.append(departure_info)
+            
+            attributes["next_departures"] = departure_list
+            attributes["departure_count"] = len(departures)
         
         # Add trip information if available
         if direction_trips:
@@ -276,6 +310,11 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             attributes["alerts"] = alerts
         
         return attributes
+
+    @property 
+    def native_unit_of_measurement(self) -> str | None:
+        """Return the unit of measurement for departures."""
+        return "departures"
 
     @property 
     def icon(self) -> str:
