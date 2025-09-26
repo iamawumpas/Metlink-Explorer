@@ -83,7 +83,18 @@ class MetlinkApiClient:
 
     async def get_stop_times(self, stop_id: str) -> list[dict[str, Any]]:
         """Get stop times for a specific stop."""
-        return await self._request(f"gtfs/stop_times?stop_id={stop_id}")
+        try:
+            _LOGGER.debug("Fetching stop times for stop_id: %s", stop_id)
+            result = await self._request(f"gtfs/stop_times?stop_id={stop_id}")
+            _LOGGER.debug("Successfully got %d stop times for stop %s", len(result), stop_id)
+            return result
+        except MetlinkApiError as err:
+            # If stop has no scheduled services, return empty list instead of failing
+            if "400" in str(err):
+                _LOGGER.debug("Stop %s has no scheduled services (400 error)", stop_id)
+                return []
+            _LOGGER.error("Error getting stop times for stop %s: %s", stop_id, err)
+            raise
 
     async def get_route_stops(self, route_id: str) -> dict[int, list[dict[str, Any]]]:
         """Get stops for a route organized by direction."""
@@ -157,53 +168,80 @@ class MetlinkApiClient:
 
     async def get_route_departures(self, route_id: str, direction_id: int = None, limit: int = 10) -> list[dict[str, Any]]:
         """Get next departures for a specific route and direction."""
-        # Get stop sequences for this route
-        route_stops = await self.get_route_stops(route_id)
-        
-        # If direction_id is specified, only get stops for that direction
-        if direction_id is not None:
-            target_stops = route_stops.get(direction_id, [])
-        else:
-            # Get stops from both directions
-            target_stops = []
-            for direction_stops in route_stops.values():
-                target_stops.extend(direction_stops)
-        
-        # Get stop times for all stops in the route sequence
-        all_departures = []
-        for stop_info in target_stops:
-            stop_id = stop_info["stop_id"]
-            stop_times = await self.get_stop_times(stop_id)
+        try:
+            # Get stop sequences for this route
+            route_stops = await self.get_route_stops(route_id)
             
-            # Filter for this specific route and add stop/sequence info
-            route_departures = [
-                {
-                    **st, 
-                    "stop_name": stop_info["stop_name"],
-                    "stop_id": stop_id,
-                    "route_stop_sequence": stop_info["stop_sequence"],
-                    "stop_lat": stop_info["stop_lat"],
-                    "stop_lon": stop_info["stop_lon"],
-                    "zone_id": stop_info["zone_id"],
-                    "stop_code": stop_info["stop_code"],
-                    "direction_id": direction_id if direction_id is not None else self._infer_direction_from_stops(stop_info, route_stops)
-                }
-                for st in stop_times 
-                if st.get("route_id") == route_id
+            # If no stops found, return empty list
+            if not route_stops:
+                _LOGGER.warning("No stops found for route %s", route_id)
+                return []
+            
+            # If direction_id is specified, only get stops for that direction
+            if direction_id is not None:
+                target_stops = route_stops.get(direction_id, [])
+            else:
+                # Get stops from both directions
+                target_stops = []
+                for direction_stops in route_stops.values():
+                    target_stops.extend(direction_stops)
+            
+            if not target_stops:
+                _LOGGER.warning("No stops found for route %s direction %s", route_id, direction_id)
+                return []
+            
+            # Get stop times for all stops in the route sequence
+            all_departures = []
+            for stop_info in target_stops:
+                stop_id = stop_info["stop_id"]
+                try:
+                    stop_times = await self.get_stop_times(stop_id)
+                    
+                    # Skip if no stop times available
+                    if not stop_times:
+                        continue
+                        
+                    # Filter for this specific route and add stop/sequence info
+                    route_departures = [
+                        {
+                            **st, 
+                            "stop_name": stop_info["stop_name"],
+                            "stop_id": stop_id,
+                            "route_stop_sequence": stop_info["stop_sequence"],
+                            "stop_lat": stop_info["stop_lat"],
+                            "stop_lon": stop_info["stop_lon"],
+                            "zone_id": stop_info["zone_id"],
+                            "stop_code": stop_info["stop_code"],
+                            "direction_id": direction_id if direction_id is not None else self._infer_direction_from_stops(stop_info, route_stops)
+                        }
+                        for st in stop_times 
+                        if st.get("route_id") == route_id
+                    ]
+                    all_departures.extend(route_departures)
+                except MetlinkApiError as err:
+                    _LOGGER.warning("Failed to get stop times for stop %s: %s", stop_id, err)
+                    continue
+            
+            # If no departures found, return empty list
+            if not all_departures:
+                _LOGGER.info("No departures found for route %s direction %s", route_id, direction_id)
+                return []
+            
+            # Sort by departure time and return next departures
+            now = datetime.now().time()
+            
+            # Filter for upcoming departures and sort
+            upcoming = [
+                dep for dep in all_departures 
+                if self._parse_time(dep.get("departure_time", "")) > now
             ]
-            all_departures.extend(route_departures)
-        
-        # Sort by departure time and return next departures
-        now = datetime.now().time()
-        
-        # Filter for upcoming departures and sort
-        upcoming = [
-            dep for dep in all_departures 
-            if self._parse_time(dep.get("departure_time", "")) > now
-        ]
-        upcoming.sort(key=lambda x: self._parse_time(x.get("departure_time", "")))
-        
-        return upcoming[:limit]
+            upcoming.sort(key=lambda x: self._parse_time(x.get("departure_time", "")))
+            
+            return upcoming[:limit]
+            
+        except Exception as err:
+            _LOGGER.error("Error getting route departures for route %s: %s", route_id, err)
+            return []
     
     def _infer_direction_from_stops(self, stop_info: dict, route_stops: dict) -> int:
         """Infer direction_id based on which direction's stop sequence contains this stop."""
