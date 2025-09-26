@@ -1,6 +1,7 @@
 """Sensor platform for Metlink Explorer."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -53,8 +54,13 @@ async def async_setup_entry(
             _LOGGER.error("No route stops data available")
             return
         
+        # Calculate total stops for progress tracking
+        total_stops = sum(len(stops) for stops in route_stops.values())
+        _LOGGER.info(f"Creating {total_stops} stop entities for route {route_short_name}")
+        
         # Create entities for each stop in both directions
         entities = []
+        created_count = 0
         
         for direction_id, stops in route_stops.items():
             direction_name = "Outbound" if direction_id == 0 else "Inbound"
@@ -81,10 +87,22 @@ async def async_setup_entry(
                 )
                 
                 entities.append(stop_entity)
+                created_count += 1
+                
+                # Log progress every 5 entities
+                if created_count % 5 == 0 or created_count == total_stops:
+                    progress_percent = int((created_count / total_stops) * 100)
+                    _LOGGER.info(f"Created {created_count}/{total_stops} stop entities ({progress_percent}%)")
+                
+                # Small delay to prevent overwhelming the system
+                if created_count % 10 == 0:
+                    await asyncio.sleep(0.1)  # 100ms pause every 10 entities
+                
                 _LOGGER.debug(f"Created stop entity: {stop_entity.name} (Stop {stop_sequence})")
         
         _LOGGER.info(f"Adding {len(entities)} stop-based entities to Home Assistant")
         async_add_entities(entities, True)
+        _LOGGER.info("All stop entities added successfully")
         
     except Exception as e:
         _LOGGER.error(f"Error setting up sensor platform: {e}", exc_info=True)
@@ -141,6 +159,7 @@ class MetlinkStopSensor(CoordinatorEntity, SensorEntity):
             "manufacturer": "Metlink",
             "model": f"{transport_type_name} Route",
             "sw_version": "1.0",
+            "suggested_area": "Transportation",  # Suggest default area
         }
 
     @property
