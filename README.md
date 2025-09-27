@@ -1,9 +1,9 @@
 <div align="left">
+  <img src="custom_components/metlink_explorer/assets/logo (256x256).png" alt="Metlink Explorer Logo" width="80" height="80" style="margin-right: 20px; vertical-align: middle;">
   <div style="display: inline-block; vertical-align: middle;">
-    <h1>🚌 Metlink Explorer</h1><h3 style="margin: 0; color: #666; font-weight: normal;">Wellington Public Transport Data for Home Assistant</h3>
+    <h1>Metlink Explorer</h1><h3 style="margin: 0; color: #666; font-weight: normal;">Wellington Public Transport Data for Home Assistant</h3>
   </div>
 </div>
-<!-- Logo placeholder: custom_components/metlink_explorer/assets/logo.png (256x256 PNG needed) -->
 <!-- Do not remove this header -->
 
 **Version**: 0.0.1
