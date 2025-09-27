@@ -1,6 +1,27 @@
 # Changelog
 
-## v0.2.0 (2025-09-26) - MAJOR ARCHITECTURE CHANGE
+# Changelog
+
+## v0.2.2 (2025-09-27) - ARCHITECTURE REVERSION
+
+### Breaking Changes (Reverted)
+- **Back to 2-Entity Model**: Reverted from stop-based entities (v0.2.0) to efficient 2-route entities
+  - **Performance**: Eliminates hundreds of entities that slow down Home Assistant
+  - **Simplicity**: Returns to clean 2-entity approach (inbound/outbound)
+  - **User Experience**: Stop selection should be handled in card UI, not entity creation
+
+### Rationale for Reversion
+The stop-based entity approach (v0.2.0) created too many entities for large routes:
+- **23-stop route** = 46 entities (23 × 2 directions)  
+- **50-stop route** = 100 entities
+- **Multiple routes** = hundreds of entities slowing Home Assistant
+
+### Recommended Architecture Going Forward
+- **Integration**: Provides 2 clean route entities with full stop data in attributes
+- **Card/Dashboard**: Users select stops of interest from comprehensive stop data
+- **Performance**: Fast, lightweight integration with rich data for UI consumption
+
+## v0.2.1 (2025-09-26) - MAJOR ARCHITECTURE CHANGE
 
 ### Breaking Changes
 - **Complete Entity Restructure**: Changed from 2 route-based entities to individual stop-based entities
