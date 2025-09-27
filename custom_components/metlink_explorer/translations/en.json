@@ -1,0 +1,36 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Metlink Explorer Setup",
+        "description": "Enter your Metlink Open Data API key to get started. You can get a free API key from the Metlink Open Data Developer Portal.",
+        "data": {
+          "api_key": "API Key"
+        }
+      },
+      "transportation_type": {
+        "title": "Select Transportation Type",
+        "description": "Choose the type of transport you want to monitor.",
+        "data": {
+          "transportation_type": "Transportation Type"
+        }
+      },
+      "route_selection": {
+        "title": "Select Route",
+        "description": "Choose the specific route you want to monitor. Routes are sorted alphanumerically.",
+        "data": {
+          "route_id": "Route"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API key. Please check your key and try again.",
+      "cannot_connect": "Unable to connect to Metlink API. Please check your internet connection and try again.",
+      "no_routes_found": "No routes found for the selected transportation type.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This route is already configured."
+    }
+  }
+}

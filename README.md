@@ -1,1 +1,54 @@
-# Metlink-Explorer
+<div align="left">
+  <div style="display: inline-block; vertical-align: middle;">
+    <h1>🚌 Metlink Explorer</h1><h3 style="margin: 0; color: #666; font-weight: normal;">Wellington Public Transport Data for Home Assistant</h3>
+  </div>
+</div>
+<!-- Logo placeholder: custom_components/metlink_explorer/assets/logo.png (256x256 PNG needed) -->
+<!-- Do not remove this header -->
+
+**Version**: 0.0.1
+
+A Home Assistant custom component that integrates with the Metlink Open Data API to provide real-time Wellington public transport information as sensor entities.
+
+## Features
+
+- **Multi-Modal Transport Support**: Bus, Train, Ferry, Cable Car, and School Bus routes
+- **Real-Time Data**: Vehicle positions, trip updates, and service alerts
+- **Direction-Based Entities**: Separate sensors for each route direction with intelligent naming
+- **Easy Setup**: Step-by-step configuration flow with API key validation
+- **Route Filtering**: Select routes by transportation type with alphanumeric sorting
+
+## Installation
+
+1. Copy the `custom_components/metlink_explorer` folder to your Home Assistant `custom_components` directory
+2. Restart Home Assistant
+3. Go to **Settings** > **Integrations** > **Add Integration**
+4. Search for "Metlink Explorer" and follow the setup wizard
+
+## Setup Process
+
+1. **API Key**: Enter your Metlink Open Data API key (get one free from [Metlink Developer Portal](https://opendata.metlink.org.nz/))
+2. **Transport Type**: Choose from Bus, Train, Ferry, Cable Car, or School Bus
+3. **Route Selection**: Pick a specific route from the filtered list
+4. **Entities Created**: Two sensors are created (one for each direction)
+
+## Entity Naming Convention
+
+Entities are named using the format: `Transportation Type :: Route Number / Route Description`
+
+- **Direction 0**: Uses route description as-is
+- **Direction 1**: Reverses route description using ' - ' as delimiters
+
+Example:
+- `Bus :: 83 / Wellington - Petone - Lower Hutt - Eastbourne` (Direction 0)
+- `Bus :: 83 / Eastbourne - Lower Hutt - Petone - Wellington` (Direction 1)
+
+## Development
+
+See [CHANGELOG.md](CHANGELOG.md) for development progress and version history.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/iamawumpus/Metlink-Explorer/issues)  
+- **API Documentation**: [Metlink Open Data Portal](https://opendata.metlink.org.nz/)
+- **Home Assistant**: [Custom Components Documentation](https://developers.home-assistant.io/docs/creating_component_index/)
