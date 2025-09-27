@@ -29,55 +29,86 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Metlink Explorer sensor platform."""
-    _LOGGER.info(f"Setting up Metlink Explorer sensor platform for entry: {config_entry.entry_id}")
+    _LOGGER.info("=" * 60)
+    _LOGGER.info(f"🚀 STARTING Metlink Explorer sensor setup for entry: {config_entry.entry_id}")
+    _LOGGER.info("=" * 60)
     
     try:
+        _LOGGER.info("📡 Step 1/6: Retrieving coordinator...")
         coordinator: MetlinkDataUpdateCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-        _LOGGER.info(f"Found coordinator: {coordinator}")
+        _LOGGER.info(f"✅ Found coordinator: {coordinator}")
         
         # Get config data
+        _LOGGER.info("📋 Step 2/6: Reading configuration data...")
         transport_type = config_entry.data[CONF_TRANSPORT_TYPE]
         route_short_name = config_entry.data[CONF_ROUTE_SHORT_NAME]
         route_long_name = config_entry.data[CONF_ROUTE_LONG_NAME]
         
-        _LOGGER.info(f"Config data - Type: {transport_type}, Route: {route_short_name}, Name: {route_long_name}")
+        transport_type_name = TRANSPORT_TYPES.get(transport_type, "Unknown")
+        _LOGGER.info(f"✅ Config loaded - {transport_type_name}: {route_short_name} / {route_long_name}")
+        
+        # Check if coordinator has data, if not wait for it
+        _LOGGER.info("🔄 Step 3/6: Ensuring coordinator data is available...")
+        if not coordinator.data:
+            _LOGGER.info("⏳ No data available yet, requesting initial refresh...")
+            await coordinator.async_request_refresh()
+            if not coordinator.data:
+                _LOGGER.error("❌ Failed to get initial data from coordinator")
+                return
+        _LOGGER.info("✅ Coordinator data is ready")
         
         # Create sensors for both directions
+        _LOGGER.info("🏗️ Step 4/6: Creating route entities...")
         entities = []
+        
+        # Direction 0 (normal direction)
+        _LOGGER.info(f"📍 Creating Direction 0 entity (Outbound): {route_long_name}")
+        direction_0_entity = MetlinkRouteSensor(
+            coordinator,
+            config_entry,
+            direction=0,
+            transport_type=transport_type,
+            route_short_name=route_short_name,
+            route_long_name=route_long_name,
+        )
+        entities.append(direction_0_entity)
+        _LOGGER.info(f"✅ Direction 0 entity created: {direction_0_entity.name}")
+        _LOGGER.info(f"   📋 Entity ID: {direction_0_entity.unique_id}")
+        
+        # Direction 1 (reverse direction)
+        _LOGGER.info("📍 Creating Direction 1 entity (Inbound)...")
+        # Reverse the route name by splitting on ' - ' and reversing
+        route_parts = route_long_name.split(" - ")
+        reversed_route_name = " - ".join(reversed(route_parts))
+        _LOGGER.info(f"   🔄 Reversed route name: {reversed_route_name}")
+        
+        direction_1_entity = MetlinkRouteSensor(
+            coordinator,
+            config_entry,
+            direction=1,
+            transport_type=transport_type,
+            route_short_name=route_short_name,
+            route_long_name=reversed_route_name,
+        )
+        entities.append(direction_1_entity)
+        _LOGGER.info(f"✅ Direction 1 entity created: {direction_1_entity.name}")
+        _LOGGER.info(f"   📋 Entity ID: {direction_1_entity.unique_id}")
+        
+        _LOGGER.info("🚀 Step 5/6: Adding entities to Home Assistant...")
+        _LOGGER.info(f"📊 Total entities to add: {len(entities)}")
+        async_add_entities(entities, True)
+        
+        _LOGGER.info("🎉 Step 6/6: Setup completed successfully!")
+        _LOGGER.info("=" * 60)
+        _LOGGER.info(f"✅ COMPLETED Metlink Explorer setup for {transport_type_name} Route {route_short_name}")
+        _LOGGER.info("📍 Check Developer Tools > States to see your new entities")
+        _LOGGER.info("=" * 60)
+        
     except Exception as e:
-        _LOGGER.error(f"Error setting up sensor platform: {e}")
+        _LOGGER.error("❌ " + "=" * 50)
+        _LOGGER.error(f"❌ ERROR during Metlink Explorer setup: {e}")
+        _LOGGER.error("❌ " + "=" * 50)
         raise
-    
-    # Direction 0 (normal direction)
-    direction_0_entity = MetlinkRouteSensor(
-        coordinator,
-        config_entry,
-        direction=0,
-        transport_type=transport_type,
-        route_short_name=route_short_name,
-        route_long_name=route_long_name,
-    )
-    entities.append(direction_0_entity)
-    _LOGGER.info(f"Created direction 0 entity: {direction_0_entity.name} (ID: {direction_0_entity.unique_id})")
-    
-    # Direction 1 (reverse direction)
-    # Reverse the route name by splitting on ' - ' and reversing
-    route_parts = route_long_name.split(" - ")
-    reversed_route_name = " - ".join(reversed(route_parts))
-    
-    direction_1_entity = MetlinkRouteSensor(
-        coordinator,
-        config_entry,
-        direction=1,
-        transport_type=transport_type,
-        route_short_name=route_short_name,
-        route_long_name=reversed_route_name,
-    )
-    entities.append(direction_1_entity)
-    _LOGGER.info(f"Created direction 1 entity: {direction_1_entity.name} (ID: {direction_1_entity.unique_id})")
-    
-    _LOGGER.info(f"Adding {len(entities)} entities to Home Assistant")
-    async_add_entities(entities, True)
 
 
 class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
