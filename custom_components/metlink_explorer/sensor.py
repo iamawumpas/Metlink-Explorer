@@ -61,26 +61,40 @@ async def async_setup_entry(
         _LOGGER.info("🏗️ Step 4/6: Creating route entities...")
         entities = []
         
-        # Direction 0 (normal direction)
-        _LOGGER.info(f"📍 Creating Direction 0 entity (Outbound): {route_long_name}")
+        # Get route stops to generate better direction-specific names
+        route_stops = coordinator.data.get("route_stops", {})
+        
+        # Direction 0 (outbound) - use original route name or generate from stops
+        direction_0_name = route_long_name
+        if route_stops and 0 in route_stops and len(route_stops[0]) >= 2:
+            first_stop = route_stops[0][0].get("stop_name", "").split(" - ")[0].replace(" Station", "").replace(" Terminus", "")
+            last_stop = route_stops[0][-1].get("stop_name", "").split(" - ")[0].replace(" Station", "").replace(" Terminus", "")
+            if first_stop and last_stop and first_stop != last_stop:
+                direction_0_name = f"{first_stop} - {last_stop}"
+        
+        _LOGGER.info(f"📍 Creating Direction 0 entity (Outbound): {direction_0_name}")
         direction_0_entity = MetlinkRouteSensor(
             coordinator,
             config_entry,
             direction=0,
             transport_type=transport_type,
             route_short_name=route_short_name,
-            route_long_name=route_long_name,
+            route_long_name=direction_0_name,
         )
         entities.append(direction_0_entity)
         _LOGGER.info(f"✅ Direction 0 entity created: {direction_0_entity.name}")
         _LOGGER.info(f"   📋 Entity ID: {direction_0_entity.unique_id}")
         
-        # Direction 1 (reverse direction)
+        # Direction 1 (inbound) - generate from stops in reverse order
+        direction_1_name = route_long_name
+        if route_stops and 1 in route_stops and len(route_stops[1]) >= 2:
+            first_stop = route_stops[1][0].get("stop_name", "").split(" - ")[0].replace(" Station", "").replace(" Terminus", "")
+            last_stop = route_stops[1][-1].get("stop_name", "").split(" - ")[0].replace(" Station", "").replace(" Terminus", "")
+            if first_stop and last_stop and first_stop != last_stop:
+                direction_1_name = f"{first_stop} - {last_stop}"
+        
         _LOGGER.info("📍 Creating Direction 1 entity (Inbound)...")
-        # Reverse the route name by splitting on ' - ' and reversing
-        route_parts = route_long_name.split(" - ")
-        reversed_route_name = " - ".join(reversed(route_parts))
-        _LOGGER.info(f"   🔄 Reversed route name: {reversed_route_name}")
+        _LOGGER.info(f"   � Direction 1 route name: {direction_1_name}")
         
         direction_1_entity = MetlinkRouteSensor(
             coordinator,
@@ -88,7 +102,7 @@ async def async_setup_entry(
             direction=1,
             transport_type=transport_type,
             route_short_name=route_short_name,
-            route_long_name=reversed_route_name,
+            route_long_name=direction_1_name,
         )
         entities.append(direction_1_entity)
         _LOGGER.info(f"✅ Direction 1 entity created: {direction_1_entity.name}")
