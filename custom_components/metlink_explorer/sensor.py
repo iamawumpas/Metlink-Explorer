@@ -41,6 +41,7 @@ async def async_setup_entry(
         # Get config data
         _LOGGER.info("📋 Step 2/6: Reading configuration data...")
         transport_type = config_entry.data[CONF_TRANSPORT_TYPE]
+        route_id = config_entry.data[CONF_ROUTE_ID]
         route_short_name = config_entry.data[CONF_ROUTE_SHORT_NAME]
         route_long_name = config_entry.data[CONF_ROUTE_LONG_NAME]
         
@@ -61,16 +62,37 @@ async def async_setup_entry(
         _LOGGER.info("🏗️ Step 4/6: Creating route entities...")
         entities = []
         
-        # Get route stops to generate better direction-specific names
-        route_stops = coordinator.data.get("route_stops", {})
+        # Get trip updates to extract headsign information for direction naming
+        trip_updates = coordinator.data.get("trip_updates", [])
+        _LOGGER.info(f"🔍 Found {len(trip_updates)} trip updates for headsign extraction")
         
-        # Direction 0 (outbound) - use original route name or generate from stops
-        direction_0_name = route_long_name
-        if route_stops and 0 in route_stops and len(route_stops[0]) >= 2:
-            first_stop = route_stops[0][0].get("stop_name", "").split(" - ")[0].replace(" Station", "").replace(" Terminus", "")
-            last_stop = route_stops[0][-1].get("stop_name", "").split(" - ")[0].replace(" Station", "").replace(" Terminus", "")
-            if first_stop and last_stop and first_stop != last_stop:
-                direction_0_name = f"{first_stop} - {last_stop}"
+        # Helper function to get headsign for a direction
+        def get_direction_headsign(direction_id):
+            _LOGGER.info(f"   🔎 Searching for direction {direction_id} headsign in route {route_id}")
+            for update in trip_updates:
+                trip_update = update.get("trip_update", {})
+                trip = trip_update.get("trip", {})
+                trip_route_id = trip.get("route_id")
+                trip_direction_id = trip.get("direction_id")
+                headsign = trip.get("trip_headsign", "")
+                
+                if trip_route_id == route_id and trip_direction_id == direction_id:
+                    if headsign:
+                        # Clean up headsign and format as "to [destination]"
+                        headsign = headsign.replace("to ", "").replace("To ", "")
+                        _LOGGER.info(f"   ✅ Found headsign: '{headsign}' for route {route_id}, direction {direction_id}")
+                        return f"to {headsign}"
+            _LOGGER.info(f"   ❌ No headsign found for route {route_id}, direction {direction_id}")
+            return None
+        
+        # Direction 0 (outbound) - use headsign or fallback to original name
+        direction_0_headsign = get_direction_headsign(0)
+        if direction_0_headsign:
+            direction_0_name = direction_0_headsign
+            _LOGGER.info(f"🎯 Found headsign for Direction 0: {direction_0_name}")
+        else:
+            direction_0_name = route_long_name
+            _LOGGER.info(f"📍 No headsign found for Direction 0, using original name: {direction_0_name}")
         
         _LOGGER.info(f"📍 Creating Direction 0 entity (Outbound): {direction_0_name}")
         direction_0_entity = MetlinkRouteSensor(
@@ -85,16 +107,17 @@ async def async_setup_entry(
         _LOGGER.info(f"✅ Direction 0 entity created: {direction_0_entity.name}")
         _LOGGER.info(f"   📋 Entity ID: {direction_0_entity.unique_id}")
         
-        # Direction 1 (inbound) - generate from stops in reverse order
-        direction_1_name = route_long_name
-        if route_stops and 1 in route_stops and len(route_stops[1]) >= 2:
-            first_stop = route_stops[1][0].get("stop_name", "").split(" - ")[0].replace(" Station", "").replace(" Terminus", "")
-            last_stop = route_stops[1][-1].get("stop_name", "").split(" - ")[0].replace(" Station", "").replace(" Terminus", "")
-            if first_stop and last_stop and first_stop != last_stop:
-                direction_1_name = f"{first_stop} - {last_stop}"
+        # Direction 1 (inbound) - use headsign or fallback to original name
+        direction_1_headsign = get_direction_headsign(1)
+        if direction_1_headsign:
+            direction_1_name = direction_1_headsign
+            _LOGGER.info(f"🎯 Found headsign for Direction 1: {direction_1_name}")
+        else:
+            direction_1_name = route_long_name
+            _LOGGER.info(f"📍 No headsign found for Direction 1, using original name: {direction_1_name}")
         
         _LOGGER.info("📍 Creating Direction 1 entity (Inbound)...")
-        _LOGGER.info(f"   � Direction 1 route name: {direction_1_name}")
+        _LOGGER.info(f"   🚂 Direction 1 route name: {direction_1_name}")
         
         direction_1_entity = MetlinkRouteSensor(
             coordinator,
