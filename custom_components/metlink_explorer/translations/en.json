@@ -10,7 +10,7 @@
       },
       "transportation_type": {
         "title": "Select Transportation Type",
-        "description": "Choose the type of transport you want to monitor.",
+        "description": "Choose the type of transport you want to monitor.\n\n*Note: Only transportation types with available routes are shown. If you don't see a type, all routes for that transport mode may already be configured.",
         "data": {
           "transportation_type": "Transportation Type"
         }
@@ -27,6 +27,8 @@
       "invalid_auth": "Invalid API key. Please check your key and try again.",
       "cannot_connect": "Unable to connect to Metlink API. Please check your internet connection and try again.",
       "no_routes_found": "No routes found for the selected transportation type.",
+      "no_routes_available": "No available routes for the selected transportation type. All routes may already be configured.",
+      "no_transportation_types_available": "No transportation types with available routes found. All routes may already be configured.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {

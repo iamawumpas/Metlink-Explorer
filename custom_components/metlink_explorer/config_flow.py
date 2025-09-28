@@ -86,32 +86,76 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            transportation_type = user_input[CONF_TRANSPORTATION_TYPE]
+            transportation_type = int(user_input[CONF_TRANSPORTATION_TYPE])
             self._transportation_type = transportation_type
             
             try:
-                # Fetch routes for this transportation type
-                self._available_routes = await self._api_client.get_routes_by_type(transportation_type)
-                if not self._available_routes:
-                    errors["base"] = "no_routes_found"
+                # Get available routes for this transportation type
+                available_routes = await self._get_available_routes_for_type(transportation_type)
+                if not available_routes:
+                    errors["base"] = "no_routes_available"
                 else:
+                    self._available_routes = available_routes
                     return await self.async_step_route_selection()
             except MetlinkApiError:
                 errors["base"] = "cannot_connect"
 
-        # Create options for transportation types
-        transportation_options = {
-            str(type_id): f"{type_name} ({type_id})"
-            for type_id, type_name in TRANSPORTATION_TYPES.items()
-        }
+        # Get transportation types with available routes
+        try:
+            available_transport_options = await self._get_available_transportation_types()
+            if not available_transport_options:
+                errors["base"] = "no_transportation_types_available"
+        except MetlinkApiError:
+            errors["base"] = "cannot_connect"
+            available_transport_options = {}
+
+        # Fallback to all types if there's an error
+        if not available_transport_options:
+            available_transport_options = {
+                str(type_id): f"{type_name}"
+                for type_id, type_name in TRANSPORTATION_TYPES.items()
+            }
 
         return self.async_show_form(
             step_id="transportation_type",
             data_schema=vol.Schema({
-                vol.Required(CONF_TRANSPORTATION_TYPE): vol.In(transportation_options),
+                vol.Required(CONF_TRANSPORTATION_TYPE): vol.In(available_transport_options),
             }),
             errors=errors,
         )
+
+    async def _get_available_transportation_types(self) -> dict[str, str]:
+        """Get transportation types that have available routes."""
+        available_options = {}
+        
+        for type_id, type_name in TRANSPORTATION_TYPES.items():
+            available_routes = await self._get_available_routes_for_type(type_id)
+            if available_routes:
+                route_count = len(available_routes)
+                available_options[str(type_id)] = f"{type_name} ({route_count} routes available)"
+                
+        return available_options
+
+    async def _get_available_routes_for_type(self, transportation_type: int) -> list[dict[str, Any]]:
+        """Get routes for a transportation type that aren't already configured."""
+        # Get all routes for this transportation type
+        all_routes = await self._api_client.get_routes_by_type(transportation_type)
+        
+        # Get existing configured route IDs from all entries
+        existing_entries = self._async_current_entries()
+        configured_route_ids = set()
+        
+        for entry in existing_entries:
+            if entry.data.get(CONF_ROUTE_ID):
+                configured_route_ids.add(entry.data[CONF_ROUTE_ID])
+        
+        # Filter out already configured routes
+        available_routes = [
+            route for route in all_routes 
+            if route.get("route_id") not in configured_route_ids
+        ]
+        
+        return available_routes
 
     async def async_step_route_selection(
         self, user_input: dict[str, Any] | None = None

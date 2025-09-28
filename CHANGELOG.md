@@ -5,6 +5,33 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2025-09-28
+
+### Added - Step 2 Complete: Intelligent Transportation Type Selection
+- **✅ STEP 2 IMPLEMENTED**: Smart transportation type filtering with route availability checking
+- Intelligent filtering: Only shows transportation types that have available (unconfigured) routes
+- Route count display: Shows how many routes are available for each transportation type
+- Prevents user confusion by hiding transportation types with no available routes
+- Enhanced user experience with informative footnote explaining filtering logic
+
+### Smart Route Management
+- `_get_available_transportation_types()` - Filters transport types by route availability
+- `_get_available_routes_for_type()` - Gets unconfigured routes for each transport type
+- Prevents duplicate route configurations across integration entries
+- Example: Ferry service with 2 routes will be hidden if both routes are already configured
+
+### Enhanced User Interface
+- Updated translations with explanatory footnote about transportation type filtering
+- New error messages for cases where no transportation types or routes are available
+- Clear indicators showing route counts for each available transportation type
+- Improved user guidance in both `strings.json` and `translations/en.json`
+
+### Technical Implementation
+- Cross-entry route tracking to prevent duplicates
+- Dynamic transportation type option generation based on availability
+- Comprehensive error handling for edge cases
+- All Step 2 requirements met with intelligent route management
+
 ## [0.1.0] - 2025-09-28
 
 ### Added - Step 1 Complete: API Key Validation
