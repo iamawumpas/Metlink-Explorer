@@ -5,6 +5,28 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-09-28
+
+### Added - Step 1 Complete: API Key Validation
+- **✅ STEP 1 IMPLEMENTED**: Complete API key validation functionality
+- API key validation using `/gtfs/agency` endpoint with 23 agencies detected
+- Automatic reuse of existing API keys from other integration entries
+- Comprehensive error handling for invalid keys and connection issues
+- Enhanced user interface with clear setup instructions in translations
+- Live API testing confirmed working with actual Metlink Open Data API
+- Updated manifest.json and README.md version synchronization to 0.1.0
+
+### Technical Implementation
+- `MetlinkApiClient.validate_api_key()` - Tests connection to Metlink API
+- `config_flow.py` - Smart API key detection and validation flow
+- `translations/en.json` - Improved user guidance and setup instructions
+- Proper error handling for network issues and invalid credentials
+- All Step 1 requirements met and thoroughly tested
+
+### Development Workflow
+- Established consistent version management across manifest.json, README.md, and CHANGELOG.md
+- Ready to proceed to Step 2 (Transportation Type Selection)
+
 ## [0.0.3] - 2025-09-27
 
 ### Modified Header in README.md
