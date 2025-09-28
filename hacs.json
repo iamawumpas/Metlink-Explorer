@@ -1,0 +1,11 @@
+{
+  "name": "Metlink Explorer",
+  "content_in_root": false,
+  "filename": "metlink_explorer",
+  "country": ["NZ"],
+  "homeassistant": "2023.1.0",
+  "iot_class": "Cloud Polling",
+  "render_readme": true,
+  "zip_release": false,
+  "hide_default_branch": false
+}
