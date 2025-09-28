@@ -5,6 +5,40 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-09-28
+
+### Changed the logo path to display correctly in HACS
+- new image location is https://raw.githubusercontent.com/iamawumpas/Metlink-Explorer/main/custom_components/metlink_explorer/assets/logo%20(256x256).png
+- based on the following information:
+
+__ The most common reason for images in a GitHub repository's README.md to appear as broken picture icons within HACS (Home Assistant Community Store) is an incorrect image path, especially when using relative links.
+
+HACS is essentially rendering the GitHub repository's README file. If the markdown for the image link is not a fully qualified URL or an explicitly correct relative path, the image won't load.
+
+Here are the primary causes and corresponding fixes:
+
+1. Incorrect Paths (Most Common)
+The way a path works on your local machine can differ from how it's interpreted on GitHub and subsequently rendered by HACS.
+
+Problem: You are using a relative path like ![Screenshot](images/myimage.png). This works perfectly on GitHub's website. However, HACS's renderer may not correctly resolve the relative path from the context it loads the README.
+
+Solution: Use the Full "Raw" GitHub URL
+The most reliable method is to use the direct link to the image file, which is served from raw.githubusercontent.com.
+
+In your GitHub repository, navigate to the image file (e.g., images/myimage.png).
+
+Click the "Raw" button.
+
+Copy the URL from your browser's address bar. It will look something like this:
+https://raw.githubusercontent.com/USER/REPO/BRANCH/path/to/image.png
+
+Use this absolute URL in your README.md file:
+
+Markdown
+
+![Alt Text](https://raw.githubusercontent.com/USER/REPO/BRANCH/path/to/image.png)
+This method guarantees the HACS renderer has a direct, absolute link to the image resource. __
+
 ## [0.1.1] - 2025-09-28
 
 ### Added - Step 2 Complete: Intelligent Transportation Type Selection

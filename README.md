@@ -1,7 +1,7 @@
 <table>
   <tr>
     <td>
-      <img src="custom_components/metlink_explorer/assets/logo (256x256).png" alt="Metlink Explorer Logo" width="auto" height="100px">
+      <img src="https://raw.githubusercontent.com/iamawumpas/Metlink-Explorer/main/custom_components/metlink_explorer/assets/logo%20(256x256).png" alt="Metlink Explorer Logo" width="auto" height="100px">
     </td>
     <td>
       <h1>Metlink Explorer</h1>
@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-      <strong>Version:</strong> 0.1.1
+      <strong>Version:</strong> 0.1.2
     </td>
   </tr>
 </table>
