@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-      <strong>Version:</strong> 0.1.3
+      <strong>Version:</strong> 0.1.4
     </td>
   </tr>
 </table>
@@ -41,14 +41,18 @@ A Home Assistant custom component that integrates with the Metlink Open Data API
 
 ## Entity Naming Convention
 
-Entities are named using the format: `Transportation Type :: Route Number / Route Description`
+Entities are named using the format: `Route Number :: Route Description`
 
-- **Direction 0**: Uses route description as-is
-- **Direction 1**: Reverses route description using ' - ' as delimiters
+- **Direction 0**: `route_short_name :: route_long_name` 
+- **Direction 1**: `route_short_name :: route_desc`
+
+The GTFS data provides separate descriptions for each direction:
+- `route_long_name` contains the Direction 0 route description
+- `route_desc` contains the Direction 1 route description
 
 Example:
-- `Bus :: 83 / Wellington - Petone - Lower Hutt - Eastbourne` (Direction 0)
-- `Bus :: 83 / Eastbourne - Lower Hutt - Petone - Wellington` (Direction 1)
+- `83 :: Wellington Station - Petone - Lower Hutt - Eastbourne` (Direction 0)
+- `83 :: Eastbourne - Lower Hutt - Petone - Wellington Station` (Direction 1)
 
 ## Development
 

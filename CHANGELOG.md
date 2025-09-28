@@ -5,6 +5,28 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-09-28
+
+### Added
+- **Step 4 Complete**: Entity Creation with Direction-Based Naming
+- **Dual Entity Creation**: Each route now creates two sensor entities (Direction 0 and Direction 1)
+- **GTFS-Based Naming**: Uses authentic GTFS `route_desc` field for Direction 1 descriptions
+- **Simplified Entity Names**: Changed from `Transportation Type :: Route / Description` to `Route :: Description`
+- **Real-Time Data Integration**: Sensors provide live trip counts and vehicle position data
+
+### Changed
+- **Entity Naming Schema**: Now uses `route_short_name :: route_description` format
+- **Direction Logic**: Direction 0 uses `route_long_name`, Direction 1 uses `route_desc`
+- **Configuration Storage**: Added `CONF_ROUTE_DESC` to store Direction 1 descriptions
+- **Sensor Attributes**: Updated to reflect new naming and include direction-specific data
+
+### Technical Details
+- Direction 0: `route_short_name :: route_long_name` (e.g., "83 :: Wellington - Eastbourne")  
+- Direction 1: `route_short_name :: route_desc` (e.g., "83 :: Eastbourne - Wellington")
+- Real-time trip counting per direction
+- Enhanced sensor state attributes with direction-specific information
+- Improved error handling for missing route descriptions
+
 ## [0.1.3] - 2025-09-28
 
 ### Added

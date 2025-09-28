@@ -24,6 +24,7 @@ from .const import (
     CONF_ROUTE_ID,
     CONF_ROUTE_SHORT_NAME,
     CONF_ROUTE_LONG_NAME,
+    CONF_ROUTE_DESC,
     TRANSPORTATION_TYPES,
     DEFAULT_SCAN_INTERVAL,
 )
@@ -79,6 +80,7 @@ async def async_setup_entry(
     route_id = config_entry.data[CONF_ROUTE_ID]
     route_short_name = config_entry.data[CONF_ROUTE_SHORT_NAME]
     route_long_name = config_entry.data[CONF_ROUTE_LONG_NAME]
+    route_desc = config_entry.data.get(CONF_ROUTE_DESC, "")  # Direction 1 description
 
     session = async_get_clientsession(hass)
     api_client = MetlinkApiClient(api_key, session)
@@ -88,27 +90,34 @@ async def async_setup_entry(
     # Fetch initial data so we have data when entities subscribe
     await coordinator.async_config_entry_first_refresh()
 
-    # Get route details to determine directions
-    try:
-        trips = await api_client.get_trips_for_route(route_id)
-        directions = list(set(trip.get("direction_id", 0) for trip in trips))
-    except MetlinkApiError:
-        directions = [0, 1]  # Default to both directions
-
-    # Create sensor entities for each direction
+    # Create sensor entities for both directions using the new naming schema
     entities = []
     transportation_name = TRANSPORTATION_TYPES.get(transportation_type, "Unknown")
     
-    for direction in directions:
+    # Direction 0: route_short_name :: route_long_name  
+    entities.append(
+        MetlinkSensor(
+            coordinator,
+            config_entry,
+            route_id,
+            route_short_name,
+            route_long_name,  # Direction 0 description
+            transportation_name,
+            0,  # Direction 0
+        )
+    )
+    
+    # Direction 1: route_short_name :: route_desc (if available)
+    if route_desc:  # Only create Direction 1 if we have route_desc
         entities.append(
             MetlinkSensor(
                 coordinator,
                 config_entry,
                 route_id,
                 route_short_name,
-                route_long_name,
+                route_desc,  # Direction 1 description
                 transportation_name,
-                direction,
+                1,  # Direction 1
             )
         )
 
@@ -124,7 +133,7 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
         config_entry: ConfigEntry,
         route_id: str,
         route_short_name: str,
-        route_long_name: str,
+        route_description: str,  # Will be route_long_name for dir 0, route_desc for dir 1
         transportation_name: str,
         direction: int,
     ) -> None:
@@ -133,20 +142,13 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
         
         self._route_id = route_id
         self._route_short_name = route_short_name
-        self._route_long_name = route_long_name
+        self._route_description = route_description
         self._transportation_name = transportation_name
         self._direction = direction
         self._config_entry = config_entry
 
-        # Generate entity name based on direction logic
-        if direction == 0:
-            direction_desc = route_long_name
-        else:
-            # Reverse the route description using ' - ' as delimiters
-            parts = route_long_name.split(' - ')
-            direction_desc = ' - '.join(reversed(parts))
-
-        self._attr_name = f"{transportation_name} :: {route_short_name} / {direction_desc}"
+        # Use the new naming schema: route_short_name :: route_description
+        self._attr_name = f"{route_short_name} :: {route_description}"
         self._attr_unique_id = f"{DOMAIN}_{route_id}_{direction}"
 
     @property
@@ -183,7 +185,7 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
         return {
             "route_id": self._route_id,
             "route_short_name": self._route_short_name,
-            "route_long_name": self._route_long_name,
+            "route_description": self._route_description,
             "transportation_type": self._transportation_name,
             "direction": self._direction,
             "trip_count": len(direction_trips),

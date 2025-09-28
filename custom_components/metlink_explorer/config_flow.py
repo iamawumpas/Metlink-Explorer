@@ -20,6 +20,7 @@ from .const import (
     CONF_ROUTE_ID,
     CONF_ROUTE_SHORT_NAME,
     CONF_ROUTE_LONG_NAME,
+    CONF_ROUTE_DESC,
     TRANSPORTATION_TYPES,
 )
 
@@ -200,9 +201,10 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Create the integration entry
                 transportation_name = TRANSPORTATION_TYPES.get(self._transportation_type, "Unknown")
                 route_short_name = selected_route["route_short_name"]
-                route_long_name = selected_route["route_long_name"]
+                route_long_name = selected_route["route_long_name"] 
+                route_desc = selected_route.get("route_desc", "")  # Direction 1 description
                 
-                title = f"{transportation_name} :: {route_short_name} / {route_long_name}"
+                title = f"{transportation_name} :: {route_short_name}"
                 
                 return self.async_create_entry(
                     title=title,
@@ -212,6 +214,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_ROUTE_ID: route_id,
                         CONF_ROUTE_SHORT_NAME: route_short_name,
                         CONF_ROUTE_LONG_NAME: route_long_name,
+                        CONF_ROUTE_DESC: route_desc,
                     }
                 )
             else:

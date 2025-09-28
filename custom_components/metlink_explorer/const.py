@@ -32,6 +32,7 @@ CONF_TRANSPORTATION_TYPE = "transportation_type"
 CONF_ROUTE_ID = "route_id"
 CONF_ROUTE_SHORT_NAME = "route_short_name"
 CONF_ROUTE_LONG_NAME = "route_long_name"
+CONF_ROUTE_DESC = "route_desc"
 
 # Default Values
 DEFAULT_SCAN_INTERVAL = 30  # seconds
