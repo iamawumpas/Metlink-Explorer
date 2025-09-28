@@ -5,6 +5,22 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2025-09-28
+
+### Added
+- **Enhanced Route Selection (Step 3)**: Implemented intelligent alphanumeric sorting for route IDs
+- **Smart Route Filtering**: Routes are now filtered to exclude already-configured routes
+- **Advanced Sorting Logic**: Handles mixed numeric/text route IDs properly (e.g., "1", "31x", "83", "220", "AX", "CCL")
+- **Improved Route Display**: Route options now show "route_short_name :: route_long_name" format
+- **Regular Expression Support**: Added regex-based parsing for complex route naming patterns
+
+### Technical Details
+- Sort priority: Numeric routes (0), Text routes (1), Empty/invalid routes (2)
+- Numeric routes are sorted numerically first, then by any text suffix
+- Mixed alphanumeric routes (like "31x", "60e") are sorted by number then letter
+- Pure text routes are sorted alphabetically
+- Enhanced error handling for edge cases in route data
+
 ## [0.1.2] - 2025-09-28
 
 ### Changed the logo path to display correctly in HACS

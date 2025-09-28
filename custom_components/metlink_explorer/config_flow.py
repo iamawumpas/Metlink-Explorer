@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -137,30 +138,55 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return available_options
 
     async def _get_available_routes_for_type(self, transportation_type: int) -> list[dict[str, Any]]:
-        """Get routes for a transportation type that aren't already configured."""
-        # Get all routes for this transportation type
+        """Get routes for a transportation type that aren't already configured as entities."""
+        # Get all routes for this transportation type from the API
         all_routes = await self._api_client.get_routes_by_type(transportation_type)
         
-        # Get existing configured route IDs from all entries
+        # Get existing configured route IDs from ALL integration entries
         existing_entries = self._async_current_entries()
         configured_route_ids = set()
         
         for entry in existing_entries:
-            if entry.data.get(CONF_ROUTE_ID):
-                configured_route_ids.add(entry.data[CONF_ROUTE_ID])
+            # Check if this entry has a route configured
+            entry_route_id = entry.data.get(CONF_ROUTE_ID)
+            if entry_route_id:
+                configured_route_ids.add(entry_route_id)
+                _LOGGER.debug(
+                    "Found existing route configuration: %s (%s)", 
+                    entry_route_id, 
+                    entry.title
+                )
         
-        # Filter out already configured routes
-        available_routes = [
-            route for route in all_routes 
-            if route.get("route_id") not in configured_route_ids
-        ]
+        # Filter out routes that are already configured as entities
+        available_routes = []
+        for route in all_routes:
+            route_id = route.get("route_id")
+            if route_id not in configured_route_ids:
+                available_routes.append(route)
+            else:
+                _LOGGER.debug(
+                    "Filtering out already configured route: %s (%s :: %s)",
+                    route_id,
+                    route.get("route_short_name", "Unknown"),
+                    route.get("route_long_name", "Unknown Route")
+                )
+        
+        _LOGGER.info(
+            "Transportation type %s: %d total routes, %d already configured, %d available",
+            transportation_type,
+            len(all_routes),
+            len(configured_route_ids),
+            len(available_routes)
+        )
         
         return available_routes
 
     async def async_step_route_selection(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle route selection."""
+        """Handle route selection with advanced filtering and sorting."""
+        errors: dict[str, str] = {}
+
         if user_input is not None:
             route_id = user_input[CONF_ROUTE_ID]
             
@@ -188,26 +214,114 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_ROUTE_LONG_NAME: route_long_name,
                     }
                 )
+            else:
+                errors["base"] = "route_not_found"
 
-        # Create route options sorted alphanumerically
-        def sort_key(route):
-            short_name = route.get("route_short_name", "")
-            # Try to convert to int for proper numeric sorting, fallback to string
-            try:
-                return (0, int(short_name))
-            except ValueError:
-                return (1, short_name.lower())
+        # Double-check available routes (exclude already configured ones)
+        try:
+            self._available_routes = await self._get_available_routes_for_type(self._transportation_type)
+            if not self._available_routes:
+                errors["base"] = "no_routes_available"
+        except MetlinkApiError:
+            errors["base"] = "cannot_connect"
 
-        sorted_routes = sorted(self._available_routes, key=sort_key)
+        # Create route options with intelligent alphanumeric sorting
+        route_options = self._create_sorted_route_options(self._available_routes)
         
-        route_options = {
-            route["route_id"]: f"{route['route_short_name']} :: {route['route_long_name']}"
-            for route in sorted_routes
-        }
+        if not route_options:
+            errors["base"] = "no_routes_available"
 
         return self.async_show_form(
             step_id="route_selection",
             data_schema=vol.Schema({
                 vol.Required(CONF_ROUTE_ID): vol.In(route_options),
             }),
+            errors=errors,
         )
+
+    def _create_sorted_route_options(self, routes: list[dict[str, Any]]) -> dict[str, str]:
+        """Create route options with intelligent alphanumeric sorting."""
+        if not routes:
+            return {}
+
+        # Sort routes using intelligent alphanumeric logic
+        def sort_key(route):
+            short_name = route.get("route_short_name", "")
+            
+            # Handle empty or None values
+            if not short_name:
+                return (2, "zzz", short_name.lower() if short_name else "")
+            
+            # Try to extract numeric portion for proper sorting
+            # Look for numbers at the start of the route name
+            numeric_match = re.match(r'^(\d+)', str(short_name))
+            if numeric_match:
+                # Route starts with number (e.g., "1", "83", "220")
+                numeric_part = int(numeric_match.group(1))
+                text_part = str(short_name)[len(str(numeric_part)):].lower()
+                return (0, numeric_part, text_part)
+            
+            # Check for mixed formats (e.g., "31x", "60e")
+            mixed_match = re.match(r'^(\d+)([a-zA-Z]+)', str(short_name))
+            if mixed_match:
+                numeric_part = int(mixed_match.group(1))
+                text_part = mixed_match.group(2).lower()
+                return (0, numeric_part, text_part)
+            
+            # Pure text routes (e.g., "AX", "KPL", "CCL")
+            return (1, 0, str(short_name).lower())
+
+        sorted_routes = sorted(routes, key=sort_key)
+        
+        # Create options dictionary with enhanced display format
+        route_options = {}
+        for route in sorted_routes:
+            route_id = route["route_id"]
+            route_short_name = route.get("route_short_name", "Unknown")
+            route_long_name = route.get("route_long_name", "Unknown Route")
+            
+            # Use the specified format: route_short_name :: route_long_name
+            display_text = f"{route_short_name} :: {route_long_name}"
+            route_options[route_id] = display_text
+            
+        return route_options
+
+    def _create_sorted_route_options(self, routes: list[dict[str, Any]]) -> dict[str, str]:
+        """Create sorted route options for the dropdown."""
+        def sort_key(route):
+            short_name = route.get("route_short_name", "")
+            long_name = route.get("route_long_name", "")
+            
+            # Handle numeric route names (e.g., "1", "83", "111")
+            try:
+                numeric_part = int(short_name)
+                return (0, numeric_part, long_name.lower())
+            except ValueError:
+                pass
+            
+            # Handle alphanumeric route names (e.g., "KPL", "N1", "AX")
+            # Extract any numeric part for better sorting
+            import re
+            match = re.match(r'([A-Za-z]*)(\d+)', short_name)
+            if match:
+                alpha_part, num_part = match.groups()
+                return (1, alpha_part.lower(), int(num_part), long_name.lower())
+            
+            # Handle purely alphabetic route names
+            return (2, short_name.lower(), long_name.lower())
+
+        # Sort routes using the enhanced key
+        sorted_routes = sorted(routes, key=sort_key)
+        
+        # Create dropdown options with route_short_name :: route_long_name format
+        route_options = {}
+        for route in sorted_routes:
+            route_id = route["route_id"]
+            short_name = route.get("route_short_name", "Unknown")
+            long_name = route.get("route_long_name", "Unknown Route")
+            
+            # Format: "83 :: Wellington - Petone - Lower Hutt - Eastbourne"
+            display_text = f"{short_name} :: {long_name}"
+            route_options[route_id] = display_text
+        
+        return route_options
