@@ -1,12 +1,19 @@
-<div align="left">
-  <img src="custom_components/metlink_explorer/assets/logo (256x256).png" alt="Metlink Explorer Logo" width="80" height="80" style="margin-right: 20px; vertical-align: middle;">
-  <div style="display: inline-block; vertical-align: middle;">
-    <h1>Metlink Explorer</h1><h3 style="margin: 0; color: #666; font-weight: normal;">Wellington Public Transport Data for Home Assistant</h3>
-  </div>
-</div>
-<!-- Do not remove this header -->
-
-**Version**: 0.0.1
+<table>
+  <tr>
+    <td>
+      <img src="custom_components/metlink_explorer/assets/logo (256x256).png" alt="Metlink Explorer Logo" width="auto" height="100px">
+    </td>
+    <td>
+      <h1>Metlink Explorer</h1>
+      Let's do public transport!<img width="550" height="0">
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" style="border: none; padding-top: 0.5em;">
+      <strong>Version:</strong> 0.0.2
+    </td>
+  </tr>
+</table>
 
 A Home Assistant custom component that integrates with the Metlink Open Data API to provide real-time Wellington public transport information as sensor entities.
 

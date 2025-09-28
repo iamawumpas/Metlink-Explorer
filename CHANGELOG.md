@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.3] - 2025-09-27
+
+### Modified Header in README.md
+- Converted the heading format into a table to better ensure logo placement. Not ideal as the default table formatting shows the borders
+
+## [0.0.2] - 2025-09-27
+
+### Initial README.md formatting
+- uploaded an 80x80 logo to \assets
+- uploaded a 256x256 logo to \assets
+- initial layout for heading.
+
 ## [0.0.1] - 2025-09-27
 
 ### Added - Initial Project Structure
