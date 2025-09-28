@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Metlink Explorer Setup",
-        "description": "Enter your Metlink Open Data API key to get started. You can get a free API key from the Metlink Open Data Developer Portal.",
+        "description": "Enter your Metlink Open Data API key to get started. You can get a free API key from the Metlink Open Data Developer Portal. See the Metlink Explorer documentation for more details. README.md for the link.",
         "data": {
           "api_key": "API Key"
         }
@@ -17,7 +17,7 @@
       },
       "route_selection": {
         "title": "Select Route",
-        "description": "Choose the specific route you want to monitor. Routes are sorted alphanumerically.",
+        "description": "Choose the specific route you want to monitor.",
         "data": {
           "route_id": "Route"
         }
