@@ -204,7 +204,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 route_long_name = selected_route["route_long_name"] 
                 route_desc = selected_route.get("route_desc", "")  # Direction 1 description
                 
-                title = f"{transportation_name} :: {route_short_name}"
+                title = f"{transportation_name} :: {route_short_name} / {route_long_name}"
                 
                 return self.async_create_entry(
                     title=title,
