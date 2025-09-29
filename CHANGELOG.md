@@ -5,6 +5,20 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-09-29
+
+### new feature
+- download stop information along the route. This implementation should:
+  **Parse stop patterns** for each route/direction using GTFS data
+  **Identify destination stops** (last stop in the sequence)
+  **Fetch real-time predictions** for all stops on the route
+  **Provide rich sensor attributes** including:
+    - Complete stop list with sequences
+    - Next departures across all stops
+    - Destination information
+    - Stop prediction counts
+
+
 ## [0.3.0] - 2025-09-29
 
 ### Version Bump

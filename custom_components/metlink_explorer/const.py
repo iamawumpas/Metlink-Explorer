@@ -9,7 +9,7 @@ API_ENDPOINTS = {
     "routes": "/gtfs/routes", 
     "stops": "/gtfs/stops",
     "trips": "/gtfs/trips",
-    "stop_times": "/gtfs/stop_times",
+    "stop_times": "/gtfs/stop_times",  # NEW: Needed for stop sequences
     "calendar_dates": "/gtfs/calendar_dates",
     "vehicle_positions": "/gtfs-rt/vehiclepositions",
     "trip_updates": "/gtfs-rt/tripupdates",
@@ -35,5 +35,5 @@ CONF_ROUTE_LONG_NAME = "route_long_name"
 CONF_ROUTE_DESC = "route_desc"
 
 # Default Values
-DEFAULT_SCAN_INTERVAL = 30  # seconds
-REQUEST_TIMEOUT = 10  # seconds
+DEFAULT_SCAN_INTERVAL = 60  # Increased to 60 seconds due to more API calls
+REQUEST_TIMEOUT = 15  # Increased timeout for complex requests

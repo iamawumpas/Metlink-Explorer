@@ -74,6 +74,59 @@ class MetlinkApiClient:
             _LOGGER.error("Failed to fetch trips for route %s: %s", route_id, exc)
             raise
 
+    async def get_stop_times_for_trip(self, trip_id: str) -> list[dict[str, Any]]:
+        """Get stop times for a specific trip to understand stop sequence."""
+        try:
+            stop_times = await self._request(API_ENDPOINTS["stop_times"])
+            trip_stop_times = [st for st in stop_times if st.get("trip_id") == trip_id]
+            # Sort by stop_sequence to get the correct order
+            return sorted(trip_stop_times, key=lambda x: x.get("stop_sequence", 0))
+        except MetlinkApiError as exc:
+            _LOGGER.error("Failed to fetch stop times for trip %s: %s", trip_id, exc)
+            raise
+
+    async def get_route_stop_pattern(self, route_id: str, direction_id: int) -> list[dict[str, Any]]:
+        """Get the stop pattern for a route in a specific direction."""
+        try:
+            # Get trips for this route and direction
+            trips = await self.get_trips_for_route(route_id)
+            direction_trips = [t for t in trips if t.get("direction_id") == direction_id]
+            
+            if not direction_trips:
+                _LOGGER.warning("No trips found for route %s direction %s", route_id, direction_id)
+                return []
+            
+            # Use the first trip to get the stop pattern
+            # In a real implementation, you might want to check multiple trips to ensure consistency
+            sample_trip = direction_trips[0]
+            trip_id = sample_trip["trip_id"]
+            
+            # Get stop times for this trip
+            stop_times = await self.get_stop_times_for_trip(trip_id)
+            
+            # Get stop details
+            all_stops = await self.get_stops()
+            stops_dict = {stop["stop_id"]: stop for stop in all_stops}
+            
+            # Build stop pattern with details
+            stop_pattern = []
+            for stop_time in stop_times:
+                stop_id = stop_time["stop_id"]
+                if stop_id in stops_dict:
+                    stop_info = stops_dict[stop_id].copy()
+                    stop_info.update({
+                        "stop_sequence": stop_time["stop_sequence"],
+                        "arrival_time": stop_time.get("arrival_time"),
+                        "departure_time": stop_time.get("departure_time"),
+                    })
+                    stop_pattern.append(stop_info)
+            
+            return stop_pattern
+            
+        except MetlinkApiError as exc:
+            _LOGGER.error("Failed to get stop pattern for route %s direction %s: %s", route_id, direction_id, exc)
+            raise
+
     async def get_stops(self) -> list[dict[str, Any]]:
         """Get all stops."""
         try:
@@ -108,4 +161,48 @@ class MetlinkApiClient:
             return await self._request(endpoint)
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch stop predictions: %s", exc)
+            raise
+
+    async def get_route_stop_predictions(self, route_id: str, direction_id: int) -> dict[str, Any]:
+        """Get real-time predictions for all stops on a route in a specific direction."""
+        try:
+            # Get the stop pattern for this route/direction
+            stop_pattern = await self.get_route_stop_pattern(route_id, direction_id)
+            
+            if not stop_pattern:
+                return {"stops": [], "destination": None}
+            
+            # Get destination (last stop in the pattern)
+            destination_stop = stop_pattern[-1] if stop_pattern else None
+            
+            # Get predictions for each stop on the route
+            stop_predictions = {}
+            for stop in stop_pattern:
+                stop_id = stop["stop_id"]
+                try:
+                    predictions = await self.get_stop_predictions(stop_id)
+                    # Filter predictions for our specific route
+                    route_predictions = [
+                        pred for pred in predictions 
+                        if pred.get("route_id") == route_id and pred.get("direction_id") == direction_id
+                    ]
+                    stop_predictions[stop_id] = {
+                        "stop_info": stop,
+                        "predictions": route_predictions[:3]  # Limit to next 3 departures
+                    }
+                except MetlinkApiError:
+                    # If we can't get predictions for this stop, continue with others
+                    stop_predictions[stop_id] = {
+                        "stop_info": stop,
+                        "predictions": []
+                    }
+            
+            return {
+                "stops": stop_predictions,
+                "destination": destination_stop,
+                "stop_count": len(stop_pattern)
+            }
+            
+        except MetlinkApiError as exc:
+            _LOGGER.error("Failed to get route stop predictions for route %s direction %s: %s", route_id, direction_id, exc)
             raise
