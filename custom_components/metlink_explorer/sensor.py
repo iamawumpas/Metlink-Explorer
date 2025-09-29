@@ -185,31 +185,31 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
         """Return if entity is available."""
         return self.coordinator.last_update_success
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        if not self.coordinator.data:
-            return {}
+@property
+def extra_state_attributes(self) -> dict[str, Any]:
+    """Return extra state attributes."""
+    if not self.coordinator.data:
+        return {}
 
-        trips = self.coordinator.data.get("trips", [])
-        vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
-        trip_updates = self.coordinator.data.get("trip_updates", [])
+    trips = self.coordinator.data.get("trips", [])
+    vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
+    trip_updates = self.coordinator.data.get("trip_updates", [])
 
-        # Filter data for this direction
-        direction_trips = [
-            trip for trip in trips 
-            if trip.get("direction_id") == self._direction
-        ]
+    # Filter data for this direction
+    direction_trips = [
+        trip for trip in trips 
+        if trip.get("direction_id") == self._direction
+    ]
 
-        return {
-            "route_id": self._route_id,
-            "route_short_name": self._route_short_name,
-            "route_description": self._route_description,
-            "transportation_type": self._transportation_name,
-            "direction": self._direction,
-            "trip_count": len(direction_trips),
-            "last_updated": self.coordinator.last_update_success_time,
-        }
+    return {
+        "route_id": self._route_id,
+        "route_short_name": self._route_short_name,
+        "route_description": self._route_description,
+        "transportation_type": self._transportation_name,
+        "direction": self._direction,
+        "trip_count": len(direction_trips),
+        "last_updated": self.coordinator.last_update_success,  # Fixed: removed _time
+    }
 
     @property
     def icon(self) -> str:
