@@ -5,6 +5,11 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-09-29
+
+### Version Bump
+- new features to be added from here.
+
 
 ## [0.2.3] - 2025-09-29
 
@@ -13,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - the key change is"
   **Before:** "last_updated": self.coordinator.last_update_success_time,
   **After:** "last_updated": self.coordinator.last_update_success,
+
 
 ## [0.2.2] - 2025-09-29
 
@@ -33,10 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Bug Fix
 - corrected the ***Integration entries*** naming scheme to **title = f"{transportation_name} :: {route_short_name} / {route_long_name}"**
 
+
+
 ## [0.2.0] - 2025-09-29
 
 ### Version Bump
 - initial integration is ready for testing
+
 
 
 ## [0.1.4] - 2025-09-28
@@ -61,6 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced sensor state attributes with direction-specific information
 - Improved error handling for missing route descriptions
 
+
+
 ## [0.1.3] - 2025-09-28
 
 ### Added
@@ -76,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mixed alphanumeric routes (like "31x", "60e") are sorted by number then letter
 - Pure text routes are sorted alphabetically
 - Enhanced error handling for edge cases in route data
+
+
 
 ## [0.1.2] - 2025-09-28
 
@@ -111,6 +124,8 @@ Markdown
 ![Alt Text](https://raw.githubusercontent.com/USER/REPO/BRANCH/path/to/image.png)
 This method guarantees the HACS renderer has a direct, absolute link to the image resource. __
 
+
+
 ## [0.1.1] - 2025-09-28
 
 ### Added - Step 2 Complete: Intelligent Transportation Type Selection
@@ -138,6 +153,8 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 - Comprehensive error handling for edge cases
 - All Step 2 requirements met with intelligent route management
 
+
+
 ## [0.1.0] - 2025-09-28
 
 ### Added - Step 1 Complete: API Key Validation
@@ -160,10 +177,14 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 - Established consistent version management across manifest.json, README.md, and CHANGELOG.md
 - Ready to proceed to Step 2 (Transportation Type Selection)
 
+
+
 ## [0.0.3] - 2025-09-27
 
 ### Modified Header in README.md
 - Converted the heading format into a table to better ensure logo placement. Not ideal as the default table formatting shows the borders
+
+
 
 ## [0.0.2] - 2025-09-27
 
@@ -171,6 +192,8 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 - uploaded an 80x80 logo to \assets
 - uploaded a 256x256 logo to \assets
 - initial layout for heading.
+
+
 
 ## [0.0.1] - 2025-09-27
 
