@@ -59,7 +59,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.debug("Starting data update for route %s direction %s", self.route_id, self.direction_id)
             
-            # Fetch basic real-time data
+            # Fetch basic real-time data first (these are essential)
             trips = await self.api_client.get_trips_for_route(self.route_id)
             _LOGGER.debug("Fetched %d trips for route %s", len(trips), self.route_id)
             
@@ -69,22 +69,27 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
             trip_updates = await self.api_client.get_trip_updates()
             _LOGGER.debug("Fetched %d trip updates", len(trip_updates))
             
-            # NEW: Fetch route stop predictions
-            _LOGGER.debug("Fetching route stop predictions for route %s direction %s", 
-                         self.route_id, self.direction_id)
-            route_stop_data = await self.api_client.get_route_stop_predictions(
-                self.route_id, self.direction_id
-            )
-            _LOGGER.debug("Route stop data: %d stops, destination: %s", 
-                         route_stop_data.get("stop_count", 0),
-                         route_stop_data.get("destination", {}).get("stop_name", "None") 
-                         if route_stop_data.get("destination") else "None")
+            # Try to fetch route stop predictions (this is the new feature, but not essential)
+            route_stop_data = {"stops": {}, "destination": None, "stop_count": 0}
+            try:
+                _LOGGER.debug("Fetching route stop predictions for route %s direction %s", 
+                             self.route_id, self.direction_id)
+                route_stop_data = await self.api_client.get_route_stop_predictions(
+                    self.route_id, self.direction_id
+                )
+                _LOGGER.debug("Route stop data: %d stops, destination: %s", 
+                             route_stop_data.get("stop_count", 0),
+                             route_stop_data.get("destination", {}).get("stop_name", "None") 
+                             if route_stop_data.get("destination") else "None")
+            except Exception as exc:
+                _LOGGER.warning("Failed to fetch route stop predictions (non-critical): %s", exc)
+                # Continue with basic functionality even if stop patterns fail
             
             return {
                 "trips": trips,
                 "vehicle_positions": vehicle_positions,
                 "trip_updates": trip_updates,
-                "route_stops": route_stop_data,  # NEW: Stop pattern and predictions
+                "route_stops": route_stop_data,  # Will be empty dict if failed
             }
         except MetlinkApiError as exc:
             _LOGGER.error("Error communicating with API: %s", exc)

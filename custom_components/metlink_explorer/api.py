@@ -89,15 +89,17 @@ class MetlinkApiClient:
         """Get stop times for a specific trip to understand stop sequence."""
         try:
             _LOGGER.debug("Getting stop times for trip %s", trip_id)
-            stop_times = await self._request(API_ENDPOINTS["stop_times"])
+            # The stop_times endpoint requires trip_id as a parameter
+            endpoint = f"{API_ENDPOINTS['stop_times']}?trip_id={trip_id}"
+            stop_times = await self._request(endpoint)
             
-            trip_stop_times = [
-                st for st in stop_times 
-                if str(st.get("trip_id")) == str(trip_id)
-            ]
+            # The API returns the stop times directly, no need to filter
+            if not isinstance(stop_times, list):
+                _LOGGER.warning("Expected list from stop_times API, got %s", type(stop_times))
+                return []
             
             # Sort by stop_sequence to get the correct order
-            sorted_stop_times = sorted(trip_stop_times, key=lambda x: x.get("stop_sequence", 0))
+            sorted_stop_times = sorted(stop_times, key=lambda x: x.get("stop_sequence", 0))
             
             _LOGGER.debug("Found %d stop times for trip %s", len(sorted_stop_times), trip_id)
             
