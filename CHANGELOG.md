@@ -5,6 +5,19 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-09-29
+
+### Enhanced Real-time Data and Time Display
+- **Improved real-time prediction matching**: Enhanced route matching logic to find predictions using both route_id and route_short_name
+- **Better time display**: Clearly distinguish between real-time predictions and scheduled GTFS times
+- **Enhanced debugging**: Added comprehensive logging for prediction matching and time handling
+- **Time context indicators**: Scheduled times now prefixed with "Scheduled:" to avoid confusion
+- **Additional prediction fields**: Support for expected_departure_time and expected_arrival_time fields
+- **Enhanced debug info**: Added real-time vs scheduled stop counts and prediction statistics
+
+This version improves the accuracy of departure times by better matching real-time predictions and clearly indicating when only scheduled times are available.
+
+
 ## [0.3.3] - 2025-09-29
 
 ### Critical Bug Fix - API Endpoint Parameter

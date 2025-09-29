@@ -258,13 +258,27 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
                 # Get scheduled departure time from GTFS data as fallback
                 scheduled_departure = stop_info.get("departure_time")
                 next_departure_time = None
+                is_real_time = False
                 
                 if predictions:
                     # Use real-time prediction if available
-                    next_departure_time = predictions[0].get("departure_time")
+                    latest_pred = predictions[0]  # Should be sorted by time
+                    next_departure_time = latest_pred.get("departure_time") or latest_pred.get("expected_departure_time")
+                    is_real_time = latest_pred.get("is_real_time", False)
+                    delay = latest_pred.get("delay_seconds", 0)
+                    
+                    if delay != 0:
+                        delay_min = delay // 60
+                        delay_text = f" ({'+' if delay > 0 else ''}{delay_min}min)" if delay_min != 0 else ""
+                        next_departure_time = f"{next_departure_time}{delay_text}"
+                    
+                    _LOGGER.debug("Using real-time prediction for stop %s: %s (delay: %ds)", 
+                                 stop_id, next_departure_time, delay)
                 elif scheduled_departure:
-                    # Fall back to scheduled time
-                    next_departure_time = scheduled_departure
+                    # Fall back to scheduled time - clearly marked as not current
+                    next_departure_time = f"Scheduled: {scheduled_departure}"
+                    is_real_time = False
+                    _LOGGER.debug("Using scheduled time for stop %s: %s", stop_id, scheduled_departure)
                 
                 stop_entry = {
                     "stop_id": stop_id,
@@ -273,7 +287,8 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
                     "next_departure": next_departure_time,
                     "scheduled_departure": scheduled_departure,
                     "prediction_count": len(predictions),
-                    "has_real_time": len(predictions) > 0,
+                    "has_real_time": is_real_time,
+                    "delay_seconds": predictions[0].get("delay_seconds", 0) if predictions else 0,
                     # Include more stop details
                     "stop_lat": stop_info.get("stop_lat"),
                     "stop_lon": stop_info.get("stop_lon"),
@@ -283,24 +298,40 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
                 # Collect next departures for quick access
                 if predictions:
                     for pred in predictions[:2]:  # Next 2 departures per stop
-                        if isinstance(pred, dict) and pred.get("departure_time"):
+                        departure_time = pred.get("departure_time") or pred.get("expected_departure_time")
+                        if isinstance(pred, dict) and departure_time:
+                            delay = pred.get("delay_seconds", 0)
+                            display_time = departure_time
+                            
+                            # Add delay information if significant
+                            if delay != 0:
+                                delay_min = delay // 60
+                                if delay_min != 0:
+                                    display_time = f"{departure_time} ({'+' if delay > 0 else ''}{delay_min}min)"
+                            
                             next_departures.append({
                                 "stop_name": stop_info.get("stop_name", "Unknown Stop"),
                                 "stop_id": stop_id,
-                                "departure_time": pred.get("departure_time"),
-                                "delay_seconds": pred.get("delay_seconds", 0),
-                                "arrival_time": pred.get("arrival_time"),
-                                "is_real_time": True,
+                                "departure_time": display_time,
+                                "raw_departure_time": departure_time,
+                                "delay_seconds": delay,
+                                "arrival_time": pred.get("arrival_time") or pred.get("expected_arrival_time"),
+                                "is_real_time": pred.get("is_real_time", False),
+                                "vehicle_id": pred.get("vehicle_id"),
+                                "trip_id": pred.get("trip_id"),
+                                "timestamp": pred.get("timestamp"),
                             })
                 elif scheduled_departure:
-                    # Include scheduled departure as fallback
+                    # Include scheduled departure as fallback with clear indication
                     next_departures.append({
                         "stop_name": stop_info.get("stop_name", "Unknown Stop"),
                         "stop_id": stop_id,
-                        "departure_time": scheduled_departure,
+                        "departure_time": f"Scheduled: {scheduled_departure}",
+                        "raw_departure_time": scheduled_departure,
                         "delay_seconds": 0,
                         "arrival_time": stop_info.get("arrival_time"),
                         "is_real_time": False,
+                        "note": "GTFS scheduled time - not current real-time data"
                     })
             
             # Sort stops by sequence
@@ -311,13 +342,28 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
             for d in next_departures:
                 if d.get("departure_time"):
                     try:
-                        # Add departure for sorting, handling potential time format issues
+                        # Use raw_departure_time for sorting if available, otherwise departure_time
+                        sort_time = d.get("raw_departure_time") or d.get("departure_time", "")
+                        # Remove "Scheduled: " prefix for sorting
+                        if sort_time.startswith("Scheduled: "):
+                            sort_time = sort_time[11:]
+                        d["_sort_time"] = sort_time
                         valid_departures.append(d)
                     except (ValueError, TypeError):
                         _LOGGER.debug("Could not parse departure time: %s", d.get("departure_time"))
             
+            # Sort by time - real-time predictions first, then by time
+            def sort_key(x):
+                is_rt = x.get("is_real_time", False)
+                time_str = x.get("_sort_time", "")
+                return (not is_rt, time_str)  # Real-time first (False sorts before True)
+            
             # Sort and limit to next 10 departures
-            next_departures = sorted(valid_departures, key=lambda x: str(x.get("departure_time", "")))[:10]
+            next_departures = sorted(valid_departures, key=sort_key)[:10]
+            
+            # Clean up sort key
+            for d in next_departures:
+                d.pop("_sort_time", None)
             
         _LOGGER.debug("Processed %d stops and %d next departures for route %s direction %s", 
                      len(all_stops), len(next_departures), self._route_id, self._direction)
@@ -346,6 +392,14 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
                 "route_stops_keys": list(route_stops.keys()) if route_stops else [],
                 "stops_data_count": len(route_stops.get("stops", {})) if route_stops else 0,
                 "last_update_time": str(self.coordinator.last_update_success_time) if hasattr(self.coordinator, 'last_update_success_time') else "unknown",
+                "real_time_stops": len([s for s in all_stops if s.get("has_real_time", False)]),
+                "scheduled_only_stops": len([s for s in all_stops if not s.get("has_real_time", False)]),
+                "total_predictions": sum(s.get("prediction_count", 0) for s in all_stops),
+                "route_info": {
+                    "route_id": self._route_id,
+                    "route_short_name": self._route_short_name,
+                    "direction": self._direction
+                }
             }
         }
 

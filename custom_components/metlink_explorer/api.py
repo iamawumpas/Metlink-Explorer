@@ -201,7 +201,7 @@ class MetlinkApiClient:
             raise
 
     async def get_route_stop_predictions(self, route_id: str, direction_id: int) -> dict[str, Any]:
-        """Get real-time predictions for all stops on a route in a specific direction."""
+        """Get real-time predictions for all stops on a route using trip updates."""
         try:
             _LOGGER.debug("Getting route stop predictions for route %s direction %s", route_id, direction_id)
             
@@ -221,54 +221,88 @@ class MetlinkApiClient:
             # Get destination (last stop in the pattern)
             destination_stop = stop_pattern[-1] if stop_pattern else None
             
-            # Get predictions for each stop on the route
+            # Get real-time trip updates
+            trip_updates = await self.get_trip_updates()
+            _LOGGER.debug("Found %d trip updates", len(trip_updates))
+            
+            # Get trips for our route to match trip IDs
+            trips = await self.get_trips_for_route(route_id)
+            direction_trips = [t for t in trips if t.get("direction_id") == direction_id]
+            trip_ids = {trip["trip_id"] for trip in direction_trips}
+            _LOGGER.debug("Looking for trip updates matching %d trip IDs", len(trip_ids))
+            
+            # Process trip updates to get real-time predictions
             stop_predictions = {}
-            prediction_errors = 0
             
-            for i, stop in enumerate(stop_pattern):
+            # Initialize all stops with empty predictions
+            for stop in stop_pattern:
                 stop_id = str(stop["stop_id"])
-                _LOGGER.debug("Getting predictions for stop %s (%d/%d): %s", 
-                             stop_id, i+1, len(stop_pattern), stop.get("stop_name", "Unknown"))
-                
-                try:
-                    predictions = await self.get_stop_predictions(stop_id)
-                    
-                    if predictions and isinstance(predictions, list):
-                        # Filter predictions for our specific route
-                        route_predictions = [
-                            pred for pred in predictions 
-                            if str(pred.get("route_id")) == str(route_id) and 
-                               pred.get("direction_id") == direction_id
-                        ]
-                        
-                        # If no route-specific predictions, log for debugging
-                        if not route_predictions and predictions:
-                            _LOGGER.debug("No route-specific predictions for stop %s, found %d general predictions", 
-                                        stop_id, len(predictions))
-                            # For debugging, let's see what route IDs we're getting
-                            unique_routes = set(str(p.get("route_id", "unknown")) for p in predictions[:5])
-                            _LOGGER.debug("Sample route IDs in predictions: %s (looking for %s)", 
-                                        list(unique_routes), route_id)
-                    else:
-                        route_predictions = []
-                        _LOGGER.debug("No predictions returned for stop %s (got %s)", stop_id, type(predictions))
-                    
-                    stop_predictions[stop_id] = {
-                        "stop_info": stop,
-                        "predictions": route_predictions[:3]  # Limit to next 3 departures
-                    }
-                    
-                except MetlinkApiError as e:
-                    # If we can't get predictions for this stop, continue with others
-                    prediction_errors += 1
-                    _LOGGER.debug("Failed to get predictions for stop %s: %s", stop_id, str(e))
-                    stop_predictions[stop_id] = {
-                        "stop_info": stop,
-                        "predictions": []
-                    }
+                stop_predictions[stop_id] = {
+                    "stop_info": stop,
+                    "predictions": []
+                }
             
-            _LOGGER.debug("Completed predictions for %d stops with %d errors", 
-                         len(stop_predictions), prediction_errors)
+            # Process trip updates
+            if isinstance(trip_updates, dict) and "entity" in trip_updates:
+                entities = trip_updates["entity"]
+            elif isinstance(trip_updates, list):
+                entities = trip_updates
+            else:
+                _LOGGER.warning("Unexpected trip_updates format: %s", type(trip_updates))
+                entities = []
+            
+            real_time_found = 0
+            for entity in entities:
+                if not isinstance(entity, dict):
+                    continue
+                    
+                trip_update = entity.get("trip_update", {})
+                if not trip_update:
+                    continue
+                
+                trip_info = trip_update.get("trip", {})
+                trip_id = trip_info.get("trip_id")
+                
+                # Check if this trip belongs to our route/direction
+                if trip_id not in trip_ids:
+                    continue
+                
+                stop_time_updates = trip_update.get("stop_time_update", [])
+                _LOGGER.debug("Processing trip %s with %d stop updates", trip_id, len(stop_time_updates))
+                
+                for stop_update in stop_time_updates:
+                    stop_id = str(stop_update.get("stop_id", ""))
+                    if stop_id in stop_predictions:
+                        # Extract departure info
+                        departure_info = stop_update.get("departure", {})
+                        if departure_info:
+                            # Convert Unix timestamp to readable time
+                            time_stamp = departure_info.get("time")
+                            delay = departure_info.get("delay", 0)
+                            
+                            if time_stamp:
+                                import datetime
+                                try:
+                                    # Convert Unix timestamp to local time
+                                    dt = datetime.datetime.fromtimestamp(int(time_stamp))
+                                    formatted_time = dt.strftime("%H:%M:%S")
+                                    
+                                    prediction = {
+                                        "departure_time": formatted_time,
+                                        "expected_departure_time": formatted_time,
+                                        "delay_seconds": delay,
+                                        "trip_id": trip_id,
+                                        "timestamp": time_stamp,
+                                        "is_real_time": True
+                                    }
+                                    
+                                    stop_predictions[stop_id]["predictions"].append(prediction)
+                                    real_time_found += 1
+                                    
+                                except (ValueError, TypeError) as e:
+                                    _LOGGER.debug("Could not parse timestamp %s: %s", time_stamp, e)
+            
+            _LOGGER.debug("Found %d real-time predictions across all stops", real_time_found)
             
             return {
                 "stops": stop_predictions,
