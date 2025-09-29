@@ -1,0 +1,12 @@
+# Metlink Explorer Debug Configuration
+# Add these lines to your Home Assistant configuration.yaml to enable debug logging
+
+logger:
+  default: info
+  logs:
+    custom_components.metlink_explorer: debug
+    custom_components.metlink_explorer.api: debug
+    custom_components.metlink_explorer.sensor: debug
+
+# This will help diagnose issues with the stop pattern functionality
+# Check your Home Assistant logs after adding this configuration and restarting HA

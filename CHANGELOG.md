@@ -5,6 +5,35 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2025-09-29
+
+### Bug Fix - Stop Pattern Implementation
+- **Fixed empty stop pattern data**: Resolved issue where `all_stops`, `next_departures`, and `destination_stop` attributes were empty
+- **Enhanced route ID matching**: Improved comparison logic to handle both string and integer route IDs from API
+- **Added comprehensive logging**: Added debug logging throughout the stop pattern process for better troubleshooting
+- **Implemented fallback mechanism**: When real-time predictions are unavailable, integration now falls back to scheduled GTFS departure times
+- **Improved error handling**: Better validation of API responses and data structures
+- **Enhanced state attributes**: Added more detailed debugging information and scheduled departure times
+
+### New Features
+- **Mixed data sources**: Integration now shows both real-time predictions and scheduled times
+- **Enhanced debugging**: Added `debug_info` attribute with troubleshooting information
+- **Scheduled departure fallback**: Shows GTFS scheduled times when real-time data isn't available
+- **Stop sequence validation**: Ensures stops are displayed in correct route order
+
+### Technical Improvements
+- **String normalization**: Consistent handling of stop IDs and route IDs as strings
+- **Better API error handling**: More resilient to individual stop prediction failures
+- **Enhanced logging**: Debug-level logging for API calls and data processing
+- **Data structure validation**: Validates API responses before processing
+
+The integration should now properly display:
+- Complete list of stops along the route in sequence
+- Next scheduled bus arrival times (real-time or scheduled)
+- Destination stop information
+- Stop-by-stop departure predictions
+
+
 ## [0.3.1] - 2025-09-29
 
 ### new feature

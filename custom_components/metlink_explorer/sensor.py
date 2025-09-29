@@ -57,15 +57,28 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library."""
         try:
+            _LOGGER.debug("Starting data update for route %s direction %s", self.route_id, self.direction_id)
+            
             # Fetch basic real-time data
             trips = await self.api_client.get_trips_for_route(self.route_id)
+            _LOGGER.debug("Fetched %d trips for route %s", len(trips), self.route_id)
+            
             vehicle_positions = await self.api_client.get_vehicle_positions()
+            _LOGGER.debug("Fetched %d vehicle positions", len(vehicle_positions))
+            
             trip_updates = await self.api_client.get_trip_updates()
+            _LOGGER.debug("Fetched %d trip updates", len(trip_updates))
             
             # NEW: Fetch route stop predictions
+            _LOGGER.debug("Fetching route stop predictions for route %s direction %s", 
+                         self.route_id, self.direction_id)
             route_stop_data = await self.api_client.get_route_stop_predictions(
                 self.route_id, self.direction_id
             )
+            _LOGGER.debug("Route stop data: %d stops, destination: %s", 
+                         route_stop_data.get("stop_count", 0),
+                         route_stop_data.get("destination", {}).get("stop_name", "None") 
+                         if route_stop_data.get("destination") else "None")
             
             return {
                 "trips": trips,
@@ -74,6 +87,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
                 "route_stops": route_stop_data,  # NEW: Stop pattern and predictions
             }
         except MetlinkApiError as exc:
+            _LOGGER.error("Error communicating with API: %s", exc)
             raise UpdateFailed(f"Error communicating with API: {exc}") from exc
 
 
@@ -211,47 +225,97 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
             if trip.get("direction_id") == self._direction
         ]
 
-        # NEW: Process stop predictions
+        # NEW: Process stop predictions with improved error handling
         next_departures = []
         all_stops = []
         destination_stop = route_stops.get("destination")
+        
+        _LOGGER.debug("Processing route stops data for route %s direction %s: %s stops available", 
+                     self._route_id, self._direction,
+                     len(route_stops.get("stops", {})) if route_stops else 0)
         
         if route_stops and route_stops.get("stops"):
             stops_data = route_stops["stops"]
             
             # Build stop list with next departures
             for stop_id, stop_data in stops_data.items():
+                if not isinstance(stop_data, dict) or "stop_info" not in stop_data:
+                    _LOGGER.warning("Invalid stop data structure for stop %s", stop_id)
+                    continue
+                    
                 stop_info = stop_data["stop_info"]
-                predictions = stop_data["predictions"]
+                predictions = stop_data.get("predictions", [])
+                
+                # Ensure predictions is a list
+                if not isinstance(predictions, list):
+                    predictions = []
+                
+                # Get scheduled departure time from GTFS data as fallback
+                scheduled_departure = stop_info.get("departure_time")
+                next_departure_time = None
+                
+                if predictions:
+                    # Use real-time prediction if available
+                    next_departure_time = predictions[0].get("departure_time")
+                elif scheduled_departure:
+                    # Fall back to scheduled time
+                    next_departure_time = scheduled_departure
                 
                 stop_entry = {
                     "stop_id": stop_id,
                     "stop_name": stop_info.get("stop_name", "Unknown Stop"),
                     "stop_sequence": stop_info.get("stop_sequence", 0),
-                    "next_departure": predictions[0].get("departure_time") if predictions else None,
-                    "prediction_count": len(predictions)
+                    "next_departure": next_departure_time,
+                    "scheduled_departure": scheduled_departure,
+                    "prediction_count": len(predictions),
+                    "has_real_time": len(predictions) > 0,
+                    # Include more stop details
+                    "stop_lat": stop_info.get("stop_lat"),
+                    "stop_lon": stop_info.get("stop_lon"),
                 }
                 all_stops.append(stop_entry)
                 
                 # Collect next departures for quick access
                 if predictions:
-                    next_departures.extend([
-                        {
-                            "stop_name": stop_info.get("stop_name"),
-                            "departure_time": pred.get("departure_time"),
-                            "delay_seconds": pred.get("delay_seconds", 0)
-                        }
-                        for pred in predictions[:2]  # Next 2 departures per stop
-                    ])
+                    for pred in predictions[:2]:  # Next 2 departures per stop
+                        if isinstance(pred, dict) and pred.get("departure_time"):
+                            next_departures.append({
+                                "stop_name": stop_info.get("stop_name", "Unknown Stop"),
+                                "stop_id": stop_id,
+                                "departure_time": pred.get("departure_time"),
+                                "delay_seconds": pred.get("delay_seconds", 0),
+                                "arrival_time": pred.get("arrival_time"),
+                                "is_real_time": True,
+                            })
+                elif scheduled_departure:
+                    # Include scheduled departure as fallback
+                    next_departures.append({
+                        "stop_name": stop_info.get("stop_name", "Unknown Stop"),
+                        "stop_id": stop_id,
+                        "departure_time": scheduled_departure,
+                        "delay_seconds": 0,
+                        "arrival_time": stop_info.get("arrival_time"),
+                        "is_real_time": False,
+                    })
             
             # Sort stops by sequence
-            all_stops.sort(key=lambda x: x["stop_sequence"])
+            all_stops.sort(key=lambda x: x.get("stop_sequence", 999))
             
-            # Sort next departures by time
-            next_departures = sorted(
-                [d for d in next_departures if d["departure_time"]], 
-                key=lambda x: x["departure_time"]
-            )[:10]  # Next 10 departures across all stops
+            # Sort next departures by time (handle various time formats)
+            valid_departures = []
+            for d in next_departures:
+                if d.get("departure_time"):
+                    try:
+                        # Add departure for sorting, handling potential time format issues
+                        valid_departures.append(d)
+                    except (ValueError, TypeError):
+                        _LOGGER.debug("Could not parse departure time: %s", d.get("departure_time"))
+            
+            # Sort and limit to next 10 departures
+            next_departures = sorted(valid_departures, key=lambda x: str(x.get("departure_time", "")))[:10]
+            
+        _LOGGER.debug("Processed %d stops and %d next departures for route %s direction %s", 
+                     len(all_stops), len(next_departures), self._route_id, self._direction)
 
         return {
             "route_id": self._route_id,
@@ -266,9 +330,18 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
             "destination_stop": destination_stop.get("stop_name") if destination_stop else None,
             "destination_stop_id": destination_stop.get("stop_id") if destination_stop else None,
             "total_stops": len(all_stops),
-            "stops_with_predictions": len([s for s in all_stops if s["next_departure"]]),
-            "next_departures": next_departures,  # Next 10 departures across route
+            "stops_with_predictions": len([s for s in all_stops if s.get("has_real_time", False)]),
+            "stops_with_scheduled": len([s for s in all_stops if s.get("scheduled_departure")]),
+            "next_departures": next_departures,  # Next departures across route
             "all_stops": all_stops,  # Complete stop list with predictions
+            
+            # Additional debugging information
+            "debug_info": {
+                "coordinator_data_keys": list(self.coordinator.data.keys()) if self.coordinator.data else [],
+                "route_stops_keys": list(route_stops.keys()) if route_stops else [],
+                "stops_data_count": len(route_stops.get("stops", {})) if route_stops else 0,
+                "last_update_time": str(self.coordinator.last_update_success_time) if hasattr(self.coordinator, 'last_update_success_time') else "unknown",
+            }
         }
 
     @property
