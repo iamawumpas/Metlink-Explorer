@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2025-09-29
+
+### Critical Bug Fix - API Endpoint Parameter
+- **Fixed 400 Bad Request error**: Added required `trip_id` parameter to `/gtfs/stop_times` endpoint call
+- **Added fallback mechanism**: Stop pattern functionality is now optional and won't break basic integration
+- **Improved error handling**: Integration continues working even if advanced stop features fail
+- **API parameter compliance**: Fixed endpoint calls to match Metlink API documentation requirements
+
+This fix resolves the "ConfigEntryNotReady" error and restores basic integration functionality.
+
+
 ## [0.3.2] - 2025-09-29
 
 ### Bug Fix - Stop Pattern Implementation
