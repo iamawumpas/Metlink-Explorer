@@ -69,7 +69,23 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
             trip_updates = await self.api_client.get_trip_updates()
             _LOGGER.debug("Fetched %d trip updates", len(trip_updates))
             
-            # Try to fetch route stop predictions (this is the new feature, but not essential)
+            # Try to fetch route timeline for card display
+            route_timeline_data = {"stops": [], "error": None}
+            try:
+                _LOGGER.info("Fetching route timeline for card display: route %s direction %s", 
+                            self.route_id, self.direction_id)
+                route_timeline_data = await self.api_client.get_route_timeline_for_card(
+                    self.route_id, self.direction_id
+                )
+                _LOGGER.info("Route timeline data: %d stops, error: %s", 
+                           len(route_timeline_data.get("stops", [])),
+                           route_timeline_data.get("error", "None"))
+                
+            except Exception as exc:
+                _LOGGER.error("Failed to fetch route timeline (non-critical): %s", exc, exc_info=True)
+                route_timeline_data = {"stops": [], "error": str(exc)}
+            
+            # Try to fetch route stop predictions (this is the original feature, now secondary)
             route_stop_data = {"stops": {}, "destination": None, "stop_count": 0}
             try:
                 _LOGGER.debug("Fetching route stop predictions for route %s direction %s", 
@@ -77,12 +93,18 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
                 route_stop_data = await self.api_client.get_route_stop_predictions(
                     self.route_id, self.direction_id
                 )
-                _LOGGER.debug("Route stop data: %d stops, destination: %s", 
+                _LOGGER.info("Route stop data: %d stops, destination: %s", 
                              route_stop_data.get("stop_count", 0),
                              route_stop_data.get("destination", {}).get("stop_name", "None") 
                              if route_stop_data.get("destination") else "None")
+                
+                # Additional debugging for empty results
+                if route_stop_data.get("stop_count", 0) == 0:
+                    _LOGGER.warning("No stops found in route stop data - investigating...")
+                    _LOGGER.debug("Full route_stop_data structure: %s", route_stop_data)
+                    
             except Exception as exc:
-                _LOGGER.warning("Failed to fetch route stop predictions (non-critical): %s", exc)
+                _LOGGER.error("Failed to fetch route stop predictions (non-critical): %s", exc, exc_info=True)
                 # Continue with basic functionality even if stop patterns fail
             
             return {
@@ -90,6 +112,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator):
                 "vehicle_positions": vehicle_positions,
                 "trip_updates": trip_updates,
                 "route_stops": route_stop_data,  # Will be empty dict if failed
+                "route_timeline": route_timeline_data,  # NEW: Card-friendly timeline data
             }
         except MetlinkApiError as exc:
             _LOGGER.error("Error communicating with API: %s", exc)
@@ -223,6 +246,7 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
         vehicle_positions = self.coordinator.data.get("vehicle_positions", [])
         trip_updates = self.coordinator.data.get("trip_updates", [])
         route_stops = self.coordinator.data.get("route_stops", {})
+        route_timeline = self.coordinator.data.get("route_timeline", {})
 
         # Filter data for this direction
         direction_trips = [
@@ -238,6 +262,13 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
         _LOGGER.debug("Processing route stops data for route %s direction %s: %s stops available", 
                      self._route_id, self._direction,
                      len(route_stops.get("stops", {})) if route_stops else 0)
+        
+        # NEW: Process timeline data for card display
+        timeline_stops = route_timeline.get("stops", [])
+        timeline_error = route_timeline.get("error")
+        
+        _LOGGER.debug("Processing route timeline for route %s direction %s: %d stops, error: %s", 
+                     self._route_id, self._direction, len(timeline_stops), timeline_error or "None")
         
         if route_stops and route_stops.get("stops"):
             stops_data = route_stops["stops"]
@@ -386,7 +417,16 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
             "next_departures": next_departures,  # Next departures across route
             "all_stops": all_stops,  # Complete stop list with predictions
             
-            # Additional debugging information
+            # NEW: Card-friendly timeline data
+            "timeline_stops": timeline_stops,  # Ordered stops with ETA calculations
+            "timeline_error": timeline_error,  # Any error in timeline generation
+            "departure_stop": route_timeline.get("departure_stop"),  # First stop
+            "destination_stop_timeline": route_timeline.get("destination_stop"),  # Last stop
+            "hub_stops": route_timeline.get("hub_stops", []),  # Major interchange stops
+            "current_time": route_timeline.get("current_time"),  # Reference time for ETAs
+            "timeline_trip_id": route_timeline.get("trip_id"),  # Trip used for timeline
+            
+            # Enhanced debugging information
             "debug_info": {
                 "coordinator_data_keys": list(self.coordinator.data.keys()) if self.coordinator.data else [],
                 "route_stops_keys": list(route_stops.keys()) if route_stops else [],

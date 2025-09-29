@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any
 
 import aiohttp
@@ -121,7 +122,8 @@ class MetlinkApiClient:
             _LOGGER.debug("Found %d trips for route %s direction %s", len(direction_trips), route_id, direction_id)
             
             if not direction_trips:
-                _LOGGER.warning("No trips found for route %s direction %s", route_id, direction_id)
+                _LOGGER.error("No trips found for route %s direction %s - this will prevent stop pattern creation", route_id, direction_id)
+                _LOGGER.debug("Available trips for route %s: %s", route_id, [f"trip_id={t.get('trip_id')}, direction_id={t.get('direction_id')}" for t in trips[:5]])
                 return []
             
             # Use the first trip to get the stop pattern
@@ -189,16 +191,26 @@ class MetlinkApiClient:
             raise
 
     async def get_stop_predictions(self, stop_id: str | None = None) -> list[dict[str, Any]]:
-        """Get stop departure predictions."""
-        endpoint = API_ENDPOINTS["stop_predictions"]
-        if stop_id:
-            endpoint += f"?stop_id={stop_id}"
-        
+        """Get stop departure predictions for a specific stop."""
         try:
-            return await self._request(endpoint)
-        except MetlinkApiError as exc:
-            _LOGGER.error("Failed to fetch stop predictions: %s", exc)
-            raise
+            url = f"{self._base_url}/stop-predictions"
+            params = {"stop_id": stop_id} if stop_id else {}
+            headers = {"X-API-KEY": self._api_key}
+        
+            _LOGGER.debug("Fetching stop predictions from %s with params %s", url, params)
+        
+            async with self._session.get(url, params=params, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    _LOGGER.debug("Got %d predictions for stop %s", len(data) if isinstance(data, list) else 0, stop_id)
+                    return data if isinstance(data, list) else []
+                else:
+                    _LOGGER.warning("Stop predictions request failed with status %d for stop %s", response.status, stop_id)
+                    return []
+                
+        except Exception as exc:
+            _LOGGER.error("Failed to get stop predictions for stop %s: %s", stop_id, exc)
+            return []
 
     async def get_route_stop_predictions(self, route_id: str, direction_id: int) -> dict[str, Any]:
         """Get real-time predictions for all stops on a route using trip updates."""
@@ -216,7 +228,8 @@ class MetlinkApiClient:
                     "stop_count": 0
                 }
             
-            _LOGGER.debug("Processing %d stops in pattern", len(stop_pattern))
+            _LOGGER.info("Processing %d stops in pattern for route %s direction %s", 
+                        len(stop_pattern), route_id, direction_id)
             
             # Get destination (last stop in the pattern)
             destination_stop = stop_pattern[-1] if stop_pattern else None
@@ -281,10 +294,9 @@ class MetlinkApiClient:
                             delay = departure_info.get("delay", 0)
                             
                             if time_stamp:
-                                import datetime
                                 try:
                                     # Convert Unix timestamp to local time
-                                    dt = datetime.datetime.fromtimestamp(int(time_stamp))
+                                    dt = datetime.fromtimestamp(int(time_stamp))
                                     formatted_time = dt.strftime("%H:%M:%S")
                                     
                                     prediction = {
@@ -314,3 +326,157 @@ class MetlinkApiClient:
             _LOGGER.error("Failed to get route stop predictions for route %s direction %s: %s", 
                          route_id, direction_id, exc)
             raise
+
+    async def get_route_timeline_for_card(self, route_id: str, direction_id: int) -> dict[str, Any]:
+        """Get route timeline data optimized for Home Assistant card display using stop predictions."""
+        try:
+            _LOGGER.info("Getting route timeline for card display: route %s direction %s", route_id, direction_id)
+            
+            # Step 1: Get the static stop pattern from GTFS data
+            stop_pattern = await self.get_route_stop_pattern(route_id, direction_id)
+            if not stop_pattern:
+                _LOGGER.error("No stop pattern found for route %s direction %s", route_id, direction_id)
+                return {"stops": [], "error": "No stop pattern found"}
+            
+            _LOGGER.info("Found stop pattern with %d stops", len(stop_pattern))
+            
+            # Step 2: Get real-time predictions using the stop-predictions endpoint
+            timeline_stops = []
+            current_time = datetime.now()
+            current_time_str = current_time.strftime("%H:%M:%S")
+            
+            for stop_info in stop_pattern:
+                stop_id = str(stop_info["stop_id"])
+                
+                # Get real-time predictions for this stop
+                predictions = []
+                try:
+                    stop_predictions = await self.get_stop_predictions(stop_id)
+                    
+                    if stop_predictions and isinstance(stop_predictions, list):
+                        # Filter for our specific route and direction
+                        relevant_predictions = [
+                            pred for pred in stop_predictions 
+                            if (str(pred.get("route_id")) == str(route_id) or 
+                                str(pred.get("route_short_name", "")).lower() == self._get_route_short_name(route_id).lower()) and
+                               pred.get("direction_id") == direction_id
+                        ]
+                        
+                        # Sort predictions by departure time and take the next few
+                        predictions = sorted(relevant_predictions, 
+                                           key=lambda x: x.get("departure_time", "99:99:99"))[:3]
+                        
+                except Exception as e:
+                    _LOGGER.debug("Could not get predictions for stop %s: %s", stop_id, e)
+                
+                # Calculate ETA for the next departure
+                eta_display = "No predictions"
+                eta_seconds = 0
+                next_departure = None
+                
+                if predictions:
+                    next_pred = predictions[0]
+                    departure_time = next_pred.get("departure_time")
+                    
+                    if departure_time:
+                        try:
+                            # Parse departure time and calculate ETA
+                            departure_dt = datetime.strptime(f"{current_time.date()} {departure_time}", "%Y-%m-%d %H:%M:%S")
+                            
+                            # If departure is earlier than now, assume it's tomorrow
+                            if departure_dt < current_time:
+                                from datetime import timedelta
+                                departure_dt += timedelta(days=1)
+                            
+                            eta_seconds = int((departure_dt - current_time).total_seconds())
+                            eta_minutes = eta_seconds // 60
+                            eta_remaining_seconds = eta_seconds % 60
+                            
+                            # Format ETA for display
+                            if eta_seconds <= 0:
+                                eta_display = "Due now"
+                            elif eta_seconds < 60:
+                                eta_display = f"{eta_seconds}s"
+                            elif eta_minutes < 60:
+                                eta_display = f"{eta_minutes}m {eta_remaining_seconds}s"
+                            else:
+                                hours = eta_minutes // 60
+                                remaining_minutes = eta_minutes % 60
+                                eta_display = f"{hours}h {remaining_minutes}m"
+                            
+                            next_departure = departure_time
+                            
+                        except Exception as e:
+                            _LOGGER.debug("Could not parse departure time %s: %s", departure_time, e)
+                            eta_display = departure_time
+                            next_departure = departure_time
+                
+                # Use scheduled time as fallback
+                if not next_departure:
+                    scheduled_time = stop_info.get("departure_time", stop_info.get("arrival_time"))
+                    if scheduled_time:
+                        eta_display = f"Scheduled: {scheduled_time}"
+                        next_departure = scheduled_time
+                
+                timeline_stop = {
+                    "stop_id": stop_id,
+                    "stop_name": stop_info.get("stop_name", "Unknown Stop"),
+                    "stop_sequence": stop_info.get("stop_sequence", 0),
+                    "scheduled_time": stop_info.get("departure_time", stop_info.get("arrival_time")),
+                    "next_departure": next_departure,
+                    "eta_display": eta_display,
+                    "eta_seconds": eta_seconds,
+                    "prediction_count": len(predictions),
+                    "has_real_time": len(predictions) > 0,
+                    "stop_lat": stop_info.get("stop_lat"),
+                    "stop_lon": stop_info.get("stop_lon"),
+                    "is_departure": stop_info.get("stop_sequence", 0) == 0,
+                    "is_destination": stop_info.get("stop_sequence", 0) == len(stop_pattern) - 1,
+                    "is_hub": self._is_hub_stop(stop_info.get("stop_name", "")),
+                    "all_predictions": predictions,  # Include all predictions for debugging
+                }
+                timeline_stops.append(timeline_stop)
+            
+            # Sort by stop sequence
+            timeline_stops.sort(key=lambda x: x["stop_sequence"])
+            
+            _LOGGER.info("Built timeline with %d stops, %d with real-time data", 
+                        len(timeline_stops), 
+                        sum(1 for s in timeline_stops if s["has_real_time"]))
+            
+            return {
+                "stops": timeline_stops,
+                "route_id": route_id,
+                "direction_id": direction_id,
+                "current_time": current_time_str,
+                "total_stops": len(timeline_stops),
+                "departure_stop": timeline_stops[0] if timeline_stops else None,
+                "destination_stop": timeline_stops[-1] if timeline_stops else None,
+                "hub_stops": [s for s in timeline_stops if s["is_hub"]],
+                "real_time_stops": sum(1 for s in timeline_stops if s["has_real_time"]),
+                "error": None
+            }
+            
+        except Exception as exc:
+            _LOGGER.error("Failed to get route timeline for route %s direction %s: %s", 
+                         route_id, direction_id, exc, exc_info=True)
+            return {"stops": [], "error": str(exc)}
+    
+    async def _get_route_short_name(self, route_id: str) -> str:
+        """Get route short name for a given route ID."""
+        try:
+            routes = await self.get_routes()
+            route_info = next((r for r in routes if str(r.get("route_id")) == str(route_id)), None)
+            return route_info.get("route_short_name", "") if route_info else ""
+        except:
+            return ""
+    
+    def _is_hub_stop(self, stop_name: str) -> bool:
+        """Identify if a stop is a major hub/interchange."""
+        hub_keywords = [
+            "station", "interchange", "terminal", "centre", "plaza", 
+            "wellington", "petone", "lower hutt", "upper hutt", "masterton",
+            "johnsonville", "porirua", "paraparaumu", "waikanae"
+        ]
+        stop_name_lower = stop_name.lower()
+        return any(keyword in stop_name_lower for keyword in hub_keywords)

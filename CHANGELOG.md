@@ -5,6 +5,34 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2025-09-29
+
+### Timeline Card Display Feature
+- **NEW: Route timeline for card display**: Added `get_route_timeline_for_card()` method to generate card-friendly stop data with ETA calculations
+- **Real-time ETA calculations**: Shows "minutes and seconds from scheduled time" for each stop using real-time predictions
+- **Smart stop categorization**: Automatically identifies departure stops, destination stops, and hub/interchange stops
+- **Flexible time display**: Shows ETA in seconds ("30s"), minutes ("5m 30s"), or hours ("1h 15m") format based on time remaining
+- **Enhanced sensor attributes**: Added `timeline_stops`, `departure_stop`, `destination_stop_timeline`, `hub_stops`, and `current_time` attributes
+- **Fallback to scheduled times**: When real-time predictions aren't available, displays clearly marked scheduled GTFS times
+- **Card-optimized data structure**: Each timeline stop includes `eta_display`, `eta_seconds`, `is_departure`, `is_destination`, `is_hub` flags for easy card rendering
+- **Real-time status indicators**: Shows prediction count and real-time availability for each stop
+- **Hub stop detection**: Automatically identifies major stations and interchanges using station name keywords
+
+### Technical Improvements
+- **Enhanced API integration**: Uses `/stop-predictions` endpoint for more accurate real-time data
+- **Improved error handling**: Timeline generation continues working even if individual stop predictions fail
+- **Better route matching**: Enhanced logic to match predictions using both route_id and route_short_name
+- **Comprehensive logging**: Added detailed debug logging for timeline generation and ETA calculations
+- **Performance optimization**: Efficient stop pattern processing and prediction matching
+
+This version enables Home Assistant cards to display rich route timelines with:
+- Selectable stops with real-time ETAs
+- Always-visible departure and destination stops  
+- Highlighted hub/interchange stops
+- Clean time format display ("10:00, 10:03, 10:07" style)
+- Real-time vs scheduled time indicators
+
+
 ## [0.3.4] - 2025-09-29
 
 ### Enhanced Real-time Data and Time Display
