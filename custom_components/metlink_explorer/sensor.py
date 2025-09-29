@@ -5,7 +5,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -150,10 +150,24 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
         # Use the new naming schema: route_short_name :: route_description
         self._attr_name = f"{route_short_name} :: {route_description}"
         self._attr_unique_id = f"{DOMAIN}_{route_id}_{direction}"
+        
+        # Add proper sensor properties for Home Assistant recognition
+        self._attr_native_unit_of_measurement = "trips"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_entity_registry_enabled_default = True
+        
+        # Set device info to group sensors properly
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"{route_id}")},
+            "name": f"{transportation_name} Route {route_short_name}",
+            "manufacturer": "Metlink",
+            "model": transportation_name,
+            "sw_version": "1.0",
+        }
 
     @property
-    def state(self) -> str | None:
-        """Return the state of the sensor."""
+    def native_value(self) -> int | None:
+        """Return the native value of the sensor."""
         if not self.coordinator.data:
             return None
         
@@ -164,7 +178,12 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
             if trip.get("direction_id") == self._direction
         ]
         
-        return str(len(active_trips))
+        return len(active_trips)
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

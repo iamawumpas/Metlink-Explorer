@@ -5,6 +5,20 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2025-09-29
+
+### Bug Fix
+- no entities created. The problem is in the sensor.py file - the entities need proper device_class, state_class, and unit_of_measurement properties to be recognized as proper sensors.
+- The key changes are:
+  **Added** native_value property instead of state - This is the modern HA way
+  **Added** native_unit_of_measurement = "trips" - Defines what the sensor measures
+  **Added** state_class = SensorStateClass.MEASUREMENT - Marks it as a measurement sensor
+  **Added** device_info - Groups sensors under a device for better organization
+  **Added** available property - Shows if the sensor is available based on coordinator success
+  **Added** entity_registry_enabled_default = True - Ensures entities are enabled by default
+
+
+
 ## [0.2.1] - 2025-09-29
 
 ### Bug Fix
