@@ -27,10 +27,30 @@ A Home Assistant custom component that integrates with the Metlink Open Data API
 
 ## Installation
 
-1. Copy the `custom_components/metlink_explorer` folder to your Home Assistant `custom_components` directory
-2. Restart Home Assistant
-3. Go to **Settings** > **Integrations** > **Add Integration**
-4. Search for "Metlink Explorer" and follow the setup wizard
+You can install Metlink Explorer either manually or via HACS as a custom repository.
+
+### Option A — Manual Installation
+
+1. Download or clone this repository
+2. Copy the entire `custom_components/metlink_explorer` directory into your Home Assistant `config/custom_components` folder
+  - Final path should be: `<config>/custom_components/metlink_explorer`
+3. Restart Home Assistant
+4. Go to **Settings** > **Devices & Services** > **Add Integration**
+5. Search for "Metlink Explorer" and follow the setup wizard
+
+### Option B — Install via HACS (Custom Repository)
+
+Prerequisite: HACS is installed in your Home Assistant.
+
+1. In Home Assistant, open **HACS**
+2. Click the three dots menu (⋮) > **Custom repositories**
+3. Add repository URL: `https://github.com/iamawumpas/Metlink-Explorer`
+  - Category: "Integration"
+4. Click **Add**
+5. Find "Metlink Explorer" in HACS > Integrations and click **Download**
+6. Restart Home Assistant when prompted
+7. Go to **Settings** > **Devices & Services** > **Add Integration**
+8. Search for "Metlink Explorer" and complete the setup
 
 ## Setup Process
 
