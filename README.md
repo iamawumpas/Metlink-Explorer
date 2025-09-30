@@ -25,6 +25,11 @@ A Home Assistant custom component that integrates with the Metlink Open Data API
 - **Easy Setup**: Step-by-step configuration flow with API key validation
 - **Route Filtering**: Select routes by transportation type with alphanumeric sorting
 
+
+## Why this integration?
+Simply put I got frustrated :smile: trying to make my dashboard do things the entities couldn't/wouldn't/probably shouldn't do (but hey! It's my server I can stress it outas much as I want). It turns out that while the Metlink API uses the GTFS standard for publishing its scheduling data and real-time data, it does not fully conform to the standard. The result is many fields do not behave the way they were meant to, contain different data, or data is formatted incorrectly. I wanted an integration that gathers all of the data and fixes much of these errors into easy to use entities, that could then be used in a number Home Assistant Lovelace Cards, or custom cards that I want to create next.
+
+
 ## Installation
 
 You can install Metlink Explorer either manually or via HACS as a custom repository.
@@ -77,16 +82,16 @@ Quick guide:
 
 Entities are named using the format: `Route Number :: Route Description`
 
-- **Direction 0**: `route_short_name :: route_long_name` 
-- **Direction 1**: `route_short_name :: route_desc`
+- **Direction 0**: `route_short_name :: route_desc` 
+- **Direction 1**: `route_short_name :: route_long_name`
 
-The GTFS data provides separate descriptions for each direction:
-- `route_long_name` contains the Direction 0 route description
-- `route_desc` contains the Direction 1 route description
+The GTFS data provides separate descriptions for each direction (note our mapping is reversed to better match local usage):
+- `route_desc` is shown for Direction 0
+- `route_long_name` is shown for Direction 1
 
 Example:
-- `83 :: Wellington Station - Petone - Lower Hutt - Eastbourne` (Direction 0)
-- `83 :: Eastbourne - Lower Hutt - Petone - Wellington Station` (Direction 1)
+- `83 :: Eastbourne - Lower Hutt - Petone - Wellington Station` (Direction 0)
+- `83 :: Wellington Station - Petone - Lower Hutt - Eastbourne` (Direction 1)
 
 ## Development
 

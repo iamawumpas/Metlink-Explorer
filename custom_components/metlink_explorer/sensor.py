@@ -139,7 +139,7 @@ async def async_setup_entry(
     entities = []
     transportation_name = TRANSPORTATION_TYPES.get(transportation_type, "Unknown")
     
-    # Direction 0: route_short_name :: route_long_name
+    # Direction 0: route_short_name :: route_desc (reversed per user request)
     coordinator_0 = MetlinkDataUpdateCoordinator(hass, api_client, route_id, 0)
     await coordinator_0.async_config_entry_first_refresh()
     
@@ -149,28 +149,28 @@ async def async_setup_entry(
             config_entry,
             route_id,
             route_short_name,
-            route_long_name,
+            # Prefer route_desc for direction 0; fall back to long name if missing
+            route_desc if route_desc else route_long_name,
             transportation_name,
             0,
         )
     )
     
-    # Direction 1: route_short_name :: route_desc (if available)
-    if route_desc:
-        coordinator_1 = MetlinkDataUpdateCoordinator(hass, api_client, route_id, 1)
-        await coordinator_1.async_config_entry_first_refresh()
-        
-        entities.append(
-            MetlinkSensor(
-                coordinator_1,
-                config_entry,
-                route_id,
-                route_short_name,
-                route_desc,
-                transportation_name,
-                1,
-            )
+    # Direction 1: route_short_name :: route_long_name (always create)
+    coordinator_1 = MetlinkDataUpdateCoordinator(hass, api_client, route_id, 1)
+    await coordinator_1.async_config_entry_first_refresh()
+    
+    entities.append(
+        MetlinkSensor(
+            coordinator_1,
+            config_entry,
+            route_id,
+            route_short_name,
+            route_long_name,
+            transportation_name,
+            1,
         )
+    )
 
     async_add_entities(entities)
 
