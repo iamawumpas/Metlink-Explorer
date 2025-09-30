@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.7] - 2025-09-30
 
-### Bug Fix
+### Bug Fix — Direction-friendly naming
 
 - Corrected direction naming logic for friendly names only:
   - Direction 0 now uses `route_desc`
@@ -117,7 +117,7 @@ This fix resolves the "ConfigEntryNotReady" error and restores basic integration
 - **Scheduled departure fallback**: Shows GTFS scheduled times when real-time data isn't available
 - **Stop sequence validation**: Ensures stops are displayed in correct route order
 
-### Technical Improvements
+### Technical Enhancements
 
 - **String normalization**: Consistent handling of stop IDs and route IDs as strings
 - **Better API error handling**: More resilient to individual stop prediction failures
@@ -133,27 +133,33 @@ The integration should now properly display:
 
 ## [0.3.1] - 2025-09-29
 
-### new feature
-- download stop information along the route. This implementation should:
-  **Parse stop patterns** for each route/direction using GTFS data
-  **Identify destination stops** (last stop in the sequence)
-  **Fetch real-time predictions** for all stops on the route
-  **Provide rich sensor attributes** including:
+### New Feature
+
+- Download stop information along the route. This implementation should:
+  - Parse stop patterns for each route/direction using GTFS data
+  - Identify destination stops (last stop in the sequence)
+  - Fetch real-time predictions for all stops on the route
+  - Provide rich sensor attributes including:
+
     - Complete stop list with sequences
     - Next departures across all stops
     - Destination information
     - Stop prediction counts
 
 
+
 ## [0.3.0] - 2025-09-29
 
 ### Version Bump
+
 - new features to be added from here.
+
 
 
 ## [0.2.3] - 2025-09-29
 
-### Bug Fix
+### Bug Fixes — Entities not created
+
 - no entities created. The AttributeError was preventing the entities from being created properly, which is why they were showing up as devices without entities and couldn't be added to dashboards.
 - the key change is"
   **Before:** "last_updated": self.coordinator.last_update_success_time,
@@ -162,35 +168,41 @@ The integration should now properly display:
 
 ## [0.2.2] - 2025-09-29
 
-### Bug Fix
-- no entities created. The problem is in the sensor.py file - the entities need proper device_class, state_class, and unit_of_measurement properties to be recognized as proper sensors.
+### Bug Fixes — Sensor recognition
+
+- No entities created. The problem is in the sensor.py file — the entities need proper device_class, state_class, and unit_of_measurement properties to be recognized as proper sensors.
 - The key changes are:
-  **Added** native_value property instead of state - This is the modern HA way
-  **Added** native_unit_of_measurement = "trips" - Defines what the sensor measures
-  **Added** state_class = SensorStateClass.MEASUREMENT - Marks it as a measurement sensor
-  **Added** device_info - Groups sensors under a device for better organization
-  **Added** available property - Shows if the sensor is available based on coordinator success
-  **Added** entity_registry_enabled_default = True - Ensures entities are enabled by default
+  - Added native_value property instead of state — This is the modern HA way
+  - Added native_unit_of_measurement = "trips" — Defines what the sensor measures
+  - Added state_class = SensorStateClass.MEASUREMENT — Marks it as a measurement sensor
+  - Added device_info — Groups sensors under a device for better organization
+  - Added available property — Shows if the sensor is available based on coordinator success
+  - Added entity_registry_enabled_default = True — Ensures entities are enabled by default
+
 
 
 
 ## [0.2.1] - 2025-09-29
 
-### Bug Fix
+### Bug Fix — Integration entries naming
+
 - corrected the ***Integration entries*** naming scheme to **title = f"{transportation_name} :: {route_short_name} / {route_long_name}"**
 
 
 
 ## [0.2.0] - 2025-09-29
 
-### Version Bump
+### Version Bump — initial integration
+
 - initial integration is ready for testing
 
 
 
 ## [0.1.4] - 2025-09-28
 
+
 ### Added
+
 - **Step 4 Complete**: Entity Creation with Direction-Based Naming
 - **Dual Entity Creation**: Each route now creates two sensor entities (Direction 0 and Direction 1)
 - **GTFS-Based Naming**: Uses authentic GTFS `route_desc` field for Direction 1 descriptions
@@ -198,12 +210,14 @@ The integration should now properly display:
 - **Real-Time Data Integration**: Sensors provide live trip counts and vehicle position data
 
 ### Changed
+
 - **Entity Naming Schema**: Now uses `route_short_name :: route_description` format
 - **Direction Logic**: Direction 0 uses `route_long_name`, Direction 1 uses `route_desc`
 - **Configuration Storage**: Added `CONF_ROUTE_DESC` to store Direction 1 descriptions
 - **Sensor Attributes**: Updated to reflect new naming and include direction-specific data
 
-### Technical Details
+### Technical Details — Route selection
+
 - Direction 0: `route_short_name :: route_long_name` (e.g., "83 :: Wellington - Eastbourne")  
 - Direction 1: `route_short_name :: route_desc` (e.g., "83 :: Eastbourne - Wellington")
 - Real-time trip counting per direction
@@ -214,7 +228,8 @@ The integration should now properly display:
 
 ## [0.1.3] - 2025-09-28
 
-### Added
+### Added — Route selection and filtering
+
 - **Enhanced Route Selection (Step 3)**: Implemented intelligent alphanumeric sorting for route IDs
 - **Smart Route Filtering**: Routes are now filtered to exclude already-configured routes
 - **Advanced Sorting Logic**: Handles mixed numeric/text route IDs properly (e.g., "1", "31x", "83", "220", "AX", "CCL")
@@ -222,6 +237,7 @@ The integration should now properly display:
 - **Regular Expression Support**: Added regex-based parsing for complex route naming patterns
 
 ### Technical Details
+
 - Sort priority: Numeric routes (0), Text routes (1), Empty/invalid routes (2)
 - Numeric routes are sorted numerically first, then by any text suffix
 - Mixed alphanumeric routes (like "31x", "60e") are sorted by number then letter
@@ -233,7 +249,8 @@ The integration should now properly display:
 ## [0.1.2] - 2025-09-28
 
 ### Changed the logo path to display correctly in HACS
-- new image location is https://raw.githubusercontent.com/iamawumpas/Metlink-Explorer/main/custom_components/metlink_explorer/assets/logo%20(256x256).png
+
+- new image location is <https://raw.githubusercontent.com/iamawumpas/Metlink-Explorer/main/custom_components/metlink_explorer/assets/logo%20(256x256).png>
 - based on the following information:
 
 __ The most common reason for images in a GitHub repository's README.md to appear as broken picture icons within HACS (Home Assistant Community Store) is an incorrect image path, especially when using relative links.
@@ -254,8 +271,9 @@ In your GitHub repository, navigate to the image file (e.g., images/myimage.png)
 
 Click the "Raw" button.
 
+
 Copy the URL from your browser's address bar. It will look something like this:
-https://raw.githubusercontent.com/USER/REPO/BRANCH/path/to/image.png
+<https://raw.githubusercontent.com/USER/REPO/BRANCH/path/to/image.png>
 
 Use this absolute URL in your README.md file:
 
@@ -276,18 +294,21 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 - Enhanced user experience with informative footnote explaining filtering logic
 
 ### Smart Route Management
+
 - `_get_available_transportation_types()` - Filters transport types by route availability
 - `_get_available_routes_for_type()` - Gets unconfigured routes for each transport type
 - Prevents duplicate route configurations across integration entries
 - Example: Ferry service with 2 routes will be hidden if both routes are already configured
 
 ### Enhanced User Interface
+
 - Updated translations with explanatory footnote about transportation type filtering
 - New error messages for cases where no transportation types or routes are available
 - Clear indicators showing route counts for each available transportation type
 - Improved user guidance in both `strings.json` and `translations/en.json`
 
-### Technical Implementation
+### Technical Implementation — Step 2
+
 - Cross-entry route tracking to prevent duplicates
 - Dynamic transportation type option generation based on availability
 - Comprehensive error handling for edge cases
@@ -297,7 +318,8 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 
 ## [0.1.0] - 2025-09-28
 
-### Added - Step 1 Complete: API Key Validation
+### Added — Step 1 Complete: API Key Validation
+
 - **✅ STEP 1 IMPLEMENTED**: Complete API key validation functionality
 - API key validation using `/gtfs/agency` endpoint with 23 agencies detected
 - Automatic reuse of existing API keys from other integration entries
@@ -306,7 +328,8 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 - Live API testing confirmed working with actual Metlink Open Data API
 - Updated manifest.json and README.md version synchronization to 0.1.0
 
-### Technical Implementation
+### Technical Implementation — Step 1
+
 - `MetlinkApiClient.validate_api_key()` - Tests connection to Metlink API
 - `config_flow.py` - Smart API key detection and validation flow
 - `translations/en.json` - Improved user guidance and setup instructions
@@ -314,6 +337,7 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 - All Step 1 requirements met and thoroughly tested
 
 ### Development Workflow
+
 - Established consistent version management across manifest.json, README.md, and CHANGELOG.md
 - Ready to proceed to Step 2 (Transportation Type Selection)
 
@@ -322,6 +346,7 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 ## [0.0.3] - 2025-09-27
 
 ### Modified Header in README.md
+
 - Converted the heading format into a table to better ensure logo placement. Not ideal as the default table formatting shows the borders
 
 
@@ -329,6 +354,7 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 ## [0.0.2] - 2025-09-27
 
 ### Initial README.md formatting
+
 - uploaded an 80x80 logo to \assets
 - uploaded a 256x256 logo to \assets
 - initial layout for heading.
@@ -338,6 +364,7 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 ## [0.0.1] - 2025-09-27
 
 ### Added - Initial Project Structure
+
 - Created Home Assistant custom component file structure
 - Added `manifest.json` with integration metadata
 - Implemented API client foundation for Metlink Open Data API
@@ -347,6 +374,7 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 - Set up project documentation and README
 
 ### Technical Implementation
+
 - **API Integration**: Base client for Metlink Open Data API (`api.py`)
 - **Configuration Flow**: Multi-step setup wizard (`config_flow.py`)
   - Step 1: API key validation and storage
@@ -358,7 +386,8 @@ This method guarantees the HACS renderer has a direct, absolute link to the imag
 - **Translations**: English UI strings (`strings.json`, `translations/en.json`)
 
 ### Project Structure
-```
+
+```text
 custom_components/metlink_explorer/
 ├── __init__.py                 # Integration setup
 ├── api.py                      # Metlink API client
@@ -374,10 +403,11 @@ custom_components/metlink_explorer/
 ```
 
 ### Features Implemented
+
 - **API Key Management**: Reuses existing API keys from other entries
 - **Transportation Type Mapping**: GTFS route_type support for all Wellington transport modes
 - **Route Sorting**: Alphanumeric sorting with proper numeric handling
-- **Direction Logic**: 
+- **Direction Logic**:
   - Direction 0: Uses `route_long_name` as-is
   - Direction 1: Reverses `route_desc` using ' - ' delimiters
 - **Entity Naming Convention**: `transportation-type :: route_number / route_description`
@@ -385,6 +415,7 @@ custom_components/metlink_explorer/
 - **Error Handling**: Comprehensive API error handling and user feedback
 
 ### Next Steps
+
 - [ ] Add integration logo (256x256 PNG)
 - [ ] Test API integration and config flow
 - [ ] Implement real-time data processing
