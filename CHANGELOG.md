@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7] - 2025-09-30
+
+### Bug Fix
+
+- Corrected direction naming logic for friendly names only:
+  - Direction 0 now uses `route_desc`
+  - Direction 1 now uses `route_long_name`
+- This change affects display names only and does not change stop sequence or data retrieval.
+- Example routes that benefit: HVL (Train), 83 (Bus).
+
 ## [0.3.6] - 2025-09-30
 
 ### Data Robustness and Performance (inspired by GTFS2)
@@ -34,6 +44,7 @@ This release should improve stability when the upstream API deviates from strict
 
 
 ### Timeline Card Display Feature
+
 - **NEW: Route timeline for card display**: Added `get_route_timeline_for_card()` method to generate card-friendly stop data with ETA calculations
 - **Real-time ETA calculations**: Shows "minutes and seconds from scheduled time" for each stop using real-time predictions
 - **Smart stop categorization**: Automatically identifies departure stops, destination stops, and hub/interchange stops
@@ -46,6 +57,7 @@ This release should improve stability when the upstream API deviates from strict
 
  
 ### Technical Improvements
+
 - **Enhanced API integration**: Uses `/stop-predictions` endpoint for more accurate real-time data
 - **Improved error handling**: Timeline generation continues working even if individual stop predictions fail
 - **Better route matching**: Enhanced logic to match predictions using both route_id and route_short_name
@@ -53,6 +65,7 @@ This release should improve stability when the upstream API deviates from strict
 - **Performance optimization**: Efficient stop pattern processing and prediction matching
 
 This version enables Home Assistant cards to display rich route timelines with:
+
 - Selectable stops with real-time ETAs
 - Always-visible departure and destination stops  
 - Highlighted hub/interchange stops
@@ -63,6 +76,7 @@ This version enables Home Assistant cards to display rich route timelines with:
 ## [0.3.4] - 2025-09-29
 
 ### Enhanced Real-time Data and Time Display
+
 - **Improved real-time prediction matching**: Enhanced route matching logic to find predictions using both route_id and route_short_name
 - **Better time display**: Clearly distinguish between real-time predictions and scheduled GTFS times
 - **Enhanced debugging**: Added comprehensive logging for prediction matching and time handling
@@ -76,6 +90,7 @@ This version improves the accuracy of departure times by better matching real-ti
 ## [0.3.3] - 2025-09-29
 
 ### Critical Bug Fix - API Endpoint Parameter
+
 - **Fixed 400 Bad Request error**: Added required `trip_id` parameter to `/gtfs/stop_times` endpoint call
 - **Added fallback mechanism**: Stop pattern functionality is now optional and won't break basic integration
 - **Improved error handling**: Integration continues working even if advanced stop features fail
@@ -87,6 +102,7 @@ This fix resolves the "ConfigEntryNotReady" error and restores basic integration
 ## [0.3.2] - 2025-09-29
 
 ### Bug Fix - Stop Pattern Implementation
+
 - **Fixed empty stop pattern data**: Resolved issue where `all_stops`, `next_departures`, and `destination_stop` attributes were empty
 - **Enhanced route ID matching**: Improved comparison logic to handle both string and integer route IDs from API
 - **Added comprehensive logging**: Added debug logging throughout the stop pattern process for better troubleshooting
@@ -95,12 +111,14 @@ This fix resolves the "ConfigEntryNotReady" error and restores basic integration
 - **Enhanced state attributes**: Added more detailed debugging information and scheduled departure times
 
 ### New Features
+
 - **Mixed data sources**: Integration now shows both real-time predictions and scheduled times
 - **Enhanced debugging**: Added `debug_info` attribute with troubleshooting information
 - **Scheduled departure fallback**: Shows GTFS scheduled times when real-time data isn't available
 - **Stop sequence validation**: Ensures stops are displayed in correct route order
 
 ### Technical Improvements
+
 - **String normalization**: Consistent handling of stop IDs and route IDs as strings
 - **Better API error handling**: More resilient to individual stop prediction failures
 - **Enhanced logging**: Debug-level logging for API calls and data processing
