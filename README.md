@@ -40,17 +40,31 @@ You can install Metlink Explorer either manually or via HACS as a custom reposit
 
 ### Option B — Install via HACS (Custom Repository)
 
-Prerequisite: HACS is installed in your Home Assistant.
+Prerequisite: HACS is installed in your Home Assistant. If you don’t have HACS yet, see [Installing HACS](#installing-hacs).
 
 1. In Home Assistant, open **HACS**
 2. Click the three dots menu (⋮) > **Custom repositories**
 3. Add repository URL: `https://github.com/iamawumpas/Metlink-Explorer`
-  - Category: "Integration"
+    - Category: "Integration"
 4. Click **Add**
 5. Find "Metlink Explorer" in HACS > Integrations and click **Download**
 6. Restart Home Assistant when prompted
 7. Go to **Settings** > **Devices & Services** > **Add Integration**
 8. Search for "Metlink Explorer" and complete the setup
+
+## Installing HACS
+
+HACS (Home Assistant Community Store) is the recommended way to discover and manage third‑party integrations like this one.
+
+Quick guide:
+
+1. Ensure Home Assistant “Advanced Mode” is enabled (Profile > Advanced Mode)
+2. Follow the official HACS installation guide:
+  - Prerequisites: https://hacs.xyz/docs/setup/prerequisites
+  - Installation: https://hacs.xyz/docs/setup/download/
+3. Restart Home Assistant after installing HACS
+4. Add the HACS integration: Settings > Devices & Services > Add Integration > search for “HACS” and complete onboarding
+5. After HACS is set up, return to “Option B — Install via HACS” above
 
 ## Setup Process
 
