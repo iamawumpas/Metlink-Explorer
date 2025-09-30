@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -26,6 +26,15 @@ class MetlinkApiClient:
         self._api_key = api_key
         self._session = session
         self._base_url = BASE_URL
+        # Simple caches to reduce repeated static lookups
+        self._route_short_name_cache = {}
+        # TTL caches for static endpoints
+        self._routes_cache = None
+        self._routes_cache_ts = None
+        self._stops_cache = None
+        self._stops_cache_ts = None
+        self._stop_pattern_cache = {}
+        self._cache_ttl_seconds = 300
 
     async def _request(self, endpoint: str) -> dict[str, Any]:
         """Make a request to the API."""
@@ -56,7 +65,14 @@ class MetlinkApiClient:
     async def get_routes(self) -> list[dict[str, Any]]:
         """Get all routes."""
         try:
-            return await self._request(API_ENDPOINTS["routes"])
+            now = datetime.now()
+            if self._routes_cache is not None and self._routes_cache_ts and (now - self._routes_cache_ts).total_seconds() < self._cache_ttl_seconds:
+                return self._routes_cache
+            data = await self._request(API_ENDPOINTS["routes"])
+            if isinstance(data, list):
+                self._routes_cache = data
+                self._routes_cache_ts = now
+            return data
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch routes: %s", exc)
             raise
@@ -113,6 +129,11 @@ class MetlinkApiClient:
         """Get the stop pattern for a route in a specific direction."""
         try:
             _LOGGER.debug("Getting stop pattern for route %s direction %s", route_id, direction_id)
+            cache_key = (str(route_id), int(direction_id))
+            now = datetime.now()
+            cached = self._stop_pattern_cache.get(cache_key)
+            if cached and (now - cached[0]).total_seconds() < self._cache_ttl_seconds:
+                return cached[1]
             
             # Get trips for this route and direction
             trips = await self.get_trips_for_route(route_id)
@@ -160,6 +181,8 @@ class MetlinkApiClient:
                     _LOGGER.warning("Stop %s not found in stops dictionary", stop_id)
             
             _LOGGER.debug("Built stop pattern with %d stops", len(stop_pattern))
+            # Cache
+            self._stop_pattern_cache[cache_key] = (now, stop_pattern)
             return stop_pattern
             
         except MetlinkApiError as exc:
@@ -169,7 +192,14 @@ class MetlinkApiClient:
     async def get_stops(self) -> list[dict[str, Any]]:
         """Get all stops."""
         try:
-            return await self._request(API_ENDPOINTS["stops"])
+            now = datetime.now()
+            if self._stops_cache is not None and self._stops_cache_ts and (now - self._stops_cache_ts).total_seconds() < self._cache_ttl_seconds:
+                return self._stops_cache
+            data = await self._request(API_ENDPOINTS["stops"])
+            if isinstance(data, list):
+                self._stops_cache = data
+                self._stops_cache_ts = now
+            return data
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch stops: %s", exc)
             raise
@@ -211,6 +241,22 @@ class MetlinkApiClient:
         except Exception as exc:
             _LOGGER.error("Failed to get stop predictions for stop %s: %s", stop_id, exc)
             return []
+
+    async def _batch_get_stop_predictions(self, stop_ids: list[str], concurrency: int = 6) -> dict[str, list[dict[str, Any]]]:
+        """Fetch predictions for many stops concurrently with a concurrency limit.
+
+        Returns a mapping of stop_id -> predictions list.
+        """
+        results: dict[str, list[dict[str, Any]]] = {}
+        sem = asyncio.Semaphore(max(1, concurrency))
+
+        async def fetch_one(sid: str) -> None:
+            async with sem:
+                preds = await self.get_stop_predictions(sid)
+                results[sid] = preds if isinstance(preds, list) else []
+
+        await asyncio.gather(*(fetch_one(s) for s in stop_ids))
+        return results
 
     async def get_route_stop_predictions(self, route_id: str, direction_id: int) -> dict[str, Any]:
         """Get real-time predictions for all stops on a route using trip updates."""
@@ -340,34 +386,56 @@ class MetlinkApiClient:
             
             _LOGGER.info("Found stop pattern with %d stops", len(stop_pattern))
             
-            # Step 2: Get real-time predictions using the stop-predictions endpoint
+            # Step 2: Get real-time predictions using the stop-predictions endpoint (batched)
             timeline_stops = []
             current_time = datetime.now()
             current_time_str = current_time.strftime("%H:%M:%S")
+            # Resolve route short name once and cache
+            route_short_name = await self._get_route_short_name(route_id)
+            stop_ids = [str(s.get("stop_id")) for s in stop_pattern if s.get("stop_id") is not None]
+            predictions_by_stop = await self._batch_get_stop_predictions(stop_ids, concurrency=6)
+            # Prepare GTFS-RT trip updates as a fallback source
+            fallback_rt = {}
+            try:
+                rt = await self.get_route_stop_predictions(route_id, direction_id)
+                if isinstance(rt, dict):
+                    fallback_rt = rt.get("stops", {}) or {}
+            except Exception as ex:
+                _LOGGER.debug("Trip updates fallback not available: %s", ex)
             
             for stop_info in stop_pattern:
                 stop_id = str(stop_info["stop_id"])
                 
                 # Get real-time predictions for this stop
-                predictions = []
-                try:
-                    stop_predictions = await self.get_stop_predictions(stop_id)
-                    
-                    if stop_predictions and isinstance(stop_predictions, list):
-                        # Filter for our specific route and direction
-                        relevant_predictions = [
-                            pred for pred in stop_predictions 
-                            if (str(pred.get("route_id")) == str(route_id) or 
-                                str(pred.get("route_short_name", "")).lower() == self._get_route_short_name(route_id).lower()) and
-                               pred.get("direction_id") == direction_id
-                        ]
-                        
-                        # Sort predictions by departure time and take the next few
-                        predictions = sorted(relevant_predictions, 
-                                           key=lambda x: x.get("departure_time", "99:99:99"))[:3]
-                        
-                except Exception as e:
-                    _LOGGER.debug("Could not get predictions for stop %s: %s", stop_id, e)
+                raw_preds = predictions_by_stop.get(stop_id, [])
+                # Filter for our specific route and direction; accept missing direction_id
+                relevant_predictions = [
+                    p for p in raw_preds
+                    if self._prediction_matches_route(p, route_id, route_short_name)
+                    and (p.get("direction_id") == direction_id or p.get("direction_id") in (None, "", "nn"))
+                ]
+                # Sort predictions by normalized departure time and take the next few
+                predictions = sorted(
+                    relevant_predictions,
+                    key=lambda x: self._normalize_time_str(
+                        x.get("departure_time") or x.get("expected_departure_time") or "99:99:99"
+                    )
+                )[:3]
+                time_source = None
+                if predictions:
+                    time_source = "realtime"
+                else:
+                    fb_entry = fallback_rt.get(stop_id, {}) if isinstance(fallback_rt, dict) else {}
+                    fb_preds = fb_entry.get("predictions", []) if isinstance(fb_entry, dict) else []
+                    if fb_preds:
+                        predictions = sorted(
+                            fb_preds,
+                            key=lambda x: self._normalize_time_str(
+                                x.get("departure_time") or x.get("expected_departure_time") or "99:99:99"
+                            )
+                        )[:3]
+                        if predictions:
+                            time_source = "trip_update"
                 
                 # Calculate ETA for the next departure
                 eta_display = "No predictions"
@@ -376,40 +444,11 @@ class MetlinkApiClient:
                 
                 if predictions:
                     next_pred = predictions[0]
-                    departure_time = next_pred.get("departure_time")
+                    departure_time = next_pred.get("departure_time") or next_pred.get("expected_departure_time")
                     
                     if departure_time:
-                        try:
-                            # Parse departure time and calculate ETA
-                            departure_dt = datetime.strptime(f"{current_time.date()} {departure_time}", "%Y-%m-%d %H:%M:%S")
-                            
-                            # If departure is earlier than now, assume it's tomorrow
-                            if departure_dt < current_time:
-                                from datetime import timedelta
-                                departure_dt += timedelta(days=1)
-                            
-                            eta_seconds = int((departure_dt - current_time).total_seconds())
-                            eta_minutes = eta_seconds // 60
-                            eta_remaining_seconds = eta_seconds % 60
-                            
-                            # Format ETA for display
-                            if eta_seconds <= 0:
-                                eta_display = "Due now"
-                            elif eta_seconds < 60:
-                                eta_display = f"{eta_seconds}s"
-                            elif eta_minutes < 60:
-                                eta_display = f"{eta_minutes}m {eta_remaining_seconds}s"
-                            else:
-                                hours = eta_minutes // 60
-                                remaining_minutes = eta_minutes % 60
-                                eta_display = f"{hours}h {remaining_minutes}m"
-                            
-                            next_departure = departure_time
-                            
-                        except Exception as e:
-                            _LOGGER.debug("Could not parse departure time %s: %s", departure_time, e)
-                            eta_display = departure_time
-                            next_departure = departure_time
+                        eta_display, eta_seconds = self._eta_from_time_str(departure_time, current_time)
+                        next_departure = self._normalize_time_str(departure_time)
                 
                 # Use scheduled time as fallback
                 if not next_departure:
@@ -417,6 +456,8 @@ class MetlinkApiClient:
                     if scheduled_time:
                         eta_display = f"Scheduled: {scheduled_time}"
                         next_departure = scheduled_time
+                        if not time_source:
+                            time_source = "scheduled"
                 
                 timeline_stop = {
                     "stop_id": stop_id,
@@ -426,6 +467,7 @@ class MetlinkApiClient:
                     "next_departure": next_departure,
                     "eta_display": eta_display,
                     "eta_seconds": eta_seconds,
+                    "time_source": time_source,
                     "prediction_count": len(predictions),
                     "has_real_time": len(predictions) > 0,
                     "stop_lat": stop_info.get("stop_lat"),
@@ -463,12 +505,17 @@ class MetlinkApiClient:
             return {"stops": [], "error": str(exc)}
     
     async def _get_route_short_name(self, route_id: str) -> str:
-        """Get route short name for a given route ID."""
+        """Get route short name for a given route ID with simple caching."""
+        rid = str(route_id)
+        if rid in self._route_short_name_cache:
+            return self._route_short_name_cache[rid]
         try:
             routes = await self.get_routes()
-            route_info = next((r for r in routes if str(r.get("route_id")) == str(route_id)), None)
-            return route_info.get("route_short_name", "") if route_info else ""
-        except:
+            for r in routes or []:
+                rid_str = str(r.get("route_id"))
+                self._route_short_name_cache[rid_str] = r.get("route_short_name", "") or ""
+            return self._route_short_name_cache.get(rid, "")
+        except Exception:
             return ""
     
     def _is_hub_stop(self, stop_name: str) -> bool:
@@ -480,3 +527,55 @@ class MetlinkApiClient:
         ]
         stop_name_lower = stop_name.lower()
         return any(keyword in stop_name_lower for keyword in hub_keywords)
+
+    def _normalize_time_str(self, time_str: str | None) -> str:
+        """Normalize a time string to HH:MM:SS for consistent sorting/formatting."""
+        if not time_str:
+            return ""
+        s = str(time_str).strip()
+        # Handle HH:MM
+        if len(s) == 5 and s.count(":") == 1:
+            return f"{s}:00"
+        # Handle values >= 24 hours (e.g., 25:30:00) by wrapping to next day for display
+        try:
+            hours, minutes, seconds = [int(x) for x in s.split(":")]
+            if hours >= 24:
+                hours = hours - 24
+                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        except Exception:
+            pass
+        return s
+
+    def _eta_from_time_str(self, time_str: str, now: datetime) -> tuple[str, int]:
+        """Compute human-friendly ETA text and seconds from a local time string."""
+        ts = self._normalize_time_str(time_str)
+        try:
+            departure_dt = datetime.strptime(f"{now.date()} {ts}", "%Y-%m-%d %H:%M:%S")
+            if departure_dt < now:
+                departure_dt += timedelta(days=1)
+            eta_seconds = int((departure_dt - now).total_seconds())
+        except Exception:
+            return ts or "", 0
+
+        if eta_seconds <= 0:
+            return "Due now", eta_seconds
+        minutes = eta_seconds // 60
+        seconds = eta_seconds % 60
+        if eta_seconds < 60:
+            return f"{eta_seconds}s", eta_seconds
+        if minutes < 60:
+            return f"{minutes}m {seconds}s", eta_seconds
+        hours = minutes // 60
+        rem_min = minutes % 60
+        return f"{hours}h {rem_min}m", eta_seconds
+
+    def _prediction_matches_route(self, pred: dict[str, Any], route_id: str, route_short_name: str) -> bool:
+        """Match prediction to route by id or short name (case/format tolerant)."""
+        try:
+            rid_match = str(pred.get("route_id")) == str(route_id)
+            rsn_pred = str(pred.get("route_short_name", "")).strip().lower()
+            rsn_ref = (route_short_name or "").strip().lower()
+            rsn_match = rsn_pred == rsn_ref and rsn_ref != ""
+            return rid_match or rsn_match
+        except Exception:
+            return False

@@ -5,7 +5,33 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2025-09-30
+
+### Data Robustness and Performance (inspired by GTFS2)
+
+- **Batch stop-predictions with concurrency**: Faster and more reliable collection of predictions across all stops on a route
+- **Route matching hardening**: Match predictions by `route_id` or `route_short_name` with normalization
+- **Service-day aware time handling**: Normalize `HH:MM` to `HH:MM:SS` and handle next-day rollover for ETAs
+- **Static TTL caches**: Cache routes, stops, and stop patterns with a short TTL to reduce API calls
+- **Trip updates fallback**: If `/stop-predictions` has gaps, blend in `/gtfs-rt/tripupdates` data for the same route/direction
+- **Time source tagging**: Each timeline stop includes a `time_source` of `realtime`, `trip_update`, or `scheduled`
+
+Minor: Improved changelog formatting and clarified acknowledgements for inspiration sources.
+
+Acknowledgement: Several resilience ideas were inspired by the excellent GTFS2 project by vingerha (<https://github.com/vingerha/gtfs2>), particularly around tolerant matching, time normalization, and merging of real-time sources.
+
+Acknowledgement: Actual project inspired by the Metlink Wellington Transport project by make-all (<https://github.com/make-all>)
+
+### Developer Notes
+
+- New helpers in `api.py`: `_batch_get_stop_predictions`, `_normalize_time_str`, `_eta_from_time_str`, `_prediction_matches_route`
+- Caches added for: routes, stops, stop patterns, and route short names
+- `get_route_timeline_for_card` now fetches predictions in batches, merges GTFS-RT trip updates as fallback, and annotates each stop with `time_source`
+
+This release should improve stability when the upstream API deviates from strict standards and reduce latency for timeline rendering.
+
 ## [0.3.5] - 2025-09-29
+
 
 ### Timeline Card Display Feature
 - **NEW: Route timeline for card display**: Added `get_route_timeline_for_card()` method to generate card-friendly stop data with ETA calculations
@@ -18,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Real-time status indicators**: Shows prediction count and real-time availability for each stop
 - **Hub stop detection**: Automatically identifies major stations and interchanges using station name keywords
 
+ 
 ### Technical Improvements
 - **Enhanced API integration**: Uses `/stop-predictions` endpoint for more accurate real-time data
 - **Improved error handling**: Timeline generation continues working even if individual stop predictions fail

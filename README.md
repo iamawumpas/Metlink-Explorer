@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-      <strong>Version:</strong> 0.3.5
+  <strong>Version:</strong> 0.3.6
     </td>
   </tr>
 </table>
@@ -63,3 +63,11 @@ See [CHANGELOG.md](CHANGELOG.md) for development progress and version history.
 - **Issues**: [GitHub Issues](https://github.com/iamawumpus/Metlink-Explorer/issues)  
 - **API Documentation**: [Metlink Open Data Portal](https://opendata.metlink.org.nz/)
 - **Home Assistant**: [Custom Components Documentation](https://developers.home-assistant.io/docs/creating_component_index/)
+
+
+## Acknowledgments
+Inspiration for this integration go to the following HACS Integrations:
+ - GTFS2 for Static and RealTime Public transport status collecting in Home Assistant https://github.com/vingerha/gtfs2
+ - Metlink Wellington Transport for Home Assistant https://github.com/make-all/metlink-nz
+
+      Thanks for creating great tools and inspiring me to try my own.
