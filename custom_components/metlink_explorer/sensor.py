@@ -269,6 +269,33 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
         
         _LOGGER.debug("Processing route timeline for route %s direction %s: %d stops, error: %s", 
                      self._route_id, self._direction, len(timeline_stops), timeline_error or "None")
+
+        # Build tile-friendly summaries for UI cards (strings instead of arrays)
+        dep_stop = route_timeline.get("departure_stop") or {}
+        dest_stop_tl = route_timeline.get("destination_stop") or {}
+        timeline_departure_stop_name = dep_stop.get("stop_name") if isinstance(dep_stop, dict) else None
+        timeline_destination_stop_name = dest_stop_tl.get("stop_name") if isinstance(dest_stop_tl, dict) else None
+        timeline_next_eta = dep_stop.get("eta_display") if isinstance(dep_stop, dict) else None
+        timeline_next_departure = dep_stop.get("next_departure") if isinstance(dep_stop, dict) else None
+        timeline_next_time_source = dep_stop.get("time_source") if isinstance(dep_stop, dict) else None
+        timeline_hub_stop_names = [
+            s.get("stop_name") for s in route_timeline.get("hub_stops", [])
+            if isinstance(s, dict) and s.get("stop_name")
+        ]
+        # Compact previews using first few timeline stops
+        preview_items = []
+        preview_times = []
+        for s in timeline_stops[:3]:
+            if not isinstance(s, dict):
+                continue
+            nm = s.get("stop_name")
+            tm = s.get("next_departure") or s.get("scheduled_time")
+            if tm:
+                preview_times.append(str(tm))
+            if nm and tm:
+                preview_items.append(f"{nm} {tm}")
+        timeline_preview = " • ".join(preview_items) if preview_items else None
+        timeline_preview_times = ", ".join(preview_times) if preview_times else None
         
         if route_stops and route_stops.get("stops"):
             stops_data = route_stops["stops"]
@@ -425,6 +452,16 @@ class MetlinkSensor(CoordinatorEntity, SensorEntity):
             "hub_stops": route_timeline.get("hub_stops", []),  # Major interchange stops
             "current_time": route_timeline.get("current_time"),  # Reference time for ETAs
             "timeline_trip_id": route_timeline.get("trip_id"),  # Trip used for timeline
+
+            # Tile-friendly summary attributes (strings)
+            "timeline_departure_stop_name": timeline_departure_stop_name,
+            "timeline_destination_stop_name": timeline_destination_stop_name,
+            "timeline_next_eta": timeline_next_eta,
+            "timeline_next_departure": timeline_next_departure,
+            "timeline_next_time_source": timeline_next_time_source,
+            "timeline_hub_stop_names": timeline_hub_stop_names,
+            "timeline_preview": timeline_preview,
+            "timeline_preview_times": timeline_preview_times,
             
             # Enhanced debugging information
             "debug_info": {

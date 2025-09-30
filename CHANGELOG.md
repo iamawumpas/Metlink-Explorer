@@ -5,6 +5,22 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8] - 2025-09-30
+
+### Enhancement — Tile-friendly attributes
+
+- Added string summary attributes to improve display on Tile/Entity cards and other UIs that don't render arrays well:
+  - `timeline_departure_stop_name`
+  - `timeline_destination_stop_name`
+  - `timeline_next_eta`
+  - `timeline_next_departure`
+  - `timeline_next_time_source`
+  - `timeline_hub_stop_names` (list of hub names)
+  - `timeline_preview` (compact "Stop Time • Stop Time • …")
+  - `timeline_preview_times` (compact "HH:MM, HH:MM, …")
+- No breaking changes; existing attributes remain unchanged.
+- Complements 0.3.7’s direction-friendly naming fix.
+
 ## [0.3.7] - 2025-09-30
 
 ### Bug Fix — Direction-friendly naming
