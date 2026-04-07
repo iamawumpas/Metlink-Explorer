@@ -5,6 +5,20 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-04-07
+
+### Feature - Aggregate departures board entities
+
+- Added a transportation-mode board sensor that aggregates upcoming departures across all configured routes of the same mode.
+- Board sensors are created for configured modes (for example Ferry, Bus, Train) and expose normalized departure records for dashboard filtering.
+- Added `departures` payload rows with route, direction, stop, destination, departure time, ETA, and realtime/source metadata.
+- Added sorting and ETA normalization so board rows can be rendered consistently for stop-level cards.
+
+### Compatibility
+
+- Existing route-centric sensors and legacy direction compatibility sensors remain available.
+- New board entities are additive and do not replace existing route entities.
+
 ## [0.4.0] - 2026-04-07
 
 ### Major Architecture Update - Route-centric design with migration compatibility

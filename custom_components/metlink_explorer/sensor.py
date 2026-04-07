@@ -1,6 +1,8 @@
 """Sensor platform for Metlink Explorer."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+import re
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
@@ -11,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     CONF_ACTIVE_DIRECTION,
+    CONF_API_KEY,
     CONF_LEGACY_DIRECTION_ENTITIES,
     CONF_ROUTE_DESC,
     CONF_ROUTE_ID,
@@ -35,6 +38,7 @@ async def async_setup_entry(
     route_short_name = config_entry.data[CONF_ROUTE_SHORT_NAME]
     route_long_name = config_entry.data[CONF_ROUTE_LONG_NAME]
     route_desc = config_entry.data.get(CONF_ROUTE_DESC, "")
+    api_key = config_entry.data[CONF_API_KEY]
     transportation_type = config_entry.data[CONF_TRANSPORTATION_TYPE]
     transportation_name = TRANSPORTATION_TYPES.get(transportation_type, "Unknown")
 
@@ -74,7 +78,33 @@ async def async_setup_entry(
             )
         )
 
+    if _is_mode_leader(hass, config_entry):
+        entities.append(
+            MetlinkModeBoardSensor(
+                coordinator,
+                hass,
+                api_key,
+                transportation_type,
+                transportation_name,
+            )
+        )
+
     async_add_entities(entities)
+
+
+def _is_mode_leader(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Ensure only one board sensor is created per API key and transportation type."""
+    api_key = config_entry.data.get(CONF_API_KEY)
+    transport_type = config_entry.data.get(CONF_TRANSPORTATION_TYPE)
+    same_group_entries = [
+        entry.entry_id
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.data.get(CONF_API_KEY) == api_key
+        and entry.data.get(CONF_TRANSPORTATION_TYPE) == transport_type
+    ]
+    if not same_group_entries:
+        return True
+    return config_entry.entry_id == sorted(same_group_entries)[0]
 
 
 def _direction_label(route_long_name: str, route_desc: str, direction: int) -> str:
@@ -100,6 +130,45 @@ def _trip_count_for_direction(data: dict[str, Any] | None, direction: int) -> in
     if not isinstance(trips, list):
         return 0
     return len([trip for trip in trips if isinstance(trip, dict) and trip.get("direction_id") == direction])
+
+
+def _normalize_departure_str(value: str | None) -> str:
+    """Normalize departure string for sorting and parsing."""
+    if not value:
+        return ""
+    text = str(value).replace("Scheduled:", "").strip()
+    match = re.match(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$", text)
+    if not match:
+        return ""
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    second = int(match.group(3) or "0")
+    if hour >= 24:
+        hour -= 24
+    return f"{hour:02d}:{minute:02d}:{second:02d}"
+
+
+def _eta_seconds_from_departure(value: str | None) -> int | None:
+    """Compute ETA seconds from local time string."""
+    normalized = _normalize_departure_str(value)
+    if not normalized:
+        return None
+    try:
+        now = datetime.now()
+        target = datetime.strptime(f"{now.date()} {normalized}", "%Y-%m-%d %H:%M:%S")
+        if target < now:
+            # If already passed today, treat as next-day service.
+            target = target + timedelta(days=1)
+        return int((target - now).total_seconds())
+    except Exception:
+        return None
+
+
+def _direction_from_entry(entry: ConfigEntry, direction_id: int) -> str:
+    """Get user-facing direction label from entry metadata."""
+    route_long_name = entry.data.get(CONF_ROUTE_LONG_NAME, "")
+    route_desc = entry.data.get(CONF_ROUTE_DESC, "")
+    return _direction_label(route_long_name, route_desc, direction_id)
 
 
 class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
@@ -134,7 +203,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.0",
+            "sw_version": "0.4.1",
         }
 
     @property
@@ -228,7 +297,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.0",
+            "sw_version": "0.4.1",
         }
 
     @property
@@ -291,3 +360,131 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "School Bus": "mdi:bus-school",
         }
         return transportation_icons.get(self._transportation_name, "mdi:transit-connection-variant")
+
+
+class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
+    """Aggregate departures board for a transportation mode across configured routes."""
+
+    def __init__(
+        self,
+        coordinator,
+        hass: HomeAssistant,
+        api_key: str,
+        transportation_type: int,
+        transportation_name: str,
+    ) -> None:
+        """Initialize mode board sensor."""
+        super().__init__(coordinator)
+        self._hass = hass
+        self._api_key = api_key
+        self._transportation_type = transportation_type
+        self._transportation_name = transportation_name
+
+        self._attr_name = f"{transportation_name} :: Departures Board"
+        self._attr_unique_id = f"{DOMAIN}_{transportation_type}_board"
+        self._attr_native_unit_of_measurement = "departures"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_entity_registry_enabled_default = True
+
+    def _build_departures(self) -> tuple[list[dict[str, Any]], int]:
+        """Collect and normalize departures across all routes in this mode."""
+        rows: list[dict[str, Any]] = []
+        route_count = 0
+
+        entries = [
+            entry
+            for entry in self._hass.config_entries.async_entries(DOMAIN)
+            if entry.data.get(CONF_API_KEY) == self._api_key
+            and entry.data.get(CONF_TRANSPORTATION_TYPE) == self._transportation_type
+        ]
+
+        for entry in entries:
+            runtime = self._hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+            coordinator = runtime.get("coordinator")
+            if not coordinator or not coordinator.data:
+                continue
+            route_count += 1
+
+            timeline_by_direction = coordinator.data.get("timeline_by_direction", {})
+            if not isinstance(timeline_by_direction, dict):
+                continue
+
+            route_id = entry.data.get(CONF_ROUTE_ID)
+            route_short_name = entry.data.get(CONF_ROUTE_SHORT_NAME)
+            for direction_id in (0, 1):
+                timeline = timeline_by_direction.get(direction_id, {})
+                if not isinstance(timeline, dict):
+                    continue
+                for stop in timeline.get("stops", []) or []:
+                    if not isinstance(stop, dict):
+                        continue
+                    departure = stop.get("next_departure") or stop.get("scheduled_time")
+                    if not departure:
+                        continue
+                    eta_seconds = stop.get("eta_seconds")
+                    if not isinstance(eta_seconds, int):
+                        eta_seconds = _eta_seconds_from_departure(departure)
+
+                    rows.append(
+                        {
+                            "route_id": route_id,
+                            "route_short_name": route_short_name,
+                            "route_type": self._transportation_name.lower(),
+                            "direction_id": direction_id,
+                            "direction_label": _direction_from_entry(entry, direction_id),
+                            "stop_id": stop.get("stop_id"),
+                            "stop_name": stop.get("stop_name"),
+                            "destination": (timeline.get("destination_stop") or {}).get("stop_name")
+                            if isinstance(timeline.get("destination_stop"), dict)
+                            else None,
+                            "departure_time": departure,
+                            "eta_seconds": eta_seconds,
+                            "eta_display": stop.get("eta_display"),
+                            "is_realtime": bool(stop.get("has_real_time", False)),
+                            "time_source": stop.get("time_source"),
+                        }
+                    )
+
+        def sort_key(item: dict[str, Any]) -> tuple[int, str]:
+            eta = item.get("eta_seconds")
+            if isinstance(eta, int):
+                return (0, f"{eta:08d}")
+            return (1, _normalize_departure_str(item.get("departure_time")) or "99:99:99")
+
+        rows.sort(key=sort_key)
+        return rows[:120], route_count
+
+    @property
+    def native_value(self) -> int | None:
+        """Return number of upcoming departures in board payload."""
+        departures, _ = self._build_departures()
+        return len(departures)
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        return self.coordinator.last_update_success
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return aggregated departures and metadata."""
+        departures, route_count = self._build_departures()
+        return {
+            "transportation_type": self._transportation_name,
+            "transportation_type_id": self._transportation_type,
+            "configured_route_count": route_count,
+            "departure_count": len(departures),
+            "departures": departures,
+        }
+
+    @property
+    def icon(self) -> str:
+        """Return icon based on transportation type."""
+        transportation_icons = {
+            "Train": "mdi:train",
+            "Bus": "mdi:bus",
+            "Ferry": "mdi:ferry",
+            "Cable Car": "mdi:cable-car",
+            "School Bus": "mdi:bus-school",
+        }
+        return transportation_icons.get(self._transportation_name, "mdi:format-list-bulleted-square")
