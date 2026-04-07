@@ -19,6 +19,7 @@ from .const import (
     CONF_ROUTE_ID,
     CONF_ROUTE_LONG_NAME,
     CONF_ROUTE_SHORT_NAME,
+    CONF_ROUTES,
     CONF_TRANSPORTATION_TYPE,
     DEFAULT_ACTIVE_DIRECTION,
     DOMAIN,
@@ -32,51 +33,72 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up route-centric and compatibility sensors."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
+    runtime = hass.data[DOMAIN][config_entry.entry_id]
+    coordinators: dict[str, Any] = runtime.get("coordinators", {})
 
-    route_id = config_entry.data[CONF_ROUTE_ID]
-    route_short_name = config_entry.data[CONF_ROUTE_SHORT_NAME]
-    route_long_name = config_entry.data[CONF_ROUTE_LONG_NAME]
-    route_desc = config_entry.data.get(CONF_ROUTE_DESC, "")
+    routes = config_entry.data.get(CONF_ROUTES)
+    if not isinstance(routes, list) or not routes:
+        routes = [
+            {
+                CONF_ROUTE_ID: config_entry.data[CONF_ROUTE_ID],
+                CONF_ROUTE_SHORT_NAME: config_entry.data[CONF_ROUTE_SHORT_NAME],
+                CONF_ROUTE_LONG_NAME: config_entry.data[CONF_ROUTE_LONG_NAME],
+                CONF_ROUTE_DESC: config_entry.data.get(CONF_ROUTE_DESC, ""),
+            }
+        ]
+
     api_key = config_entry.data[CONF_API_KEY]
     transportation_type = config_entry.data[CONF_TRANSPORTATION_TYPE]
     transportation_name = TRANSPORTATION_TYPES.get(transportation_type, "Unknown")
 
-    entities: list[SensorEntity] = [
-        MetlinkRouteSensor(
-            coordinator,
-            config_entry,
-            route_id,
-            route_short_name,
-            route_long_name,
-            route_desc,
-            transportation_name,
-        )
-    ]
+    entities: list[SensorEntity] = []
+    for route in routes:
+        route_id = str(route.get(CONF_ROUTE_ID))
+        if not route_id:
+            continue
+        coordinator = coordinators.get(route_id) or runtime.get("coordinator")
+        if not coordinator:
+            continue
 
-    if config_entry.options.get(CONF_LEGACY_DIRECTION_ENTITIES, True):
+        route_short_name = route.get(CONF_ROUTE_SHORT_NAME, "Unknown")
+        route_long_name = route.get(CONF_ROUTE_LONG_NAME, "Unknown Route")
+        route_desc = route.get(CONF_ROUTE_DESC, "")
+
         entities.append(
-            MetlinkDirectionSensor(
+            MetlinkRouteSensor(
                 coordinator,
                 config_entry,
                 route_id,
                 route_short_name,
-                _direction_label(route_long_name, route_desc, 0),
+                route_long_name,
+                route_desc,
                 transportation_name,
-                0,
             )
         )
-        entities.append(
-            MetlinkDirectionSensor(
-                coordinator,
-                config_entry,
-                route_id,
-                route_short_name,
-                _direction_label(route_long_name, route_desc, 1),
-                transportation_name,
-                1,
+
+        if config_entry.options.get(CONF_LEGACY_DIRECTION_ENTITIES, True):
+            entities.append(
+                MetlinkDirectionSensor(
+                    coordinator,
+                    config_entry,
+                    route_id,
+                    route_short_name,
+                    _direction_label(route_long_name, route_desc, 0),
+                    transportation_name,
+                    0,
+                )
             )
-        )
+            entities.append(
+                MetlinkDirectionSensor(
+                    coordinator,
+                    config_entry,
+                    route_id,
+                    route_short_name,
+                    _direction_label(route_long_name, route_desc, 1),
+                    transportation_name,
+                    1,
+                )
+            )
 
     if _is_mode_leader(hass, config_entry):
         entities.append(
@@ -203,7 +225,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.2",
+            "sw_version": "0.4.3",
         }
 
     @property
@@ -297,7 +319,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.2",
+            "sw_version": "0.4.3",
         }
 
     @property
@@ -400,58 +422,111 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
 
         for entry in entries:
             runtime = self._hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-            coordinator = runtime.get("coordinator")
-            if not coordinator or not coordinator.data:
-                continue
-            route_count += 1
-
-            route_id = entry.data.get(CONF_ROUTE_ID)
-            route_short_name = entry.data.get(CONF_ROUTE_SHORT_NAME)
-
-            timetable_rows = coordinator.data.get("timetable_rows", [])
-            if not isinstance(timetable_rows, list):
-                continue
-
-            for row in timetable_rows:
-                if not isinstance(row, dict):
-                    continue
-
-                departure = row.get("departure_time") or row.get("scheduled_departure_time")
-                if not departure:
-                    continue
-
-                eta_seconds = _eta_seconds_from_departure(departure)
-                direction_id_raw = row.get("direction_id")
-                try:
-                    direction_id = int(direction_id_raw) if direction_id_raw is not None else None
-                except (TypeError, ValueError):
-                    direction_id = None
-                direction_label = _direction_from_entry(entry, direction_id) if direction_id is not None else None
-
-                rows.append(
+            routes = entry.data.get(CONF_ROUTES)
+            if not isinstance(routes, list) or not routes:
+                routes = [
                     {
-                        "route_id": route_id,
-                        "route_short_name": route_short_name,
-                        "route_type": self._transportation_name.lower(),
-                        "direction_id": direction_id,
-                        "direction_label": direction_label,
-                        "stop_id": row.get("stop_id"),
-                        "stop_name": row.get("stop_name"),
-                        "destination": row.get("destination"),
-                        "departure_time": departure,
-                        "scheduled_departure_time": row.get("scheduled_departure_time"),
-                        "eta_seconds": eta_seconds,
-                        "eta_display": row.get("eta_display"),
-                        "is_realtime": bool(row.get("is_realtime", False)),
-                        "time_source": row.get("time_source"),
-                        # Debug fields
-                        "trip_id": row.get("trip_id"),
-                        "service_id": row.get("service_id"),
-                        "service_date": row.get("service_date"),
-                        "stop_sequence": row.get("stop_sequence"),
-                        "debug_source": row.get("debug_source"),
+                        CONF_ROUTE_ID: entry.data.get(CONF_ROUTE_ID),
+                        CONF_ROUTE_SHORT_NAME: entry.data.get(CONF_ROUTE_SHORT_NAME),
                     }
-                )
+                ]
+
+            coordinators: dict[str, Any] = runtime.get("coordinators", {})
+            route_short_name_by_id = {
+                str(r.get(CONF_ROUTE_ID)): r.get(CONF_ROUTE_SHORT_NAME)
+                for r in routes
+                if r.get(CONF_ROUTE_ID) is not None
+            }
+
+            for route_id, coordinator in coordinators.items():
+                if not coordinator or not coordinator.data:
+                    continue
+                route_count += 1
+
+                route_short_name = route_short_name_by_id.get(str(route_id))
+
+                timetable_rows = coordinator.data.get("timetable_rows", [])
+                if not isinstance(timetable_rows, list):
+                    continue
+
+                for row in timetable_rows:
+                    if not isinstance(row, dict):
+                        continue
+
+                    departure = row.get("departure_time") or row.get("scheduled_departure_time")
+                    if not departure:
+                        continue
+
+                    eta_seconds = _eta_seconds_from_departure(departure)
+                    direction_id_raw = row.get("direction_id")
+                    try:
+                        direction_id = int(direction_id_raw) if direction_id_raw is not None else None
+                    except (TypeError, ValueError):
+                        direction_id = None
+                    direction_label = _direction_from_entry(entry, direction_id) if direction_id is not None else None
+
+                    rows.append(
+                        {
+                            "route_id": route_id,
+                            "route_short_name": route_short_name,
+                            "route_type": self._transportation_name.lower(),
+                            "direction_id": direction_id,
+                            "direction_label": direction_label,
+                            "stop_id": row.get("stop_id"),
+                            "stop_name": row.get("stop_name"),
+                            "destination": row.get("destination"),
+                            "departure_time": departure,
+                            "scheduled_departure_time": row.get("scheduled_departure_time"),
+                            "eta_seconds": eta_seconds,
+                            "eta_display": row.get("eta_display"),
+                            "is_realtime": bool(row.get("is_realtime", False)),
+                            "time_source": row.get("time_source"),
+                            # Debug fields
+                            "trip_id": row.get("trip_id"),
+                            "service_id": row.get("service_id"),
+                            "service_date": row.get("service_date"),
+                            "stop_sequence": row.get("stop_sequence"),
+                            "debug_source": row.get("debug_source"),
+                        }
+                    )
+
+            # Legacy fallback if no coordinators dict is present.
+            if not coordinators:
+                coordinator = runtime.get("coordinator")
+                if coordinator and coordinator.data:
+                    route_count += 1
+                    route_id = entry.data.get(CONF_ROUTE_ID)
+                    route_short_name = entry.data.get(CONF_ROUTE_SHORT_NAME)
+                    for row in coordinator.data.get("timetable_rows", []) or []:
+                        if not isinstance(row, dict):
+                            continue
+                        departure = row.get("departure_time") or row.get("scheduled_departure_time")
+                        if not departure:
+                            continue
+                        eta_seconds = _eta_seconds_from_departure(departure)
+                        rows.append(
+                            {
+                                "route_id": route_id,
+                                "route_short_name": route_short_name,
+                                "route_type": self._transportation_name.lower(),
+                                "direction_id": row.get("direction_id"),
+                                "direction_label": None,
+                                "stop_id": row.get("stop_id"),
+                                "stop_name": row.get("stop_name"),
+                                "destination": row.get("destination"),
+                                "departure_time": departure,
+                                "scheduled_departure_time": row.get("scheduled_departure_time"),
+                                "eta_seconds": eta_seconds,
+                                "eta_display": row.get("eta_display"),
+                                "is_realtime": bool(row.get("is_realtime", False)),
+                                "time_source": row.get("time_source"),
+                                "trip_id": row.get("trip_id"),
+                                "service_id": row.get("service_id"),
+                                "service_date": row.get("service_date"),
+                                "stop_sequence": row.get("stop_sequence"),
+                                "debug_source": row.get("debug_source"),
+                            }
+                        )
 
         def sort_key(item: dict[str, Any]) -> tuple[int, str]:
             eta = item.get("eta_seconds")

@@ -13,6 +13,7 @@ from .const import (
     CONF_ROUTE_ID,
     CONF_ROUTE_LONG_NAME,
     CONF_ROUTE_SHORT_NAME,
+    CONF_ROUTES,
     DEFAULT_ACTIVE_DIRECTION,
     DOMAIN,
 )
@@ -24,24 +25,41 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up direction selector entity."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
-    route_id = config_entry.data[CONF_ROUTE_ID]
-    route_short_name = config_entry.data[CONF_ROUTE_SHORT_NAME]
-    route_long_name = config_entry.data[CONF_ROUTE_LONG_NAME]
-    route_desc = config_entry.data.get(CONF_ROUTE_DESC, "")
+    runtime = hass.data[DOMAIN][config_entry.entry_id]
+    coordinators = runtime.get("coordinators", {})
 
-    async_add_entities(
-        [
+    routes = config_entry.data.get(CONF_ROUTES)
+    if not isinstance(routes, list) or not routes:
+        routes = [
+            {
+                CONF_ROUTE_ID: config_entry.data[CONF_ROUTE_ID],
+                CONF_ROUTE_SHORT_NAME: config_entry.data[CONF_ROUTE_SHORT_NAME],
+                CONF_ROUTE_LONG_NAME: config_entry.data[CONF_ROUTE_LONG_NAME],
+                CONF_ROUTE_DESC: config_entry.data.get(CONF_ROUTE_DESC, ""),
+            }
+        ]
+
+    entities: list[MetlinkDirectionSelect] = []
+    for route in routes:
+        route_id = str(route.get(CONF_ROUTE_ID))
+        if not route_id:
+            continue
+        coordinator = coordinators.get(route_id) or runtime.get("coordinator")
+        if not coordinator:
+            continue
+
+        entities.append(
             MetlinkDirectionSelect(
                 coordinator,
                 config_entry,
                 route_id,
-                route_short_name,
-                route_long_name,
-                route_desc,
+                route.get(CONF_ROUTE_SHORT_NAME, "Unknown"),
+                route.get(CONF_ROUTE_LONG_NAME, "Unknown Route"),
+                route.get(CONF_ROUTE_DESC, ""),
             )
-        ]
-    )
+        )
+
+    async_add_entities(entities)
 
 
 class MetlinkDirectionSelect(CoordinatorEntity, SelectEntity):

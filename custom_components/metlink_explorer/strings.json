@@ -31,7 +31,8 @@
       "no_transportation_types_available": "No transportation types with available routes found. All routes may already be configured."
     },
     "abort": {
-      "already_configured": "This route is already configured."
+      "already_configured": "This route is already configured.",
+      "route_added_to_existing": "Route added to existing transportation integration."
     }
   },
   "options": {

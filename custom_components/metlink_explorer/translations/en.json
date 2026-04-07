@@ -32,7 +32,8 @@
       "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This route is already configured."
+      "already_configured": "This route is already configured.",
+      "route_added_to_existing": "Route added to existing transportation integration."
     }
   }
 }
