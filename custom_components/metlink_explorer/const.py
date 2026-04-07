@@ -33,7 +33,10 @@ CONF_ROUTE_ID = "route_id"
 CONF_ROUTE_SHORT_NAME = "route_short_name"
 CONF_ROUTE_LONG_NAME = "route_long_name"
 CONF_ROUTE_DESC = "route_desc"
+CONF_ACTIVE_DIRECTION = "active_direction"
+CONF_LEGACY_DIRECTION_ENTITIES = "legacy_direction_entities"
 
 # Default Values
 DEFAULT_SCAN_INTERVAL = 60  # Increased to 60 seconds due to more API calls
 REQUEST_TIMEOUT = 15  # Increased timeout for complex requests
+DEFAULT_ACTIVE_DIRECTION = 0

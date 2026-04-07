@@ -5,6 +5,28 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-04-07
+
+### Major Architecture Update - Route-centric design with migration compatibility
+
+- Added a route-centric update model with one shared coordinator per configured route.
+- Added a new primary route sensor entity to represent both travel directions in one place.
+- Added a direction `select` entity so users can switch the active direction at runtime from cards/UI.
+- Preserved legacy direction sensor unique IDs (`metlink_explorer_<route_id>_0` and `_1`) where possible for dashboard compatibility.
+- Route data for both directions is now fetched and processed under the same route coordinator cycle.
+
+### Config and setup improvements
+
+- Added default config entry options for route-centric behavior:
+  - `active_direction` defaulting to direction `0`
+  - `legacy_direction_entities` defaulting to `true`
+- Removed duplicated route option sorting method from the config flow to avoid accidental logic shadowing.
+
+### Notes
+
+- Existing installations should continue to see legacy direction entities while gaining the new route-centric entities.
+- This release lays the foundation for future API call and Recorder overhead reduction work.
+
 ## [0.3.8] - 2025-09-30
 
 ### Enhancement — Tile-friendly attributes

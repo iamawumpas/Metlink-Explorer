@@ -15,12 +15,15 @@ import homeassistant.helpers.config_validation as cv
 from .api import MetlinkApiClient, MetlinkApiError
 from .const import (
     DOMAIN,
+    CONF_ACTIVE_DIRECTION,
     CONF_API_KEY,
+    CONF_LEGACY_DIRECTION_ENTITIES,
     CONF_TRANSPORTATION_TYPE,
     CONF_ROUTE_ID,
     CONF_ROUTE_SHORT_NAME,
     CONF_ROUTE_LONG_NAME,
     CONF_ROUTE_DESC,
+    DEFAULT_ACTIVE_DIRECTION,
     TRANSPORTATION_TYPES,
 )
 
@@ -215,7 +218,11 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_ROUTE_SHORT_NAME: route_short_name,
                         CONF_ROUTE_LONG_NAME: route_long_name,
                         CONF_ROUTE_DESC: route_desc,
-                    }
+                    },
+                    options={
+                        CONF_ACTIVE_DIRECTION: DEFAULT_ACTIVE_DIRECTION,
+                        CONF_LEGACY_DIRECTION_ENTITIES: True,
+                    },
                 )
             else:
                 errors["base"] = "route_not_found"
@@ -289,42 +296,3 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
         return route_options
 
-    def _create_sorted_route_options(self, routes: list[dict[str, Any]]) -> dict[str, str]:
-        """Create sorted route options for the dropdown."""
-        def sort_key(route):
-            short_name = route.get("route_short_name", "")
-            long_name = route.get("route_long_name", "")
-            
-            # Handle numeric route names (e.g., "1", "83", "111")
-            try:
-                numeric_part = int(short_name)
-                return (0, numeric_part, long_name.lower())
-            except ValueError:
-                pass
-            
-            # Handle alphanumeric route names (e.g., "KPL", "N1", "AX")
-            # Extract any numeric part for better sorting
-            import re
-            match = re.match(r'([A-Za-z]*)(\d+)', short_name)
-            if match:
-                alpha_part, num_part = match.groups()
-                return (1, alpha_part.lower(), int(num_part), long_name.lower())
-            
-            # Handle purely alphabetic route names
-            return (2, short_name.lower(), long_name.lower())
-
-        # Sort routes using the enhanced key
-        sorted_routes = sorted(routes, key=sort_key)
-        
-        # Create dropdown options with route_short_name :: route_long_name format
-        route_options = {}
-        for route in sorted_routes:
-            route_id = route["route_id"]
-            short_name = route.get("route_short_name", "Unknown")
-            long_name = route.get("route_long_name", "Unknown Route")
-            
-            # Format: "83 :: Wellington - Petone - Lower Hutt - Eastbourne"
-            display_text = f"{short_name} :: {long_name}"
-            route_options[route_id] = display_text
-        
-        return route_options
