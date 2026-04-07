@@ -5,6 +5,30 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-04-08
+
+### Fix - Timetable board accuracy and provenance
+
+- Reworked board-row generation to build departures from GTFS static data (`trips` + `stop_times`) for the selected service date.
+- Added service-date filtering using `calendar_dates` exception rules before row generation.
+- Destination is now derived from each trip's final stop instead of direction-label fallback.
+- Board rows now represent one trip-stop event per row and are sorted chronologically by service-time.
+- Added GTFS-RT trip updates overlay so realtime departures replace scheduled values when available.
+
+### New debug fields per board row
+
+- `trip_id`
+- `service_id`
+- `service_date`
+- `stop_sequence`
+- `scheduled_departure_time`
+- `debug_source`
+
+### Notes
+
+- This update is intended to align board entity output with timetable-style expectations more closely.
+- Existing entities and dashboards remain compatible.
+
 ## [0.4.1] - 2026-04-07
 
 ### Feature - Aggregate departures board entities

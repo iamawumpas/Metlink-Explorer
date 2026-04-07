@@ -40,6 +40,10 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             trips = await self.api_client.get_trips_for_route(self.route_id)
             vehicle_positions = await self.api_client.get_vehicle_positions()
             trip_updates = await self.api_client.get_trip_updates()
+            timetable_rows = await self.api_client.get_route_timetable_rows(
+                self.route_id,
+                trip_updates_payload=trip_updates,
+            )
 
             timeline_by_direction: dict[int, dict[str, Any]] = {}
             for direction_id in (0, 1):
@@ -62,6 +66,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "trips": trips,
                 "vehicle_positions": vehicle_positions,
                 "trip_updates": trip_updates,
+                "timetable_rows": timetable_rows,
                 "timeline_by_direction": timeline_by_direction,
             }
         except MetlinkApiError as exc:

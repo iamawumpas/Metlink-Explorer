@@ -203,7 +203,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.1",
+            "sw_version": "0.4.2",
         }
 
     @property
@@ -297,7 +297,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.1",
+            "sw_version": "0.4.2",
         }
 
     @property
@@ -387,7 +387,7 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
         self._attr_entity_registry_enabled_default = True
 
     def _build_departures(self) -> tuple[list[dict[str, Any]], int]:
-        """Collect and normalize departures across all routes in this mode."""
+        """Collect and normalize timetable departures across all routes in this mode."""
         rows: list[dict[str, Any]] = []
         route_count = 0
 
@@ -405,45 +405,53 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                 continue
             route_count += 1
 
-            timeline_by_direction = coordinator.data.get("timeline_by_direction", {})
-            if not isinstance(timeline_by_direction, dict):
-                continue
-
             route_id = entry.data.get(CONF_ROUTE_ID)
             route_short_name = entry.data.get(CONF_ROUTE_SHORT_NAME)
-            for direction_id in (0, 1):
-                timeline = timeline_by_direction.get(direction_id, {})
-                if not isinstance(timeline, dict):
-                    continue
-                for stop in timeline.get("stops", []) or []:
-                    if not isinstance(stop, dict):
-                        continue
-                    departure = stop.get("next_departure") or stop.get("scheduled_time")
-                    if not departure:
-                        continue
-                    eta_seconds = stop.get("eta_seconds")
-                    if not isinstance(eta_seconds, int):
-                        eta_seconds = _eta_seconds_from_departure(departure)
 
-                    rows.append(
-                        {
-                            "route_id": route_id,
-                            "route_short_name": route_short_name,
-                            "route_type": self._transportation_name.lower(),
-                            "direction_id": direction_id,
-                            "direction_label": _direction_from_entry(entry, direction_id),
-                            "stop_id": stop.get("stop_id"),
-                            "stop_name": stop.get("stop_name"),
-                            "destination": (timeline.get("destination_stop") or {}).get("stop_name")
-                            if isinstance(timeline.get("destination_stop"), dict)
-                            else None,
-                            "departure_time": departure,
-                            "eta_seconds": eta_seconds,
-                            "eta_display": stop.get("eta_display"),
-                            "is_realtime": bool(stop.get("has_real_time", False)),
-                            "time_source": stop.get("time_source"),
-                        }
-                    )
+            timetable_rows = coordinator.data.get("timetable_rows", [])
+            if not isinstance(timetable_rows, list):
+                continue
+
+            for row in timetable_rows:
+                if not isinstance(row, dict):
+                    continue
+
+                departure = row.get("departure_time") or row.get("scheduled_departure_time")
+                if not departure:
+                    continue
+
+                eta_seconds = _eta_seconds_from_departure(departure)
+                direction_id_raw = row.get("direction_id")
+                try:
+                    direction_id = int(direction_id_raw) if direction_id_raw is not None else None
+                except (TypeError, ValueError):
+                    direction_id = None
+                direction_label = _direction_from_entry(entry, direction_id) if direction_id is not None else None
+
+                rows.append(
+                    {
+                        "route_id": route_id,
+                        "route_short_name": route_short_name,
+                        "route_type": self._transportation_name.lower(),
+                        "direction_id": direction_id,
+                        "direction_label": direction_label,
+                        "stop_id": row.get("stop_id"),
+                        "stop_name": row.get("stop_name"),
+                        "destination": row.get("destination"),
+                        "departure_time": departure,
+                        "scheduled_departure_time": row.get("scheduled_departure_time"),
+                        "eta_seconds": eta_seconds,
+                        "eta_display": row.get("eta_display"),
+                        "is_realtime": bool(row.get("is_realtime", False)),
+                        "time_source": row.get("time_source"),
+                        # Debug fields
+                        "trip_id": row.get("trip_id"),
+                        "service_id": row.get("service_id"),
+                        "service_date": row.get("service_date"),
+                        "stop_sequence": row.get("stop_sequence"),
+                        "debug_source": row.get("debug_source"),
+                    }
+                )
 
         def sort_key(item: dict[str, Any]) -> tuple[int, str]:
             eta = item.get("eta_seconds")
@@ -452,7 +460,7 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
             return (1, _normalize_departure_str(item.get("departure_time")) or "99:99:99")
 
         rows.sort(key=sort_key)
-        return rows[:120], route_count
+        return rows, route_count
 
     @property
     def native_value(self) -> int | None:

@@ -33,7 +33,10 @@ class MetlinkApiClient:
         self._routes_cache_ts = None
         self._stops_cache = None
         self._stops_cache_ts = None
+        self._calendar_dates_cache = None
+        self._calendar_dates_cache_ts = None
         self._stop_pattern_cache = {}
+        self._route_timetable_cache = {}
         self._cache_ttl_seconds = 300
 
     async def _request(self, endpoint: str) -> dict[str, Any]:
@@ -203,6 +206,233 @@ class MetlinkApiClient:
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch stops: %s", exc)
             raise
+
+    async def get_calendar_dates(self) -> list[dict[str, Any]]:
+        """Get calendar date overrides used for service validity."""
+        try:
+            now = datetime.now()
+            if (
+                self._calendar_dates_cache is not None
+                and self._calendar_dates_cache_ts
+                and (now - self._calendar_dates_cache_ts).total_seconds() < self._cache_ttl_seconds
+            ):
+                return self._calendar_dates_cache
+
+            data = await self._request(API_ENDPOINTS["calendar_dates"])
+            if isinstance(data, list):
+                self._calendar_dates_cache = data
+                self._calendar_dates_cache_ts = now
+            return data if isinstance(data, list) else []
+        except MetlinkApiError as exc:
+            _LOGGER.error("Failed to fetch calendar_dates: %s", exc)
+            raise
+
+    async def get_route_timetable_rows(
+        self,
+        route_id: str,
+        service_date: str | None = None,
+        trip_updates_payload: dict[str, Any] | list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Build timetable rows for a route from trips+stop_times for a service date.
+
+        Rows are sorted chronologically and realtime updates are overlaid when available.
+        """
+        date_str = service_date or datetime.now().strftime("%Y%m%d")
+        cache_key = (str(route_id), date_str)
+        now = datetime.now()
+
+        if cache_key in self._route_timetable_cache:
+            ts, cached_rows = self._route_timetable_cache[cache_key]
+            if (now - ts).total_seconds() < self._cache_ttl_seconds:
+                base_rows = [row.copy() for row in cached_rows]
+            else:
+                base_rows = await self._build_route_timetable_base_rows(str(route_id), date_str)
+                self._route_timetable_cache[cache_key] = (now, [row.copy() for row in base_rows])
+        else:
+            base_rows = await self._build_route_timetable_base_rows(str(route_id), date_str)
+            self._route_timetable_cache[cache_key] = (now, [row.copy() for row in base_rows])
+
+        return self._overlay_realtime_on_rows(base_rows, trip_updates_payload)
+
+    async def _build_route_timetable_base_rows(self, route_id: str, date_str: str) -> list[dict[str, Any]]:
+        """Build scheduled route timetable rows for the given service date."""
+        trips = await self.get_trips_for_route(route_id)
+        if not trips:
+            return []
+
+        try:
+            calendar_dates = await self.get_calendar_dates()
+        except MetlinkApiError:
+            calendar_dates = []
+
+        trips_for_date = self._filter_trips_for_service_date(trips, calendar_dates, date_str)
+        if not trips_for_date:
+            # Fallback: if service-date filtering removes everything, keep all route trips.
+            trips_for_date = trips
+
+        stops = await self.get_stops()
+        stop_name_by_id = {str(s.get("stop_id")): s.get("stop_name", "Unknown Stop") for s in stops}
+
+        sem = asyncio.Semaphore(8)
+
+        async def fetch_trip_stop_times(trip: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+            async with sem:
+                trip_id = str(trip.get("trip_id"))
+                stop_times = await self.get_stop_times_for_trip(trip_id)
+                return trip, stop_times
+
+        trip_and_stop_times = await asyncio.gather(
+            *(fetch_trip_stop_times(trip) for trip in trips_for_date),
+            return_exceptions=False,
+        )
+
+        rows: list[dict[str, Any]] = []
+        for trip, stop_times in trip_and_stop_times:
+            if not stop_times:
+                continue
+
+            last = stop_times[-1]
+            destination_stop_id = str(last.get("stop_id"))
+            destination_name = stop_name_by_id.get(destination_stop_id, "Unknown Stop")
+
+            trip_id = str(trip.get("trip_id"))
+            service_id = str(trip.get("service_id", ""))
+            direction_id = trip.get("direction_id")
+
+            for st in stop_times:
+                stop_id = str(st.get("stop_id"))
+                dep_time = st.get("departure_time") or st.get("arrival_time")
+                if not dep_time:
+                    continue
+                rows.append(
+                    {
+                        "route_id": str(route_id),
+                        "trip_id": trip_id,
+                        "service_id": service_id,
+                        "service_date": date_str,
+                        "direction_id": direction_id,
+                        "stop_id": stop_id,
+                        "stop_name": stop_name_by_id.get(stop_id, "Unknown Stop"),
+                        "stop_sequence": st.get("stop_sequence"),
+                        "destination": destination_name,
+                        "scheduled_departure_time": dep_time,
+                        "departure_time": dep_time,
+                        "eta_display": f"Scheduled: {dep_time}",
+                        "is_realtime": False,
+                        "time_source": "scheduled",
+                        "debug_source": "gtfs_stop_times",
+                    }
+                )
+
+        rows.sort(key=lambda r: self._seconds_for_service_time(r.get("scheduled_departure_time")))
+        return rows
+
+    def _filter_trips_for_service_date(
+        self,
+        trips: list[dict[str, Any]],
+        calendar_dates: list[dict[str, Any]],
+        date_str: str,
+    ) -> list[dict[str, Any]]:
+        """Filter trips by service_date using calendar_dates exceptions."""
+        if not calendar_dates:
+            return trips
+
+        active_service_ids: set[str] = set()
+        removed_service_ids: set[str] = set()
+        for row in calendar_dates:
+            if str(row.get("date")) != str(date_str):
+                continue
+            service_id = str(row.get("service_id", ""))
+            exception_type = int(row.get("exception_type", 0) or 0)
+            if exception_type == 1:
+                active_service_ids.add(service_id)
+            elif exception_type == 2:
+                removed_service_ids.add(service_id)
+
+        filtered = []
+        for trip in trips:
+            sid = str(trip.get("service_id", ""))
+            if sid in removed_service_ids:
+                continue
+            if active_service_ids and sid not in active_service_ids:
+                continue
+            filtered.append(trip)
+        return filtered
+
+    def _overlay_realtime_on_rows(
+        self,
+        rows: list[dict[str, Any]],
+        trip_updates_payload: dict[str, Any] | list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        """Overlay GTFS-RT trip update times onto scheduled rows."""
+        result = [row.copy() for row in rows]
+        if not trip_updates_payload:
+            return result
+
+        if isinstance(trip_updates_payload, dict):
+            entities = trip_updates_payload.get("entity", [])
+        elif isinstance(trip_updates_payload, list):
+            entities = trip_updates_payload
+        else:
+            return result
+
+        rt_map: dict[tuple[str, str], dict[str, Any]] = {}
+        for entity in entities:
+            if not isinstance(entity, dict):
+                continue
+            trip_update = entity.get("trip_update", {})
+            if not isinstance(trip_update, dict):
+                continue
+            trip_id = str((trip_update.get("trip") or {}).get("trip_id", ""))
+            for stu in trip_update.get("stop_time_update", []) or []:
+                if not isinstance(stu, dict):
+                    continue
+                stop_id = str(stu.get("stop_id", ""))
+                dep = stu.get("departure", {})
+                if not isinstance(dep, dict) or not dep.get("time"):
+                    continue
+                timestamp = int(dep.get("time"))
+                delay = int(dep.get("delay", 0) or 0)
+                formatted = datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
+                rt_map[(trip_id, stop_id)] = {
+                    "departure_time": formatted,
+                    "timestamp": timestamp,
+                    "delay_seconds": delay,
+                }
+
+        for row in result:
+            key = (str(row.get("trip_id", "")), str(row.get("stop_id", "")))
+            rt = rt_map.get(key)
+            if not rt:
+                continue
+            row["departure_time"] = rt["departure_time"]
+            row["eta_display"] = rt["departure_time"]
+            row["is_realtime"] = True
+            row["time_source"] = "trip_update"
+            row["realtime_timestamp"] = rt["timestamp"]
+            row["delay_seconds"] = rt["delay_seconds"]
+            row["debug_source"] = "gtfs_rt_trip_updates"
+
+        result.sort(key=lambda r: self._seconds_for_service_time(r.get("departure_time")))
+        return result
+
+    def _seconds_for_service_time(self, value: str | None) -> int:
+        """Convert HH:MM(:SS) service time to sortable seconds (supports 24+ hours)."""
+        if not value:
+            return 10**9
+        text = str(value).strip()
+        if text.startswith("Scheduled:"):
+            text = text.replace("Scheduled:", "").strip()
+        parts = text.split(":")
+        if len(parts) < 2:
+            return 10**9
+        try:
+            hh = int(parts[0])
+            mm = int(parts[1])
+            ss = int(parts[2]) if len(parts) > 2 else 0
+            return hh * 3600 + mm * 60 + ss
+        except ValueError:
+            return 10**9
 
     async def get_vehicle_positions(self) -> list[dict[str, Any]]:
         """Get real-time vehicle positions."""
