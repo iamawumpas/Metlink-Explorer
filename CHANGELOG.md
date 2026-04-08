@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-04-08
+
+### Change - Remove legacy direction sensors
+
+- Removed creation of legacy fixed-direction sensors for each route.
+- New installs now create route-centric entities only for route data display.
+- Keeps the streamlined model focused on the `... :: Route` sensor flow.
+
 ## [0.4.3] - 2026-04-08
 
 ### Feature - Single integration entry per transport mode

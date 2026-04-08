@@ -14,7 +14,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     CONF_ACTIVE_DIRECTION,
     CONF_API_KEY,
-    CONF_LEGACY_DIRECTION_ENTITIES,
     CONF_ROUTE_DESC,
     CONF_ROUTE_ID,
     CONF_ROUTE_LONG_NAME,
@@ -75,30 +74,6 @@ async def async_setup_entry(
                 transportation_name,
             )
         )
-
-        if config_entry.options.get(CONF_LEGACY_DIRECTION_ENTITIES, True):
-            entities.append(
-                MetlinkDirectionSensor(
-                    coordinator,
-                    config_entry,
-                    route_id,
-                    route_short_name,
-                    _direction_label(route_long_name, route_desc, 0),
-                    transportation_name,
-                    0,
-                )
-            )
-            entities.append(
-                MetlinkDirectionSensor(
-                    coordinator,
-                    config_entry,
-                    route_id,
-                    route_short_name,
-                    _direction_label(route_long_name, route_desc, 1),
-                    transportation_name,
-                    1,
-                )
-            )
 
     if _is_mode_leader(hass, config_entry):
         entities.append(
@@ -225,7 +200,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.3",
+            "sw_version": "0.4.4",
         }
 
     @property
@@ -319,7 +294,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.3",
+            "sw_version": "0.4.4",
         }
 
     @property
