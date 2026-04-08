@@ -145,8 +145,11 @@ def _normalize_departure_str(value: str | None) -> str:
     return f"{hour:02d}:{minute:02d}:{second:02d}"
 
 
-def _eta_seconds_from_departure(value: str | None) -> int | None:
-    """Compute ETA seconds from local time string."""
+def _eta_seconds_from_departure(value: str | None, wrap_next_day: bool = True) -> int | None:
+    """Compute ETA seconds from local time string.
+
+    When wrap_next_day is False, times earlier than now return negative values.
+    """
     normalized = _normalize_departure_str(value)
     if not normalized:
         return None
@@ -154,8 +157,9 @@ def _eta_seconds_from_departure(value: str | None) -> int | None:
         now = datetime.now()
         target = datetime.strptime(f"{now.date()} {normalized}", "%Y-%m-%d %H:%M:%S")
         if target < now:
-            # If already passed today, treat as next-day service.
-            target = target + timedelta(days=1)
+            if wrap_next_day:
+                # If already passed today, treat as next-day service.
+                target = target + timedelta(days=1)
         return int((target - now).total_seconds())
     except Exception:
         return None
@@ -200,7 +204,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.4",
+            "sw_version": "0.4.5",
         }
 
     @property
@@ -294,7 +298,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.4",
+            "sw_version": "0.4.5",
         }
 
     @property
@@ -432,7 +436,10 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                     if not departure:
                         continue
 
-                    eta_seconds = _eta_seconds_from_departure(departure)
+                    eta_seconds = _eta_seconds_from_departure(departure, wrap_next_day=False)
+                    if eta_seconds is None or eta_seconds < 0:
+                        # Board rows are for upcoming departures only.
+                        continue
                     direction_id_raw = row.get("direction_id")
                     try:
                         direction_id = int(direction_id_raw) if direction_id_raw is not None else None
@@ -478,7 +485,9 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                         departure = row.get("departure_time") or row.get("scheduled_departure_time")
                         if not departure:
                             continue
-                        eta_seconds = _eta_seconds_from_departure(departure)
+                        eta_seconds = _eta_seconds_from_departure(departure, wrap_next_day=False)
+                        if eta_seconds is None or eta_seconds < 0:
+                            continue
                         rows.append(
                             {
                                 "route_id": route_id,

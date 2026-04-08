@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-04-09
+
+### Fix - Departures board update cycle behavior
+
+- Adjusted board ETA handling so past departures are no longer wrapped to next-day countdowns.
+- Mode board rows now include upcoming departures only, preventing stale services from appearing as large future ETAs (for example 18h+).
+- This improves real-world dashboard behavior for bus/ferry/train board cards that display "Departs ... in ..." values.
+
 ## [0.4.4] - 2026-04-08
 
 ### Change - Remove legacy direction sensors
