@@ -696,10 +696,13 @@ class MetlinkApiClient:
                 stop_id = str(st.get("stop_id"))
                 # Departure boards should only include true departure events.
                 dep_time = st.get("departure_time")
+                # Some non-train feeds only populate arrival_time at stops.
+                if not dep_time and self._transportation_type != TRAIN_ROUTE_TYPE:
+                    dep_time = st.get("arrival_time")
                 if not dep_time:
                     continue
                 # Exclude terminal-stop rows where service ends at this stop.
-                if stop_id == destination_stop_id:
+                if self._transportation_type == TRAIN_ROUTE_TYPE and stop_id == destination_stop_id:
                     continue
                 rows.append(
                     {
@@ -751,7 +754,13 @@ class MetlinkApiClient:
             sid = str(trip.get("service_id", ""))
             if sid in removed_service_ids:
                 continue
-            if active_service_ids and sid not in active_service_ids:
+            # Non-train feeds may provide sparse active exceptions; keep trips
+            # unless they are explicitly removed.
+            if (
+                self._transportation_type == TRAIN_ROUTE_TYPE
+                and active_service_ids
+                and sid not in active_service_ids
+            ):
                 continue
             filtered.append(trip)
         return filtered

@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-04-09
+
+### Fix - Bus and ferry departures board row filtering
+
+- Added non-train fallback to `arrival_time` when `departure_time` is missing in stop-time rows.
+- Restricted terminal-stop exclusion to train mode so non-train rows are not over-pruned.
+- Relaxed service-date active exception filtering for non-train modes (explicit removals still apply).
+- Updated departures ETA parsing to use GTFS service-time seconds (including 24+ hour values) for robust upcoming-row detection.
+
 ## [0.5.1] - 2026-04-09
 
 ### Feature - Physical offset lanes for overlapping train geometries

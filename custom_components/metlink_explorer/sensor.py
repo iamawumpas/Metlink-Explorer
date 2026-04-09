@@ -169,22 +169,40 @@ def _normalize_departure_str(value: str | None) -> str:
     return f"{hour:02d}:{minute:02d}:{second:02d}"
 
 
+def _service_time_to_seconds(value: str | None) -> int | None:
+    """Convert GTFS-style HH:MM(:SS) service time to seconds.
+
+    Supports hours >= 24 used by overnight service representation.
+    """
+    if not value:
+        return None
+    text = str(value).replace("Scheduled:", "").strip()
+    match = re.match(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$", text)
+    if not match:
+        return None
+    try:
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        second = int(match.group(3) or "0")
+        return hour * 3600 + minute * 60 + second
+    except (TypeError, ValueError):
+        return None
+
+
 def _eta_seconds_from_departure(value: str | None, wrap_next_day: bool = True) -> int | None:
     """Compute ETA seconds from local time string.
 
     When wrap_next_day is False, times earlier than now return negative values.
     """
-    normalized = _normalize_departure_str(value)
-    if not normalized:
+    target_seconds = _service_time_to_seconds(value)
+    if target_seconds is None:
         return None
     try:
         now = datetime.now()
-        target = datetime.strptime(f"{now.date()} {normalized}", "%Y-%m-%d %H:%M:%S")
-        if target < now:
-            if wrap_next_day:
-                # If already passed today, treat as next-day service.
-                target = target + timedelta(days=1)
-        return int((target - now).total_seconds())
+        now_seconds = now.hour * 3600 + now.minute * 60 + now.second
+        if wrap_next_day and target_seconds < now_seconds:
+            target_seconds += 86400
+        return int(target_seconds - now_seconds)
     except Exception:
         return None
 
@@ -241,7 +259,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.5.1",
+            "sw_version": "0.5.2",
         }
 
     @property
@@ -335,7 +353,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.5.1",
+            "sw_version": "0.5.2",
         }
 
     @property
