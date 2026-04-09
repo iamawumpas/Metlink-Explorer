@@ -23,7 +23,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.DEVICE_TRACKER]
 
 
 def _entry_routes(entry: ConfigEntry) -> list[dict[str, str]]:

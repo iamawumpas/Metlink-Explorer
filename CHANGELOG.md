@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.7] - 2026-04-09
+
+### Feature - Live vehicle trackers for map cards
+
+- Added `device_tracker` entities for live Ferry vehicle positions using GTFS-RT vehicle position data.
+- Extended live vehicle trackers to Train mode so train vehicles can also be shown on map cards.
+- Tracker entities are created dynamically as vehicles appear and include live metadata like route, trip, bearing, speed, and timestamp.
+
 ## [0.4.6] - 2026-04-09
 
 ### Fix - Departure board terminal-stop handling
