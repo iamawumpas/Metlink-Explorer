@@ -48,6 +48,7 @@ def _entry_routes(entry: ConfigEntry) -> list[dict[str, str]]:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Metlink Explorer from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    routes = _entry_routes(entry)
 
     # Consolidate legacy duplicate entries for the same API key + transportation type.
     same_mode_entries = sorted(
@@ -61,28 +62,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if same_mode_entries:
         leader = same_mode_entries[0]
-        if entry.entry_id != leader.entry_id:
-            leader_routes = _entry_routes(leader)
-            leader_route_ids = {str(r.get(CONF_ROUTE_ID)) for r in leader_routes if r.get(CONF_ROUTE_ID)}
-            for route in _entry_routes(entry):
-                rid = str(route.get(CONF_ROUTE_ID))
-                if rid and rid not in leader_route_ids:
-                    leader_routes.append(route)
-                    leader_route_ids.add(rid)
+        merged_routes: list[dict[str, str]] = []
+        merged_route_ids: set[str] = set()
 
+        # Always union all configured routes across matching entries so leader
+        # setup can initialize coordinators for every installed route.
+        for grouped_entry in same_mode_entries:
+            for route in _entry_routes(grouped_entry):
+                rid = str(route.get(CONF_ROUTE_ID, "")).strip()
+                if not rid or rid in merged_route_ids:
+                    continue
+                merged_route_ids.add(rid)
+                merged_routes.append(route)
+
+        if merged_routes:
             updated_data = dict(leader.data)
-            updated_data[CONF_ROUTES] = leader_routes
-            if leader_routes:
-                updated_data[CONF_ROUTE_ID] = leader_routes[0].get(CONF_ROUTE_ID)
-                updated_data[CONF_ROUTE_SHORT_NAME] = leader_routes[0].get(CONF_ROUTE_SHORT_NAME)
-                updated_data[CONF_ROUTE_LONG_NAME] = leader_routes[0].get(CONF_ROUTE_LONG_NAME)
-                updated_data[CONF_ROUTE_DESC] = leader_routes[0].get(CONF_ROUTE_DESC, "")
-
+            updated_data[CONF_ROUTES] = merged_routes
+            updated_data[CONF_ROUTE_ID] = merged_routes[0].get(CONF_ROUTE_ID)
+            updated_data[CONF_ROUTE_SHORT_NAME] = merged_routes[0].get(CONF_ROUTE_SHORT_NAME)
+            updated_data[CONF_ROUTE_LONG_NAME] = merged_routes[0].get(CONF_ROUTE_LONG_NAME)
+            updated_data[CONF_ROUTE_DESC] = merged_routes[0].get(CONF_ROUTE_DESC, "")
             title = TRANSPORTATION_TYPES.get(int(leader.data.get(CONF_TRANSPORTATION_TYPE, -1)), leader.title)
-            hass.config_entries.async_update_entry(leader, data=updated_data, title=title)
+            if updated_data != leader.data or title != leader.title:
+                hass.config_entries.async_update_entry(leader, data=updated_data, title=title)
+
+        if entry.entry_id != leader.entry_id:
             await hass.config_entries.async_reload(leader.entry_id)
             await hass.config_entries.async_remove(entry.entry_id)
             return False
+
+        # Leader setup should use merged routes immediately, even before reloads.
+        if merged_routes:
+            routes = merged_routes
 
     session = async_get_clientsession(hass)
     api_client = MetlinkApiClient(
@@ -90,8 +101,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session,
         transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
     )
-
-    routes = _entry_routes(entry)
 
     coordinators: dict[str, MetlinkDataUpdateCoordinator] = {}
     for route in routes:

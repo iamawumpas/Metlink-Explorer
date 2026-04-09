@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.15] - 2026-04-09
+
+### Fix - Train startup route consolidation and coordinator initialization
+
+- Setup now unions routes across all matching entries (same API key + mode) before leader initialization.
+- Leader entry route data is updated up-front so route coordinators are created for every installed train route in the same startup cycle.
+- Prevents non-primary train routes from remaining as restored-only entities without live data after reload/startup.
+
 ## [0.4.14] - 2026-04-09
 
 ### Fix - Train route availability and per-line geometry entities
