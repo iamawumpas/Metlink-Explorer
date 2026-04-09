@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-04-09
+
+### Fix - 24h lookahead departures for bus and ferry boards
+
+- Route coordinators now build board timetable rows from both today and tomorrow service dates, with row deduplication.
+- Departures board ETA calculations are now service-date aware, so tomorrow rows are treated as upcoming instead of dropped.
+- Improves visibility for routes with low frequency or no remaining same-day departures.
+
 ## [0.5.2] - 2026-04-09
 
 ### Fix - Bus and ferry departures board row filtering

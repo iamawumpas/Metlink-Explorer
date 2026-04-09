@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -40,10 +40,36 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             trips = await self.api_client.get_trips_for_route(self.route_id)
             vehicle_positions = await self.api_client.get_vehicle_positions()
             trip_updates = await self.api_client.get_trip_updates()
-            timetable_rows = await self.api_client.get_route_timetable_rows(
+            today_str = datetime.now().strftime("%Y%m%d")
+            tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
+
+            timetable_rows_today = await self.api_client.get_route_timetable_rows(
                 self.route_id,
+                service_date=today_str,
                 trip_updates_payload=trip_updates,
             )
+            timetable_rows_tomorrow = await self.api_client.get_route_timetable_rows(
+                self.route_id,
+                service_date=tomorrow_str,
+                trip_updates_payload=None,
+            )
+
+            # Keep a 24h+ board horizon while avoiding duplicate timetable rows.
+            seen_rows: set[tuple[str, str, str, str]] = set()
+            timetable_rows: list[dict[str, Any]] = []
+            for row in (timetable_rows_today or []) + (timetable_rows_tomorrow or []):
+                if not isinstance(row, dict):
+                    continue
+                key = (
+                    str(row.get("trip_id", "")),
+                    str(row.get("stop_id", "")),
+                    str(row.get("service_date", "")),
+                    str(row.get("scheduled_departure_time", "")),
+                )
+                if key in seen_rows:
+                    continue
+                seen_rows.add(key)
+                timetable_rows.append(row)
 
             timeline_by_direction: dict[int, dict[str, Any]] = {}
             for direction_id in (0, 1):

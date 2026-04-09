@@ -207,6 +207,24 @@ def _eta_seconds_from_departure(value: str | None, wrap_next_day: bool = True) -
         return None
 
 
+def _eta_seconds_for_service_row(departure_time: str | None, service_date: str | None) -> int | None:
+    """Compute ETA seconds for a GTFS row with explicit service date."""
+    target_seconds = _service_time_to_seconds(departure_time)
+    if target_seconds is None:
+        return None
+
+    try:
+        now = datetime.now()
+        if service_date and len(str(service_date)) == 8 and str(service_date).isdigit():
+            base_date = datetime.strptime(str(service_date), "%Y%m%d")
+            target = base_date + timedelta(seconds=target_seconds)
+            return int((target - now).total_seconds())
+    except Exception:
+        pass
+
+    return _eta_seconds_from_departure(departure_time, wrap_next_day=True)
+
+
 def _direction_from_entry(entry: ConfigEntry, direction_id: int) -> str:
     """Get user-facing direction label from entry metadata."""
     route_long_name = entry.data.get(CONF_ROUTE_LONG_NAME, "")
@@ -259,7 +277,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.5.2",
+            "sw_version": "0.5.3",
         }
 
     @property
@@ -353,7 +371,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.5.2",
+            "sw_version": "0.5.3",
         }
 
     @property
@@ -483,7 +501,10 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                     if not departure:
                         continue
 
-                    eta_seconds = _eta_seconds_from_departure(departure, wrap_next_day=False)
+                    eta_seconds = _eta_seconds_for_service_row(
+                        departure,
+                        row.get("service_date"),
+                    )
                     if eta_seconds is None or eta_seconds < 0:
                         # Board rows are for upcoming departures only.
                         continue
@@ -532,7 +553,10 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                         departure = row.get("departure_time") or row.get("scheduled_departure_time")
                         if not departure:
                             continue
-                        eta_seconds = _eta_seconds_from_departure(departure, wrap_next_day=False)
+                        eta_seconds = _eta_seconds_for_service_row(
+                            departure,
+                            row.get("service_date"),
+                        )
                         if eta_seconds is None or eta_seconds < 0:
                             continue
                         rows.append(
