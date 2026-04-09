@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.14] - 2026-04-09
+
+### Fix - Train route availability and per-line geometry entities
+
+- Route selection filtering now scopes configured-route checks to the same API key and transportation mode, preventing unrelated entries from hiding valid train routes.
+- Train per-line geometry sensors are now created for all configured train routes, then enriched with any additional routes present in geometry features.
+- This ensures line entities like KVL and MEL can exist whenever those train routes are installed, even before geometry features fully populate.
+
 ## [0.4.13] - 2026-04-09
 
 ### Fix - Train geometry route enumeration from installed routes

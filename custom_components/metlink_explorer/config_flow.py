@@ -147,11 +147,16 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Get all routes for this transportation type from the API
         all_routes = await self._api_client.get_routes_by_type(transportation_type)
         
-        # Get existing configured route IDs from ALL integration entries
+        # Get existing configured route IDs from entries in the same API key + mode.
         existing_entries = self._async_current_entries()
         configured_route_ids = set()
         
         for entry in existing_entries:
+            if self._api_key and entry.data.get(CONF_API_KEY) != self._api_key:
+                continue
+            if int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1)) != int(transportation_type):
+                continue
+
             entry_routes = entry.data.get(CONF_ROUTES)
             if isinstance(entry_routes, list) and entry_routes:
                 for route in entry_routes:
