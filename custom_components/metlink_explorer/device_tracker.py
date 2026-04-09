@@ -13,11 +13,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     CONF_API_KEY,
     CONF_ROUTE_ID,
-    CONF_ROUTES,
     CONF_TRANSPORTATION_TYPE,
-    DOMAIN,
     TRANSPORTATION_TYPES,
 )
+from .mode_registry import entry_routes, is_mode_leader, normalize_transportation_type
 
 SUPPORTED_TRACKER_TYPES: set[int] = {2, 4}
 MODE_ICONS = {
@@ -28,31 +27,13 @@ MODE_ICONS = {
 
 def _entry_route_ids(config_entry: ConfigEntry) -> set[str]:
     """Return configured route ids for an entry."""
-    routes = config_entry.data.get(CONF_ROUTES)
     route_ids: set[str] = set()
-    if isinstance(routes, list):
-        for route in routes:
-            if isinstance(route, dict) and route.get(CONF_ROUTE_ID):
-                route_ids.add(str(route.get(CONF_ROUTE_ID)))
+    for route in entry_routes(config_entry):
+        route_ids.add(str(route.get(CONF_ROUTE_ID)))
 
     if not route_ids and config_entry.data.get(CONF_ROUTE_ID):
         route_ids.add(str(config_entry.data.get(CONF_ROUTE_ID)))
     return route_ids
-
-
-def _is_mode_leader(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Ensure one tracker platform owner per API key and transportation type."""
-    api_key = config_entry.data.get(CONF_API_KEY)
-    transport_type = config_entry.data.get(CONF_TRANSPORTATION_TYPE)
-    same_group_entries = [
-        entry.entry_id
-        for entry in hass.config_entries.async_entries(DOMAIN)
-        if entry.data.get(CONF_API_KEY) == api_key
-        and entry.data.get(CONF_TRANSPORTATION_TYPE) == transport_type
-    ]
-    if not same_group_entries:
-        return True
-    return config_entry.entry_id == sorted(same_group_entries)[0]
 
 
 def _extract_positions(vehicle_positions: Any, route_ids: set[str]) -> dict[str, dict[str, Any]]:
@@ -124,10 +105,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up live train/ferry vehicle trackers from GTFS-RT vehicle positions."""
-    transport_type = int(config_entry.data.get(CONF_TRANSPORTATION_TYPE, -1))
+    transport_type = normalize_transportation_type(config_entry.data.get(CONF_TRANSPORTATION_TYPE))
     if transport_type not in SUPPORTED_TRACKER_TYPES:
         return
-    if not _is_mode_leader(hass, config_entry):
+    if not is_mode_leader(hass, config_entry):
         return
 
     transportation_name = TRANSPORTATION_TYPES.get(transport_type, "Vehicle")
@@ -196,7 +177,7 @@ class MetlinkVehicleTrackerEntity(CoordinatorEntity, TrackerEntity):
             "name": self._attr_name,
             "manufacturer": "Metlink",
             "model": f"{transportation_name} Vehicle",
-            "sw_version": "0.4.16",
+            "sw_version": "0.5.0",
         }
 
     def _current(self) -> dict[str, Any] | None:

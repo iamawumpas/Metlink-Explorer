@@ -25,6 +25,7 @@ from .const import (
     TRAIN_ROUTE_TYPE,
     TRANSPORTATION_TYPES,
 )
+from .mode_registry import entry_routes, is_mode_leader, normalize_transportation_type, same_mode_entries
 
 
 async def async_setup_entry(
@@ -36,19 +37,10 @@ async def async_setup_entry(
     runtime = hass.data[DOMAIN][config_entry.entry_id]
     coordinators: dict[str, Any] = runtime.get("coordinators", {})
 
-    routes = config_entry.data.get(CONF_ROUTES)
-    if not isinstance(routes, list) or not routes:
-        routes = [
-            {
-                CONF_ROUTE_ID: config_entry.data[CONF_ROUTE_ID],
-                CONF_ROUTE_SHORT_NAME: config_entry.data[CONF_ROUTE_SHORT_NAME],
-                CONF_ROUTE_LONG_NAME: config_entry.data[CONF_ROUTE_LONG_NAME],
-                CONF_ROUTE_DESC: config_entry.data.get(CONF_ROUTE_DESC, ""),
-            }
-        ]
+    routes = entry_routes(config_entry)
 
     api_key = config_entry.data[CONF_API_KEY]
-    transportation_type = config_entry.data[CONF_TRANSPORTATION_TYPE]
+    transportation_type = normalize_transportation_type(config_entry.data.get(CONF_TRANSPORTATION_TYPE))
     transportation_name = TRANSPORTATION_TYPES.get(transportation_type, "Unknown")
 
     entities: list[SensorEntity] = []
@@ -76,7 +68,7 @@ async def async_setup_entry(
             )
         )
 
-    if _is_mode_leader(hass, config_entry):
+    if is_mode_leader(hass, config_entry):
         entities.append(
             MetlinkModeBoardSensor(
                 coordinator,
@@ -87,7 +79,7 @@ async def async_setup_entry(
             )
         )
 
-    if int(transportation_type) == TRAIN_ROUTE_TYPE:
+    if transportation_type == TRAIN_ROUTE_TYPE:
         geometry_coordinator = runtime.get("geometry_coordinator")
         if geometry_coordinator is not None:
             entities.append(
@@ -134,21 +126,6 @@ async def async_setup_entry(
                 )
 
     async_add_entities(entities)
-
-
-def _is_mode_leader(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Ensure only one board sensor is created per API key and transportation type."""
-    api_key = config_entry.data.get(CONF_API_KEY)
-    transport_type = int(config_entry.data.get(CONF_TRANSPORTATION_TYPE, -1))
-    same_group_entries = [
-        entry.entry_id
-        for entry in hass.config_entries.async_entries(DOMAIN)
-        if entry.data.get(CONF_API_KEY) == api_key
-        and int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1)) == transport_type
-    ]
-    if not same_group_entries:
-        return True
-    return config_entry.entry_id == sorted(same_group_entries)[0]
 
 
 def _direction_label(route_long_name: str, route_desc: str, direction: int) -> str:
@@ -264,7 +241,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.16",
+            "sw_version": "0.5.0",
         }
 
     @property
@@ -358,7 +335,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.16",
+            "sw_version": "0.5.0",
         }
 
     @property
@@ -452,23 +429,15 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
         rows: list[dict[str, Any]] = []
         route_count = 0
 
-        entries = [
-            entry
-            for entry in self._hass.config_entries.async_entries(DOMAIN)
-            if entry.data.get(CONF_API_KEY) == self._api_key
-            and entry.data.get(CONF_TRANSPORTATION_TYPE) == self._transportation_type
-        ]
+        entries = same_mode_entries(
+            self._hass,
+            self._api_key,
+            self._transportation_type,
+        )
 
         for entry in entries:
             runtime = self._hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-            routes = entry.data.get(CONF_ROUTES)
-            if not isinstance(routes, list) or not routes:
-                routes = [
-                    {
-                        CONF_ROUTE_ID: entry.data.get(CONF_ROUTE_ID),
-                        CONF_ROUTE_SHORT_NAME: entry.data.get(CONF_ROUTE_SHORT_NAME),
-                    }
-                ]
+            routes = entry_routes(entry)
 
             coordinators: dict[str, Any] = runtime.get("coordinators", {})
             route_short_name_by_id = {

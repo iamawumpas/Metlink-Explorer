@@ -5,6 +5,20 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-09
+
+### Refactor - Canonical mode grouping and route ownership
+
+- Added shared mode-registry helpers for normalized transportation-type handling, deterministic mode leaders, and merged route ownership across entries.
+- Refactored setup, sensor, select, and device-tracker platforms to use the shared helpers instead of duplicating mode matching logic.
+- Consolidation and runtime route enumeration now use consistent route normalization to reduce restored-only ghost entities.
+
+### Refactor - Route download and geometry cache behavior
+
+- Added cached trips index by route to avoid repeated full `/gtfs/trips` downloads per route update cycle.
+- Added per-trip stop-times cache to reduce repeated `/gtfs/stop_times` calls across timetable and geometry workflows.
+- Reworked route-geometry caching to use short negative caching (5 minutes) for missing geometry, preventing week-long stale "no geometry" states.
+
 ## [0.4.16] - 2026-04-09
 
 ### Fix - Train geometry entities always created when coordinator exists

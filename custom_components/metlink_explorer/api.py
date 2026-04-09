@@ -20,6 +20,7 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+NEGATIVE_ROUTE_GEOMETRY_CACHE_TTL_SECONDS = 300
 
 
 class MetlinkApiError(Exception):
@@ -45,14 +46,19 @@ class MetlinkApiClient:
         # TTL caches for static endpoints
         self._routes_cache = None
         self._routes_cache_ts = None
+        self._trips_cache = None
+        self._trips_cache_ts = None
+        self._trips_by_route_cache: dict[str, list[dict[str, Any]]] = {}
         self._stops_cache = None
         self._stops_cache_ts = None
         self._calendar_dates_cache = None
         self._calendar_dates_cache_ts = None
+        self._stop_times_cache_by_trip: dict[str, tuple[datetime, list[dict[str, Any]]]] = {}
         self._shapes_cache_by_id: dict[str, tuple[datetime, list[dict[str, Any]]]] = {}
         self._stop_pattern_cache = {}
         self._route_timetable_cache = {}
-        self._route_geometry_cache = {}
+        self._route_geometry_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
+        self._route_geometry_miss_cache: dict[str, datetime] = {}
         self._cache_ttl_seconds = DEFAULT_GTFS_CACHE_TTL_SECONDS
 
     @property
@@ -115,18 +121,37 @@ class MetlinkApiClient:
     async def get_trips_for_route(self, route_id: str) -> list[dict[str, Any]]:
         """Get trips for a specific route."""
         try:
+            route_id = str(route_id)
             _LOGGER.debug("Getting trips for route %s", route_id)
-            trips = await self._request(API_ENDPOINTS["trips"])
-            
-            # Ensure route_id comparison handles both string and integer types
-            route_trips = [
-                trip for trip in trips 
-                if str(trip.get("route_id")) == str(route_id)
-            ]
-            
-            _LOGGER.debug("Found %d trips for route %s out of %d total trips", 
-                         len(route_trips), route_id, len(trips))
-            
+            now = datetime.now()
+            cache_valid = (
+                self._trips_cache is not None
+                and self._trips_cache_ts is not None
+                and (now - self._trips_cache_ts).total_seconds() < self._static_cache_ttl_seconds
+            )
+
+            if not cache_valid:
+                trips = await self._request(API_ENDPOINTS["trips"])
+                if not isinstance(trips, list):
+                    trips = []
+                self._trips_cache = trips
+                self._trips_cache_ts = now
+                self._trips_by_route_cache = {}
+                for trip in trips:
+                    if not isinstance(trip, dict):
+                        continue
+                    rid = str(trip.get("route_id", "")).strip()
+                    if not rid:
+                        continue
+                    self._trips_by_route_cache.setdefault(rid, []).append(trip)
+
+            route_trips = self._trips_by_route_cache.get(route_id, [])
+            _LOGGER.debug(
+                "Found %d trips for route %s out of %d total trips",
+                len(route_trips),
+                route_id,
+                len(self._trips_cache) if isinstance(self._trips_cache, list) else 0,
+            )
             return route_trips
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch trips for route %s: %s", route_id, exc)
@@ -135,7 +160,13 @@ class MetlinkApiClient:
     async def get_stop_times_for_trip(self, trip_id: str) -> list[dict[str, Any]]:
         """Get stop times for a specific trip to understand stop sequence."""
         try:
+            trip_id = str(trip_id)
             _LOGGER.debug("Getting stop times for trip %s", trip_id)
+            now = datetime.now()
+            cached = self._stop_times_cache_by_trip.get(trip_id)
+            if cached and (now - cached[0]).total_seconds() < self._static_cache_ttl_seconds:
+                return cached[1]
+
             # The stop_times endpoint requires trip_id as a parameter
             endpoint = f"{API_ENDPOINTS['stop_times']}?trip_id={trip_id}"
             stop_times = await self._request(endpoint)
@@ -147,6 +178,7 @@ class MetlinkApiClient:
             
             # Sort by stop_sequence to get the correct order
             sorted_stop_times = sorted(stop_times, key=lambda x: x.get("stop_sequence", 0))
+            self._stop_times_cache_by_trip[trip_id] = (now, sorted_stop_times)
             
             _LOGGER.debug("Found %d stop times for trip %s", len(sorted_stop_times), trip_id)
             
@@ -286,9 +318,14 @@ class MetlinkApiClient:
         if cached and (now - cached[0]).total_seconds() < self._static_cache_ttl_seconds:
             return cached[1]
 
+        miss_ts = self._route_geometry_miss_cache.get(route_id)
+        if miss_ts and (now - miss_ts).total_seconds() < NEGATIVE_ROUTE_GEOMETRY_CACHE_TTL_SECONDS:
+            return None
+
         trips = await self.get_trips_for_route(route_id)
         if not trips:
-            self._route_geometry_cache[route_id] = (now, None)
+            self._route_geometry_miss_cache[route_id] = now
+            self._route_geometry_cache.pop(route_id, None)
             return None
 
         shape_ids: list[str] = []
@@ -328,7 +365,8 @@ class MetlinkApiClient:
         if not lines:
             lines = await self._fallback_route_lines_from_stop_patterns(route_id)
         if not lines:
-            self._route_geometry_cache[route_id] = (now, None)
+            self._route_geometry_miss_cache[route_id] = now
+            self._route_geometry_cache.pop(route_id, None)
             return None
 
         route_short_name = await self._get_route_short_name(route_id)
@@ -346,6 +384,7 @@ class MetlinkApiClient:
         }
 
         self._route_geometry_cache[route_id] = (now, feature)
+        self._route_geometry_miss_cache.pop(route_id, None)
         return feature
 
     async def _fallback_route_lines_from_stop_patterns(self, route_id: str) -> list[list[list[float]]]:

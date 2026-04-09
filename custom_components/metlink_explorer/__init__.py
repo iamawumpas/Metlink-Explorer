@@ -22,66 +22,35 @@ from .const import (
     TRANSPORTATION_TYPES,
 )
 from .const import DOMAIN
+from .mode_registry import entry_routes, merged_routes, same_mode_entries
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.DEVICE_TRACKER]
 
 
-def _entry_routes(entry: ConfigEntry) -> list[dict[str, str]]:
-    """Return routes list for an entry with legacy compatibility."""
-    routes = entry.data.get(CONF_ROUTES)
-    if isinstance(routes, list) and routes:
-        return routes
-    if entry.data.get(CONF_ROUTE_ID):
-        return [
-            {
-                CONF_ROUTE_ID: entry.data.get(CONF_ROUTE_ID),
-                CONF_ROUTE_SHORT_NAME: entry.data.get(CONF_ROUTE_SHORT_NAME),
-                CONF_ROUTE_LONG_NAME: entry.data.get(CONF_ROUTE_LONG_NAME),
-                CONF_ROUTE_DESC: entry.data.get(CONF_ROUTE_DESC, ""),
-            }
-        ]
-    return []
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Metlink Explorer from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    routes = _entry_routes(entry)
+    routes = entry_routes(entry)
 
     # Consolidate legacy duplicate entries for the same API key + transportation type.
-    same_mode_entries = sorted(
-        [
-            e
-            for e in hass.config_entries.async_entries(DOMAIN)
-            if e.data.get(CONF_API_KEY) == entry.data.get(CONF_API_KEY)
-            and e.data.get(CONF_TRANSPORTATION_TYPE) == entry.data.get(CONF_TRANSPORTATION_TYPE)
-        ],
-        key=lambda e: e.entry_id,
+    grouped_mode_entries = same_mode_entries(
+        hass,
+        entry.data.get(CONF_API_KEY),
+        entry.data.get(CONF_TRANSPORTATION_TYPE),
     )
-    if same_mode_entries:
-        leader = same_mode_entries[0]
-        merged_routes: list[dict[str, str]] = []
-        merged_route_ids: set[str] = set()
+    if grouped_mode_entries:
+        leader = grouped_mode_entries[0]
+        merged = merged_routes(grouped_mode_entries)
 
-        # Always union all configured routes across matching entries so leader
-        # setup can initialize coordinators for every installed route.
-        for grouped_entry in same_mode_entries:
-            for route in _entry_routes(grouped_entry):
-                rid = str(route.get(CONF_ROUTE_ID, "")).strip()
-                if not rid or rid in merged_route_ids:
-                    continue
-                merged_route_ids.add(rid)
-                merged_routes.append(route)
-
-        if merged_routes:
+        if merged:
             updated_data = dict(leader.data)
-            updated_data[CONF_ROUTES] = merged_routes
-            updated_data[CONF_ROUTE_ID] = merged_routes[0].get(CONF_ROUTE_ID)
-            updated_data[CONF_ROUTE_SHORT_NAME] = merged_routes[0].get(CONF_ROUTE_SHORT_NAME)
-            updated_data[CONF_ROUTE_LONG_NAME] = merged_routes[0].get(CONF_ROUTE_LONG_NAME)
-            updated_data[CONF_ROUTE_DESC] = merged_routes[0].get(CONF_ROUTE_DESC, "")
+            updated_data[CONF_ROUTES] = merged
+            updated_data[CONF_ROUTE_ID] = merged[0].get(CONF_ROUTE_ID)
+            updated_data[CONF_ROUTE_SHORT_NAME] = merged[0].get(CONF_ROUTE_SHORT_NAME)
+            updated_data[CONF_ROUTE_LONG_NAME] = merged[0].get(CONF_ROUTE_LONG_NAME)
+            updated_data[CONF_ROUTE_DESC] = merged[0].get(CONF_ROUTE_DESC, "")
             title = TRANSPORTATION_TYPES.get(int(leader.data.get(CONF_TRANSPORTATION_TYPE, -1)), leader.title)
             if updated_data != leader.data or title != leader.title:
                 hass.config_entries.async_update_entry(leader, data=updated_data, title=title)
@@ -92,8 +61,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return False
 
         # Leader setup should use merged routes immediately, even before reloads.
-        if merged_routes:
-            routes = merged_routes
+        if merged:
+            routes = merged
 
     session = async_get_clientsession(hass)
     api_client = MetlinkApiClient(
@@ -125,17 +94,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Build geometry from installed routes only, unioned across all train
         # entries sharing this API key.
-        train_entries = [
-            e
-            for e in hass.config_entries.async_entries(DOMAIN)
-            if e.data.get(CONF_API_KEY) == entry.data.get(CONF_API_KEY)
-            and int(e.data.get(CONF_TRANSPORTATION_TYPE, -1)) == TRAIN_ROUTE_TYPE
-        ]
+        train_entries = same_mode_entries(hass, entry.data.get(CONF_API_KEY), TRAIN_ROUTE_TYPE)
         if not train_entries:
             train_entries = [entry]
 
         for train_entry in train_entries:
-            for route in _entry_routes(train_entry):
+            for route in entry_routes(train_entry):
                 route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
                 if not route_id or route_id in seen_route_ids:
                     continue
