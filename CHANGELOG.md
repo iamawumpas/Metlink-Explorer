@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.13] - 2026-04-09
+
+### Fix - Train geometry route enumeration from installed routes
+
+- Train geometry collection now uses the union of installed train routes across matching config entries (same API key + mode).
+- Geometry route scope remains installed-routes-only and no longer expands to all GTFS train routes.
+- Per-line geometry sensors now enumerate from geometry feature payloads to reflect installed route coverage.
+
 ## [0.4.12] - 2026-04-09
 
 ### Fix - GTFS shapes collection uses required shape_id query

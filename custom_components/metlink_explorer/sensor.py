@@ -96,15 +96,40 @@ async def async_setup_entry(
                         transportation_name,
                     )
                 )
-                for route in routes:
-                    route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
-                    if not route_id:
-                        continue
+                line_routes: list[tuple[str, str]] = []
+                seen_route_ids: set[str] = set()
+
+                geometry_data = geometry_coordinator.data if isinstance(geometry_coordinator.data, dict) else {}
+                geometry_features = geometry_data.get("features", []) if isinstance(geometry_data, dict) else []
+                if isinstance(geometry_features, list):
+                    for feature in geometry_features:
+                        if not isinstance(feature, dict):
+                            continue
+                        props = feature.get("properties", {})
+                        if not isinstance(props, dict):
+                            continue
+                        route_id = str(props.get("route_id", "")).strip()
+                        if not route_id or route_id in seen_route_ids:
+                            continue
+                        seen_route_ids.add(route_id)
+                        route_short_name = str(props.get("route_short_name") or route_id)
+                        line_routes.append((route_id, route_short_name))
+
+                if not line_routes:
+                    for route in routes:
+                        route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
+                        if not route_id or route_id in seen_route_ids:
+                            continue
+                        seen_route_ids.add(route_id)
+                        route_short_name = str(route.get(CONF_ROUTE_SHORT_NAME) or route_id)
+                        line_routes.append((route_id, route_short_name))
+
+                for route_id, route_short_name in line_routes:
                     entities.append(
                         MetlinkTrainLineGeometrySensor(
                             geometry_coordinator,
                             route_id=route_id,
-                            route_short_name=str(route.get(CONF_ROUTE_SHORT_NAME) or route_id),
+                            route_short_name=route_short_name,
                         )
                     )
 
@@ -239,7 +264,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.12",
+            "sw_version": "0.4.13",
         }
 
     @property
@@ -333,7 +358,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.12",
+            "sw_version": "0.4.13",
         }
 
     @property

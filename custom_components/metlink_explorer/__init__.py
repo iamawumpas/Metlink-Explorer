@@ -111,11 +111,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     if int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1)) == TRAIN_ROUTE_TYPE:
+        geometry_route_ids: list[str] = []
+        seen_route_ids: set[str] = set()
+
+        # Build geometry from installed routes only, unioned across all train
+        # entries sharing this API key.
+        train_entries = [
+            e
+            for e in hass.config_entries.async_entries(DOMAIN)
+            if e.data.get(CONF_API_KEY) == entry.data.get(CONF_API_KEY)
+            and int(e.data.get(CONF_TRANSPORTATION_TYPE, -1)) == TRAIN_ROUTE_TYPE
+        ]
+        if not train_entries:
+            train_entries = [entry]
+
+        for train_entry in train_entries:
+            for route in _entry_routes(train_entry):
+                route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
+                if not route_id or route_id in seen_route_ids:
+                    continue
+                seen_route_ids.add(route_id)
+                geometry_route_ids.append(route_id)
+
+        if not geometry_route_ids:
+            geometry_route_ids = [
+                str(route.get(CONF_ROUTE_ID))
+                for route in routes
+                if route.get(CONF_ROUTE_ID)
+            ]
+
         geometry_coordinator = MetlinkRouteGeometryCoordinator(
             hass,
             api_client,
             mode_key=TRAIN_GEOMETRY_SENSOR_KEY,
-            route_ids=[str(route.get(CONF_ROUTE_ID)) for route in routes if route.get(CONF_ROUTE_ID)],
+            route_ids=geometry_route_ids,
         )
         await geometry_coordinator.async_config_entry_first_refresh()
         hass.data[DOMAIN][entry.entry_id]["geometry_coordinator"] = geometry_coordinator
