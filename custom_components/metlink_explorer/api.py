@@ -275,7 +275,10 @@ class MetlinkApiClient:
             raise
 
     async def get_route_geojson_feature(self, route_id: str) -> dict[str, Any] | None:
-        """Build a GeoJSON feature for a single route from GTFS shapes."""
+        """Build a GeoJSON feature for a single route.
+
+        Prefer GTFS shapes when available; fall back to stop-pattern geometry.
+        """
         route_id = str(route_id)
         now = datetime.now()
         cached = self._route_geometry_cache.get(route_id)
@@ -296,40 +299,39 @@ class MetlinkApiClient:
             shape_id_set.add(shape_id)
             shape_ids.append(shape_id)
 
-        if not shape_ids:
-            self._route_geometry_cache[route_id] = (now, None)
-            return None
-
-        shapes = await self.get_shapes()
-        points_by_shape: dict[str, list[tuple[int, float, float]]] = {shape_id: [] for shape_id in shape_ids}
-        for row in shapes:
-            if not isinstance(row, dict):
-                continue
-
-            shape_id = str(row.get("shape_id", "")).strip()
-            if shape_id not in points_by_shape:
-                continue
-
-            try:
-                lat = float(row.get("shape_pt_lat"))
-                lon = float(row.get("shape_pt_lon"))
-                seq = int(row.get("shape_pt_sequence", 0) or 0)
-            except (TypeError, ValueError):
-                continue
-
-            points_by_shape[shape_id].append((seq, lat, lon))
-
         lines: list[list[list[float]]] = []
-        for shape_id in shape_ids:
-            rows = sorted(points_by_shape.get(shape_id, []), key=lambda item: item[0])
-            coords: list[list[float]] = []
-            for _, lat, lon in rows:
-                point = [lon, lat]
-                if not coords or coords[-1] != point:
-                    coords.append(point)
-            if len(coords) >= 2:
-                lines.append(coords)
+        if shape_ids:
+            shapes = await self.get_shapes()
+            points_by_shape: dict[str, list[tuple[int, float, float]]] = {shape_id: [] for shape_id in shape_ids}
+            for row in shapes:
+                if not isinstance(row, dict):
+                    continue
 
+                shape_id = str(row.get("shape_id", "")).strip()
+                if shape_id not in points_by_shape:
+                    continue
+
+                try:
+                    lat = float(row.get("shape_pt_lat"))
+                    lon = float(row.get("shape_pt_lon"))
+                    seq = int(row.get("shape_pt_sequence", 0) or 0)
+                except (TypeError, ValueError):
+                    continue
+
+                points_by_shape[shape_id].append((seq, lat, lon))
+
+            for shape_id in shape_ids:
+                rows = sorted(points_by_shape.get(shape_id, []), key=lambda item: item[0])
+                coords: list[list[float]] = []
+                for _, lat, lon in rows:
+                    point = [lon, lat]
+                    if not coords or coords[-1] != point:
+                        coords.append(point)
+                if len(coords) >= 2:
+                    lines.append(coords)
+
+        if not lines:
+            lines = await self._fallback_route_lines_from_stop_patterns(route_id)
         if not lines:
             self._route_geometry_cache[route_id] = (now, None)
             return None
@@ -350,6 +352,33 @@ class MetlinkApiClient:
 
         self._route_geometry_cache[route_id] = (now, feature)
         return feature
+
+    async def _fallback_route_lines_from_stop_patterns(self, route_id: str) -> list[list[list[float]]]:
+        """Build route geometry lines from direction stop patterns as fallback."""
+        lines: list[list[list[float]]] = []
+        for direction_id in (0, 1):
+            try:
+                stops = await self.get_route_stop_pattern(route_id, direction_id)
+            except MetlinkApiError:
+                continue
+
+            coords: list[list[float]] = []
+            for stop in stops or []:
+                if not isinstance(stop, dict):
+                    continue
+                lat = stop.get("stop_lat")
+                lon = stop.get("stop_lon")
+                try:
+                    point = [float(lon), float(lat)]
+                except (TypeError, ValueError):
+                    continue
+                if not coords or coords[-1] != point:
+                    coords.append(point)
+
+            if len(coords) >= 2:
+                lines.append(coords)
+
+        return lines
 
     async def get_mode_routes_geojson(self, route_ids: list[str]) -> dict[str, Any]:
         """Build a GeoJSON feature collection for the provided mode routes."""

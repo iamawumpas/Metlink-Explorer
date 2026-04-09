@@ -196,7 +196,7 @@ class MetlinkVehicleTrackerEntity(CoordinatorEntity, TrackerEntity):
             "name": self._attr_name,
             "manufacturer": "Metlink",
             "model": f"{transportation_name} Vehicle",
-            "sw_version": "0.4.10",
+            "sw_version": "0.4.11",
         }
 
     def _current(self) -> dict[str, Any] | None:

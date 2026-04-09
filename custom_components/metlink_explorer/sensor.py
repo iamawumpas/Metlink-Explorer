@@ -239,7 +239,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.10",
+            "sw_version": "0.4.11",
         }
 
     @property
@@ -333,7 +333,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.10",
+            "sw_version": "0.4.11",
         }
 
     @property
