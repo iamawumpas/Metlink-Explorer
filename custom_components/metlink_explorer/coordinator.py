@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MetlinkApiClient, MetlinkApiError
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, TRAIN_GTFS_CACHE_TTL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,5 +69,35 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "timetable_rows": timetable_rows,
                 "timeline_by_direction": timeline_by_direction,
             }
+        except MetlinkApiError as exc:
+            raise UpdateFailed(f"Error communicating with API: {exc}") from exc
+
+
+class MetlinkRouteGeometryCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Fetch and hold mode route geometry as GeoJSON."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        api_client: MetlinkApiClient,
+        mode_key: str,
+        route_ids: list[str],
+    ) -> None:
+        """Initialize mode route geometry coordinator."""
+        self.api_client = api_client
+        self.mode_key = mode_key
+        self.route_ids = [str(route_id) for route_id in route_ids if route_id]
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_{mode_key}_geometry",
+            update_interval=timedelta(seconds=TRAIN_GTFS_CACHE_TTL_SECONDS),
+        )
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Update mode geometry from static GTFS shapes."""
+        try:
+            return await self.api_client.get_mode_routes_geojson(self.route_ids)
         except MetlinkApiError as exc:
             raise UpdateFailed(f"Error communicating with API: {exc}") from exc

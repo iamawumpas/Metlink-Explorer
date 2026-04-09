@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.9] - 2026-04-09
+
+### Feature - Train route geometry for map overlays
+
+- Added GTFS shapes support and cached route geometry extraction as GeoJSON features.
+- Added a train route geometry coordinator with weekly refresh cadence.
+- Added a train route geometry sensor exposing GeoJSON feature collections for custom map overlays.
+
 ## [0.4.8] - 2026-04-09
 
 ### Feature - Weekly train GTFS static cache

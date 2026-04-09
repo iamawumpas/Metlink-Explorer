@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import MetlinkApiClient
-from .coordinator import MetlinkDataUpdateCoordinator
+from .coordinator import MetlinkDataUpdateCoordinator, MetlinkRouteGeometryCoordinator
 from .const import (
     CONF_API_KEY,
     CONF_ROUTE_DESC,
@@ -17,6 +17,8 @@ from .const import (
     CONF_ROUTE_SHORT_NAME,
     CONF_ROUTES,
     CONF_TRANSPORTATION_TYPE,
+    TRAIN_GEOMETRY_SENSOR_KEY,
+    TRAIN_ROUTE_TYPE,
     TRANSPORTATION_TYPES,
 )
 from .const import DOMAIN
@@ -107,6 +109,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": next(iter(coordinators.values())) if coordinators else None,
         "routes": routes,
     }
+
+    if int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1)) == TRAIN_ROUTE_TYPE:
+        geometry_coordinator = MetlinkRouteGeometryCoordinator(
+            hass,
+            api_client,
+            mode_key=TRAIN_GEOMETRY_SENSOR_KEY,
+            route_ids=[str(route.get(CONF_ROUTE_ID)) for route in routes if route.get(CONF_ROUTE_ID)],
+        )
+        await geometry_coordinator.async_config_entry_first_refresh()
+        hass.data[DOMAIN][entry.entry_id]["geometry_coordinator"] = geometry_coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

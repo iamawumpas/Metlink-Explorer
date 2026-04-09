@@ -22,6 +22,7 @@ from .const import (
     CONF_TRANSPORTATION_TYPE,
     DEFAULT_ACTIVE_DIRECTION,
     DOMAIN,
+    TRAIN_ROUTE_TYPE,
     TRANSPORTATION_TYPES,
 )
 
@@ -85,6 +86,16 @@ async def async_setup_entry(
                 transportation_name,
             )
         )
+
+        if int(transportation_type) == TRAIN_ROUTE_TYPE:
+            geometry_coordinator = runtime.get("geometry_coordinator")
+            if geometry_coordinator is not None:
+                entities.append(
+                    MetlinkTrainRouteGeometrySensor(
+                        geometry_coordinator,
+                        transportation_name,
+                    )
+                )
 
     async_add_entities(entities)
 
@@ -204,7 +215,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.8",
+            "sw_version": "0.4.9",
         }
 
     @property
@@ -298,7 +309,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.8",
+            "sw_version": "0.4.9",
         }
 
     @property
@@ -555,3 +566,42 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
             "School Bus": "mdi:bus-school",
         }
         return transportation_icons.get(self._transportation_name, "mdi:format-list-bulleted-square")
+
+
+class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
+    """Expose train route geometries as GeoJSON for map overlays."""
+
+    def __init__(self, coordinator, transportation_name: str) -> None:
+        """Initialize train route geometry sensor."""
+        super().__init__(coordinator)
+        self._transportation_name = transportation_name
+        self._attr_name = f"{transportation_name} :: Route Geometry"
+        self._attr_unique_id = f"{DOMAIN}_{transportation_name.lower()}_route_geometry"
+        self._attr_native_unit_of_measurement = "routes"
+        self._attr_entity_registry_enabled_default = True
+        self._attr_icon = "mdi:map-marker-path"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return number of route features in GeoJSON payload."""
+        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
+        return int(data.get("feature_count", 0))
+
+    @property
+    def available(self) -> bool:
+        """Return if geometry payload is available."""
+        return self.coordinator.last_update_success
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return GeoJSON data and summary attributes."""
+        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
+        return {
+            "transportation_type": self._transportation_name,
+            "geojson": {
+                "type": data.get("type", "FeatureCollection"),
+                "features": data.get("features", []),
+            },
+            "route_count": data.get("route_count", 0),
+            "feature_count": data.get("feature_count", 0),
+        }

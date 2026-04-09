@@ -48,8 +48,11 @@ class MetlinkApiClient:
         self._stops_cache_ts = None
         self._calendar_dates_cache = None
         self._calendar_dates_cache_ts = None
+        self._shapes_cache = None
+        self._shapes_cache_ts = None
         self._stop_pattern_cache = {}
         self._route_timetable_cache = {}
+        self._route_geometry_cache = {}
         self._cache_ttl_seconds = DEFAULT_GTFS_CACHE_TTL_SECONDS
 
     @property
@@ -250,6 +253,121 @@ class MetlinkApiClient:
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch calendar_dates: %s", exc)
             raise
+
+    async def get_shapes(self) -> list[dict[str, Any]]:
+        """Get GTFS shapes used to render route geometry."""
+        try:
+            now = datetime.now()
+            if (
+                self._shapes_cache is not None
+                and self._shapes_cache_ts
+                and (now - self._shapes_cache_ts).total_seconds() < self._static_cache_ttl_seconds
+            ):
+                return self._shapes_cache
+
+            data = await self._request(API_ENDPOINTS["shapes"])
+            if isinstance(data, list):
+                self._shapes_cache = data
+                self._shapes_cache_ts = now
+            return data if isinstance(data, list) else []
+        except MetlinkApiError as exc:
+            _LOGGER.error("Failed to fetch shapes: %s", exc)
+            raise
+
+    async def get_route_geojson_feature(self, route_id: str) -> dict[str, Any] | None:
+        """Build a GeoJSON feature for a single route from GTFS shapes."""
+        route_id = str(route_id)
+        now = datetime.now()
+        cached = self._route_geometry_cache.get(route_id)
+        if cached and (now - cached[0]).total_seconds() < self._static_cache_ttl_seconds:
+            return cached[1]
+
+        trips = await self.get_trips_for_route(route_id)
+        if not trips:
+            self._route_geometry_cache[route_id] = (now, None)
+            return None
+
+        shape_ids: list[str] = []
+        shape_id_set: set[str] = set()
+        for trip in trips:
+            shape_id = str(trip.get("shape_id", "")).strip()
+            if not shape_id or shape_id in shape_id_set:
+                continue
+            shape_id_set.add(shape_id)
+            shape_ids.append(shape_id)
+
+        if not shape_ids:
+            self._route_geometry_cache[route_id] = (now, None)
+            return None
+
+        shapes = await self.get_shapes()
+        points_by_shape: dict[str, list[tuple[int, float, float]]] = {shape_id: [] for shape_id in shape_ids}
+        for row in shapes:
+            if not isinstance(row, dict):
+                continue
+
+            shape_id = str(row.get("shape_id", "")).strip()
+            if shape_id not in points_by_shape:
+                continue
+
+            try:
+                lat = float(row.get("shape_pt_lat"))
+                lon = float(row.get("shape_pt_lon"))
+                seq = int(row.get("shape_pt_sequence", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+
+            points_by_shape[shape_id].append((seq, lat, lon))
+
+        lines: list[list[list[float]]] = []
+        for shape_id in shape_ids:
+            rows = sorted(points_by_shape.get(shape_id, []), key=lambda item: item[0])
+            coords: list[list[float]] = []
+            for _, lat, lon in rows:
+                point = [lon, lat]
+                if not coords or coords[-1] != point:
+                    coords.append(point)
+            if len(coords) >= 2:
+                lines.append(coords)
+
+        if not lines:
+            self._route_geometry_cache[route_id] = (now, None)
+            return None
+
+        route_short_name = await self._get_route_short_name(route_id)
+        feature = {
+            "type": "Feature",
+            "properties": {
+                "route_id": route_id,
+                "route_short_name": route_short_name,
+                "shape_count": len(lines),
+            },
+            "geometry": {
+                "type": "MultiLineString" if len(lines) > 1 else "LineString",
+                "coordinates": lines if len(lines) > 1 else lines[0],
+            },
+        }
+
+        self._route_geometry_cache[route_id] = (now, feature)
+        return feature
+
+    async def get_mode_routes_geojson(self, route_ids: list[str]) -> dict[str, Any]:
+        """Build a GeoJSON feature collection for the provided mode routes."""
+        features: list[dict[str, Any]] = []
+        for route_id in route_ids:
+            try:
+                feature = await self.get_route_geojson_feature(str(route_id))
+            except MetlinkApiError:
+                feature = None
+            if feature:
+                features.append(feature)
+
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+            "route_count": len(route_ids),
+            "feature_count": len(features),
+        }
 
     async def get_route_timetable_rows(
         self,

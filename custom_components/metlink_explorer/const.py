@@ -10,6 +10,7 @@ API_ENDPOINTS = {
     "stops": "/gtfs/stops",
     "trips": "/gtfs/trips",
     "stop_times": "/gtfs/stop_times",  # NEW: Needed for stop sequences
+    "shapes": "/gtfs/shapes",
     "calendar_dates": "/gtfs/calendar_dates",
     "vehicle_positions": "/gtfs-rt/vehiclepositions",
     "trip_updates": "/gtfs-rt/tripupdates",
@@ -45,3 +46,4 @@ REQUEST_TIMEOUT = 15  # Increased timeout for complex requests
 DEFAULT_ACTIVE_DIRECTION = 0
 DEFAULT_GTFS_CACHE_TTL_SECONDS = 300
 TRAIN_GTFS_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
+TRAIN_GEOMETRY_SENSOR_KEY = "train_route_geometry"
