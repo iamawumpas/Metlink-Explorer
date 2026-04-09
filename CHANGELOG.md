@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6] - 2026-04-09
+
+### Fix - Departure board terminal-stop handling
+
+- Departure board row generation now uses `departure_time` only (not `arrival_time` fallback).
+- Excludes terminal-stop rows from departure board payloads to prevent entries like "Wellington Station -> Wellington Station".
+- Improves train board output where terminating services previously appeared as departures from their final stop.
+
 ## [0.4.5] - 2026-04-09
 
 ### Fix - Departures board update cycle behavior

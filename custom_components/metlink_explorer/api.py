@@ -301,8 +301,12 @@ class MetlinkApiClient:
 
             for st in stop_times:
                 stop_id = str(st.get("stop_id"))
-                dep_time = st.get("departure_time") or st.get("arrival_time")
+                # Departure boards should only include true departure events.
+                dep_time = st.get("departure_time")
                 if not dep_time:
+                    continue
+                # Exclude terminal-stop rows where service ends at this stop.
+                if stop_id == destination_stop_id:
                     continue
                 rows.append(
                     {
