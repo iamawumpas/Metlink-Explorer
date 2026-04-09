@@ -83,7 +83,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return False
 
     session = async_get_clientsession(hass)
-    api_client = MetlinkApiClient(entry.data[CONF_API_KEY], session)
+    api_client = MetlinkApiClient(
+        entry.data[CONF_API_KEY],
+        session,
+        transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
+    )
 
     routes = _entry_routes(entry)
 

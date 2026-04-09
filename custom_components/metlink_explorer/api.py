@@ -9,7 +9,14 @@ from typing import Any
 import aiohttp
 import async_timeout
 
-from .const import BASE_URL, API_ENDPOINTS, REQUEST_TIMEOUT
+from .const import (
+    API_ENDPOINTS,
+    BASE_URL,
+    DEFAULT_GTFS_CACHE_TTL_SECONDS,
+    REQUEST_TIMEOUT,
+    TRAIN_GTFS_CACHE_TTL_SECONDS,
+    TRAIN_ROUTE_TYPE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,11 +28,17 @@ class MetlinkApiError(Exception):
 class MetlinkApiClient:
     """Client for interacting with Metlink Open Data API."""
 
-    def __init__(self, api_key: str, session: aiohttp.ClientSession) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        session: aiohttp.ClientSession,
+        transportation_type: int | None = None,
+    ) -> None:
         """Initialize the API client."""
         self._api_key = api_key
         self._session = session
         self._base_url = BASE_URL
+        self._transportation_type = int(transportation_type) if transportation_type is not None else None
         # Simple caches to reduce repeated static lookups
         self._route_short_name_cache = {}
         # TTL caches for static endpoints
@@ -37,7 +50,18 @@ class MetlinkApiClient:
         self._calendar_dates_cache_ts = None
         self._stop_pattern_cache = {}
         self._route_timetable_cache = {}
-        self._cache_ttl_seconds = 300
+        self._cache_ttl_seconds = DEFAULT_GTFS_CACHE_TTL_SECONDS
+
+    @property
+    def _static_cache_ttl_seconds(self) -> int:
+        """Return cache TTL for static GTFS datasets.
+
+        Train static GTFS data changes infrequently, so use a weekly TTL to
+        reduce repeated API load.
+        """
+        if self._transportation_type == TRAIN_ROUTE_TYPE:
+            return TRAIN_GTFS_CACHE_TTL_SECONDS
+        return self._cache_ttl_seconds
 
     async def _request(self, endpoint: str) -> dict[str, Any]:
         """Make a request to the API."""
@@ -69,7 +93,7 @@ class MetlinkApiClient:
         """Get all routes."""
         try:
             now = datetime.now()
-            if self._routes_cache is not None and self._routes_cache_ts and (now - self._routes_cache_ts).total_seconds() < self._cache_ttl_seconds:
+            if self._routes_cache is not None and self._routes_cache_ts and (now - self._routes_cache_ts).total_seconds() < self._static_cache_ttl_seconds:
                 return self._routes_cache
             data = await self._request(API_ENDPOINTS["routes"])
             if isinstance(data, list):
@@ -135,7 +159,7 @@ class MetlinkApiClient:
             cache_key = (str(route_id), int(direction_id))
             now = datetime.now()
             cached = self._stop_pattern_cache.get(cache_key)
-            if cached and (now - cached[0]).total_seconds() < self._cache_ttl_seconds:
+            if cached and (now - cached[0]).total_seconds() < self._static_cache_ttl_seconds:
                 return cached[1]
             
             # Get trips for this route and direction
@@ -196,7 +220,7 @@ class MetlinkApiClient:
         """Get all stops."""
         try:
             now = datetime.now()
-            if self._stops_cache is not None and self._stops_cache_ts and (now - self._stops_cache_ts).total_seconds() < self._cache_ttl_seconds:
+            if self._stops_cache is not None and self._stops_cache_ts and (now - self._stops_cache_ts).total_seconds() < self._static_cache_ttl_seconds:
                 return self._stops_cache
             data = await self._request(API_ENDPOINTS["stops"])
             if isinstance(data, list):
@@ -214,7 +238,7 @@ class MetlinkApiClient:
             if (
                 self._calendar_dates_cache is not None
                 and self._calendar_dates_cache_ts
-                and (now - self._calendar_dates_cache_ts).total_seconds() < self._cache_ttl_seconds
+                and (now - self._calendar_dates_cache_ts).total_seconds() < self._static_cache_ttl_seconds
             ):
                 return self._calendar_dates_cache
 
@@ -243,7 +267,7 @@ class MetlinkApiClient:
 
         if cache_key in self._route_timetable_cache:
             ts, cached_rows = self._route_timetable_cache[cache_key]
-            if (now - ts).total_seconds() < self._cache_ttl_seconds:
+            if (now - ts).total_seconds() < self._static_cache_ttl_seconds:
                 base_rows = [row.copy() for row in cached_rows]
             else:
                 base_rows = await self._build_route_timetable_base_rows(str(route_id), date_str)

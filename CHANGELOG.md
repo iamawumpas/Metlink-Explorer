@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.8] - 2026-04-09
+
+### Feature - Weekly train GTFS static cache
+
+- Added a train-specific static GTFS cache policy with a 7-day TTL.
+- Train static datasets now cache weekly for routes, stops, calendar dates, stop patterns, and timetable base rows.
+- Realtime feeds remain unchanged and continue polling live.
+
 ## [0.4.7] - 2026-04-09
 
 ### Feature - Live vehicle trackers for map cards

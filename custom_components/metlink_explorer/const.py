@@ -18,8 +18,10 @@ API_ENDPOINTS = {
 }
 
 # Transportation Types (GTFS route_type mapping)
+TRAIN_ROUTE_TYPE = 2
+
 TRANSPORTATION_TYPES = {
-    2: "Train",
+    TRAIN_ROUTE_TYPE: "Train",
     3: "Bus", 
     4: "Ferry",
     5: "Cable Car",
@@ -41,3 +43,5 @@ CONF_LEGACY_DIRECTION_ENTITIES = "legacy_direction_entities"
 DEFAULT_SCAN_INTERVAL = 60  # Increased to 60 seconds due to more API calls
 REQUEST_TIMEOUT = 15  # Increased timeout for complex requests
 DEFAULT_ACTIVE_DIRECTION = 0
+DEFAULT_GTFS_CACHE_TTL_SECONDS = 300
+TRAIN_GTFS_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
