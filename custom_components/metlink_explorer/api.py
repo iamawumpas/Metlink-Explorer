@@ -5,6 +5,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 
 import aiohttp
 import async_timeout
@@ -48,8 +49,7 @@ class MetlinkApiClient:
         self._stops_cache_ts = None
         self._calendar_dates_cache = None
         self._calendar_dates_cache_ts = None
-        self._shapes_cache = None
-        self._shapes_cache_ts = None
+        self._shapes_cache_by_id: dict[str, tuple[datetime, list[dict[str, Any]]]] = {}
         self._stop_pattern_cache = {}
         self._route_timetable_cache = {}
         self._route_geometry_cache = {}
@@ -254,24 +254,25 @@ class MetlinkApiClient:
             _LOGGER.error("Failed to fetch calendar_dates: %s", exc)
             raise
 
-    async def get_shapes(self) -> list[dict[str, Any]]:
-        """Get GTFS shapes used to render route geometry."""
+    async def get_shapes(self, shape_id: str) -> list[dict[str, Any]]:
+        """Get GTFS shape points for a specific shape_id."""
         try:
-            now = datetime.now()
-            if (
-                self._shapes_cache is not None
-                and self._shapes_cache_ts
-                and (now - self._shapes_cache_ts).total_seconds() < self._static_cache_ttl_seconds
-            ):
-                return self._shapes_cache
+            shape_id = str(shape_id).strip()
+            if not shape_id:
+                return []
 
-            data = await self._request(API_ENDPOINTS["shapes"])
-            if isinstance(data, list):
-                self._shapes_cache = data
-                self._shapes_cache_ts = now
-            return data if isinstance(data, list) else []
+            now = datetime.now()
+            cached = self._shapes_cache_by_id.get(shape_id)
+            if cached and (now - cached[0]).total_seconds() < self._static_cache_ttl_seconds:
+                return cached[1]
+
+            endpoint = f"{API_ENDPOINTS['shapes']}?shape_id={quote(shape_id, safe='')}"
+            data = await self._request(endpoint)
+            rows = data if isinstance(data, list) else []
+            self._shapes_cache_by_id[shape_id] = (now, rows)
+            return rows
         except MetlinkApiError as exc:
-            _LOGGER.error("Failed to fetch shapes: %s", exc)
+            _LOGGER.error("Failed to fetch shapes for shape_id %s: %s", shape_id, exc)
             raise
 
     async def get_route_geojson_feature(self, route_id: str) -> dict[str, Any] | None:
@@ -301,27 +302,21 @@ class MetlinkApiClient:
 
         lines: list[list[list[float]]] = []
         if shape_ids:
-            shapes = await self.get_shapes()
-            points_by_shape: dict[str, list[tuple[int, float, float]]] = {shape_id: [] for shape_id in shape_ids}
-            for row in shapes:
-                if not isinstance(row, dict):
-                    continue
-
-                shape_id = str(row.get("shape_id", "")).strip()
-                if shape_id not in points_by_shape:
-                    continue
-
-                try:
-                    lat = float(row.get("shape_pt_lat"))
-                    lon = float(row.get("shape_pt_lon"))
-                    seq = int(row.get("shape_pt_sequence", 0) or 0)
-                except (TypeError, ValueError):
-                    continue
-
-                points_by_shape[shape_id].append((seq, lat, lon))
-
             for shape_id in shape_ids:
-                rows = sorted(points_by_shape.get(shape_id, []), key=lambda item: item[0])
+                shape_rows = await self.get_shapes(shape_id)
+                points: list[tuple[int, float, float]] = []
+                for row in shape_rows:
+                    if not isinstance(row, dict):
+                        continue
+                    try:
+                        lat = float(row.get("shape_pt_lat"))
+                        lon = float(row.get("shape_pt_lon"))
+                        seq = int(row.get("shape_pt_sequence", 0) or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    points.append((seq, lat, lon))
+
+                rows = sorted(points, key=lambda item: item[0])
                 coords: list[list[float]] = []
                 for _, lat, lon in rows:
                     point = [lon, lat]

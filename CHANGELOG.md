@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.12] - 2026-04-09
+
+### Fix - GTFS shapes collection uses required shape_id query
+
+- Updated GTFS shapes collection to query `/gtfs/shapes?shape_id=...` per shape, matching API requirements.
+- Added URL-encoding for shape IDs and per-shape cache entries for static geometry reuse.
+- Resolved empty route-geometry feature payloads caused by invalid bulk shapes requests.
+
 ## [0.4.11] - 2026-04-09
 
 ### Fix - Route geometry fallback when GTFS shapes are missing
