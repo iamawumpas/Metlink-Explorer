@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.16] - 2026-04-09
+
+### Fix - Train geometry entities always created when coordinator exists
+
+- Train geometry sensor creation is no longer gated by mode-leader checks.
+- Per-line and aggregate train geometry entities now initialize whenever a train entry has a geometry coordinator.
+- Mode-leader detection now normalizes transportation type comparison as integers to avoid string/int mismatch edge cases.
+
 ## [0.4.15] - 2026-04-09
 
 ### Fix - Train startup route consolidation and coordinator initialization

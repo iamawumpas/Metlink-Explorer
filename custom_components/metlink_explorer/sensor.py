@@ -87,51 +87,51 @@ async def async_setup_entry(
             )
         )
 
-        if int(transportation_type) == TRAIN_ROUTE_TYPE:
-            geometry_coordinator = runtime.get("geometry_coordinator")
-            if geometry_coordinator is not None:
-                entities.append(
-                    MetlinkTrainRouteGeometrySensor(
-                        geometry_coordinator,
-                        transportation_name,
-                    )
+    if int(transportation_type) == TRAIN_ROUTE_TYPE:
+        geometry_coordinator = runtime.get("geometry_coordinator")
+        if geometry_coordinator is not None:
+            entities.append(
+                MetlinkTrainRouteGeometrySensor(
+                    geometry_coordinator,
+                    transportation_name,
                 )
-                line_routes: list[tuple[str, str]] = []
-                seen_route_ids: set[str] = set()
+            )
+            line_routes: list[tuple[str, str]] = []
+            seen_route_ids: set[str] = set()
 
-                # Create one per-line entity for every configured train route.
-                for route in routes:
-                    route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
+            # Create one per-line entity for every configured train route.
+            for route in routes:
+                route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
+                if not route_id or route_id in seen_route_ids:
+                    continue
+                seen_route_ids.add(route_id)
+                route_short_name = str(route.get(CONF_ROUTE_SHORT_NAME) or route_id)
+                line_routes.append((route_id, route_short_name))
+
+            geometry_data = geometry_coordinator.data if isinstance(geometry_coordinator.data, dict) else {}
+            geometry_features = geometry_data.get("features", []) if isinstance(geometry_data, dict) else []
+            if isinstance(geometry_features, list):
+                for feature in geometry_features:
+                    if not isinstance(feature, dict):
+                        continue
+                    props = feature.get("properties", {})
+                    if not isinstance(props, dict):
+                        continue
+                    route_id = str(props.get("route_id", "")).strip()
                     if not route_id or route_id in seen_route_ids:
                         continue
                     seen_route_ids.add(route_id)
-                    route_short_name = str(route.get(CONF_ROUTE_SHORT_NAME) or route_id)
+                    route_short_name = str(props.get("route_short_name") or route_id)
                     line_routes.append((route_id, route_short_name))
 
-                geometry_data = geometry_coordinator.data if isinstance(geometry_coordinator.data, dict) else {}
-                geometry_features = geometry_data.get("features", []) if isinstance(geometry_data, dict) else []
-                if isinstance(geometry_features, list):
-                    for feature in geometry_features:
-                        if not isinstance(feature, dict):
-                            continue
-                        props = feature.get("properties", {})
-                        if not isinstance(props, dict):
-                            continue
-                        route_id = str(props.get("route_id", "")).strip()
-                        if not route_id or route_id in seen_route_ids:
-                            continue
-                        seen_route_ids.add(route_id)
-                        route_short_name = str(props.get("route_short_name") or route_id)
-                        line_routes.append((route_id, route_short_name))
-
-                for route_id, route_short_name in line_routes:
-                    entities.append(
-                        MetlinkTrainLineGeometrySensor(
-                            geometry_coordinator,
-                            route_id=route_id,
-                            route_short_name=route_short_name,
-                        )
+            for route_id, route_short_name in line_routes:
+                entities.append(
+                    MetlinkTrainLineGeometrySensor(
+                        geometry_coordinator,
+                        route_id=route_id,
+                        route_short_name=route_short_name,
                     )
+                )
 
     async_add_entities(entities)
 
@@ -139,12 +139,12 @@ async def async_setup_entry(
 def _is_mode_leader(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Ensure only one board sensor is created per API key and transportation type."""
     api_key = config_entry.data.get(CONF_API_KEY)
-    transport_type = config_entry.data.get(CONF_TRANSPORTATION_TYPE)
+    transport_type = int(config_entry.data.get(CONF_TRANSPORTATION_TYPE, -1))
     same_group_entries = [
         entry.entry_id
         for entry in hass.config_entries.async_entries(DOMAIN)
         if entry.data.get(CONF_API_KEY) == api_key
-        and entry.data.get(CONF_TRANSPORTATION_TYPE) == transport_type
+        and int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1)) == transport_type
     ]
     if not same_group_entries:
         return True
@@ -264,7 +264,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.15",
+            "sw_version": "0.4.16",
         }
 
     @property
@@ -358,7 +358,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.15",
+            "sw_version": "0.4.16",
         }
 
     @property
