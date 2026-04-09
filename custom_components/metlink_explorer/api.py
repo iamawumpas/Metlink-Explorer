@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -21,6 +22,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 NEGATIVE_ROUTE_GEOMETRY_CACHE_TTL_SECONDS = 300
+TRAIN_OVERLAP_OFFSET_METERS = 10.0
 
 
 class MetlinkApiError(Exception):
@@ -425,12 +427,198 @@ class MetlinkApiClient:
             if feature:
                 features.append(feature)
 
+        if self._transportation_type == TRAIN_ROUTE_TYPE and features:
+            features = self._apply_train_overlap_offsets(features)
+
         return {
             "type": "FeatureCollection",
             "features": features,
             "route_count": len(route_ids),
             "feature_count": len(features),
         }
+
+    def _apply_train_overlap_offsets(self, features: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Apply point-level east/west offsets to overlapping train routes.
+
+        Offsets are applied only to coordinates shared by more than one route,
+        keeping single-line track sections on native coordinates.
+        """
+        point_routes: dict[tuple[float, float], set[str]] = {}
+
+        for feature in features:
+            props = feature.get("properties", {}) if isinstance(feature, dict) else {}
+            route_short_name = str((props or {}).get("route_short_name", "")).strip().upper()
+            if not route_short_name:
+                continue
+            for lon, lat in self._iter_feature_points(feature):
+                key = self._point_key(lon, lat)
+                point_routes.setdefault(key, set()).add(route_short_name)
+
+        adjusted_features: list[dict[str, Any]] = []
+        for feature in features:
+            if not isinstance(feature, dict):
+                adjusted_features.append(feature)
+                continue
+
+            props = feature.get("properties", {}) if isinstance(feature, dict) else {}
+            route_short_name = str((props or {}).get("route_short_name", "")).strip().upper()
+            if not route_short_name:
+                adjusted_features.append(feature)
+                continue
+
+            geometry = feature.get("geometry", {})
+            if not isinstance(geometry, dict):
+                adjusted_features.append(feature)
+                continue
+
+            geometry_type = geometry.get("type")
+            coordinates = geometry.get("coordinates")
+            if geometry_type == "LineString":
+                new_coords = self._offset_line_coords(coordinates, route_short_name, point_routes)
+            elif geometry_type == "MultiLineString":
+                new_coords = [
+                    self._offset_line_coords(line, route_short_name, point_routes)
+                    for line in (coordinates or [])
+                    if isinstance(line, list)
+                ]
+            else:
+                adjusted_features.append(feature)
+                continue
+
+            new_feature = {
+                **feature,
+                "geometry": {
+                    **geometry,
+                    "coordinates": new_coords,
+                },
+            }
+            adjusted_features.append(new_feature)
+
+        return adjusted_features
+
+    def _iter_feature_points(self, feature: dict[str, Any]) -> list[tuple[float, float]]:
+        """Return all (lon, lat) points from a GeoJSON feature geometry."""
+        geometry = feature.get("geometry", {})
+        if not isinstance(geometry, dict):
+            return []
+
+        geometry_type = geometry.get("type")
+        coordinates = geometry.get("coordinates")
+        points: list[tuple[float, float]] = []
+
+        if geometry_type == "LineString" and isinstance(coordinates, list):
+            for point in coordinates:
+                if not isinstance(point, list) or len(point) < 2:
+                    continue
+                try:
+                    points.append((float(point[0]), float(point[1])))
+                except (TypeError, ValueError):
+                    continue
+        elif geometry_type == "MultiLineString" and isinstance(coordinates, list):
+            for line in coordinates:
+                if not isinstance(line, list):
+                    continue
+                for point in line:
+                    if not isinstance(point, list) or len(point) < 2:
+                        continue
+                    try:
+                        points.append((float(point[0]), float(point[1])))
+                    except (TypeError, ValueError):
+                        continue
+
+        return points
+
+    def _offset_line_coords(
+        self,
+        coords: Any,
+        route_short_name: str,
+        point_routes: dict[tuple[float, float], set[str]],
+    ) -> list[list[float]]:
+        """Offset coordinates in a line based on overlap lane placement rules."""
+        if not isinstance(coords, list):
+            return []
+
+        shifted: list[list[float]] = []
+        for point in coords:
+            if not isinstance(point, list) or len(point) < 2:
+                continue
+
+            try:
+                lon = float(point[0])
+                lat = float(point[1])
+            except (TypeError, ValueError):
+                continue
+
+            key = self._point_key(lon, lat)
+            overlapping_routes = point_routes.get(key, set())
+            if len(overlapping_routes) <= 1:
+                shifted.append([lon, lat])
+                continue
+
+            lane_step = self._lane_step_for_route(route_short_name, overlapping_routes)
+            if lane_step == 0:
+                shifted.append([lon, lat])
+                continue
+
+            meters_per_lon_degree = 111320.0 * max(0.2, math.cos(math.radians(lat)))
+            lon_offset = (TRAIN_OVERLAP_OFFSET_METERS * lane_step) / meters_per_lon_degree
+            shifted.append([lon + lon_offset, lat])
+
+        return shifted
+
+    def _lane_step_for_route(self, route_short_name: str, overlapping_routes: set[str]) -> int:
+        """Return lane step where negative is west and positive is east."""
+        name = route_short_name.upper()
+        routes = {r.upper() for r in overlapping_routes}
+
+        steps: dict[str, int] = {}
+        mel_present = "MEL" in routes
+        hvl_present = "HVL" in routes
+        kpl_present = "KPL" in routes
+        jvl_present = "JVL" in routes
+        wrl_present = "WRL" in routes
+
+        if mel_present:
+            steps["MEL"] = 0
+            if kpl_present:
+                steps["KPL"] = -1
+                if jvl_present:
+                    steps["JVL"] = -2
+                if hvl_present:
+                    steps["HVL"] = 1
+                    if wrl_present:
+                        steps["WRL"] = 2
+                elif wrl_present:
+                    steps["WRL"] = 1
+            else:
+                # Special case: if KPL is missing, WRL moves west of MEL.
+                if wrl_present:
+                    steps["WRL"] = -1
+                if jvl_present:
+                    steps["JVL"] = -2 if wrl_present else -1
+                if hvl_present:
+                    steps["HVL"] = 1
+        else:
+            # Special case: if MEL is missing, HVL is centered when present.
+            if hvl_present:
+                steps["HVL"] = 0
+            if wrl_present:
+                steps["WRL"] = 1 if hvl_present else 0
+            if kpl_present:
+                steps["KPL"] = -1 if hvl_present else 0
+            if jvl_present:
+                if kpl_present:
+                    steps["JVL"] = steps["KPL"] - 1
+                elif hvl_present:
+                    steps["JVL"] = -1
+                else:
+                    steps["JVL"] = 0
+
+        return steps.get(name, 0)
+
+    def _point_key(self, lon: float, lat: float) -> tuple[float, float]:
+        """Normalize a coordinate to stable key precision for overlap matching."""
+        return (round(lon, 6), round(lat, 6))
 
     async def get_route_timetable_rows(
         self,

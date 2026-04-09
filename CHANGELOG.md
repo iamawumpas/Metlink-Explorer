@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-04-09
+
+### Feature - Physical offset lanes for overlapping train geometries
+
+- Added overlap-aware coordinate offset processing for train route GeoJSON output.
+- Offsets are applied only where routes share the same coordinates; single-line sections remain on native track coordinates.
+- Implemented lane-ordering rules for MEL/HVL/WRL/KPL/JVL overlap cases, including MEL-missing and KPL-missing fallback behavior.
+
 ## [0.5.0] - 2026-04-09
 
 ### Refactor - Canonical mode grouping and route ownership
