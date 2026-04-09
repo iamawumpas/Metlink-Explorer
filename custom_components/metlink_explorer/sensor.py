@@ -96,6 +96,17 @@ async def async_setup_entry(
                         transportation_name,
                     )
                 )
+                for route in routes:
+                    route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
+                    if not route_id:
+                        continue
+                    entities.append(
+                        MetlinkTrainLineGeometrySensor(
+                            geometry_coordinator,
+                            route_id=route_id,
+                            route_short_name=str(route.get(CONF_ROUTE_SHORT_NAME) or route_id),
+                        )
+                    )
 
     async_add_entities(entities)
 
@@ -183,6 +194,19 @@ def _direction_from_entry(entry: ConfigEntry, direction_id: int) -> str:
     return _direction_label(route_long_name, route_desc, direction_id)
 
 
+def _train_line_default_color(route_short_name: str | None) -> str:
+    """Return a default color for known train line abbreviations."""
+    key = (route_short_name or "").strip().upper()
+    known = {
+        "HVL": "#f57c00",
+        "KPL": "#1e88e5",
+        "JVL": "#43a047",
+        "MEL": "#8e24aa",
+        "WRL": "#e53935",
+    }
+    return known.get(key, "#00bcd4")
+
+
 class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
     """Primary route sensor representing both directions."""
 
@@ -215,7 +239,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.9",
+            "sw_version": "0.4.10",
         }
 
     @property
@@ -309,7 +333,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.4.9",
+            "sw_version": "0.4.10",
         }
 
     @property
@@ -604,4 +628,61 @@ class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
             },
             "route_count": data.get("route_count", 0),
             "feature_count": data.get("feature_count", 0),
+        }
+
+
+class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
+    """Expose a single train line geometry as GeoJSON for per-route styling."""
+
+    def __init__(self, coordinator, route_id: str, route_short_name: str) -> None:
+        """Initialize train line geometry sensor."""
+        super().__init__(coordinator)
+        self._route_id = str(route_id)
+        self._route_short_name = route_short_name
+        self._attr_name = f"Train :: {self._route_short_name} Geometry"
+        self._attr_unique_id = f"{DOMAIN}_train_route_geometry_{self._route_id}"
+        self._attr_native_unit_of_measurement = "features"
+        self._attr_entity_registry_enabled_default = True
+        self._attr_icon = "mdi:transit-connection-horizontal"
+
+    def _feature(self) -> dict[str, Any] | None:
+        """Return this route's feature from the mode geometry payload."""
+        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
+        features = data.get("features", [])
+        if not isinstance(features, list):
+            return None
+        for feature in features:
+            if not isinstance(feature, dict):
+                continue
+            props = feature.get("properties", {})
+            if not isinstance(props, dict):
+                continue
+            if str(props.get("route_id", "")) == self._route_id:
+                return feature
+        return None
+
+    @property
+    def native_value(self) -> int | None:
+        """Return 1 when this route has geometry data available."""
+        return 1 if self._feature() else 0
+
+    @property
+    def available(self) -> bool:
+        """Return if geometry payload is available."""
+        return self.coordinator.last_update_success
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return route-specific GeoJSON and default style hint."""
+        feature = self._feature()
+        features = [feature] if feature else []
+        return {
+            "route_id": self._route_id,
+            "route_short_name": self._route_short_name,
+            "default_color": _train_line_default_color(self._route_short_name),
+            "geojson": {
+                "type": "FeatureCollection",
+                "features": features,
+            },
+            "feature_count": len(features),
         }
