@@ -277,7 +277,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.5.3",
+            "sw_version": "0.5.4",
         }
 
     @property
@@ -371,7 +371,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.5.3",
+            "sw_version": "0.5.4",
         }
 
     @property
@@ -487,8 +487,6 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                     continue
                 route_count += 1
 
-                route_short_name = route_short_name_by_id.get(str(route_id))
-
                 timetable_rows = coordinator.data.get("timetable_rows", [])
                 if not isinstance(timetable_rows, list):
                     continue
@@ -518,7 +516,8 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                     rows.append(
                         {
                             "route_id": route_id,
-                            "route_short_name": route_short_name,
+                            "route_short_name": row.get("route_short_name") or route_short_name_by_id.get(str(route_id)),
+                            "service_label": row.get("service_label"),
                             "route_type": self._transportation_name.lower(),
                             "direction_id": direction_id,
                             "direction_label": direction_label,

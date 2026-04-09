@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-04-09
+
+### Fix - Distinguish MIF and QDF trips in combined ferry board output
+
+- Added per-trip ferry service labeling for shared route_id services (MIF/QDF) during timetable row generation.
+- Board aggregation now prefers row-level service labels so combined sensors can list both services distinctly in chronological order.
+- Added service-label context fields to timetable rows to improve downstream card rendering and debugging.
+
 ## [0.5.3] - 2026-04-09
 
 ### Fix - 24h lookahead departures for bus and ferry boards

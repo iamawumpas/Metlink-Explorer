@@ -23,6 +23,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 NEGATIVE_ROUTE_GEOMETRY_CACHE_TTL_SECONDS = 300
 TRAIN_OVERLAP_OFFSET_METERS = 10.0
+FERRY_ROUTE_TYPE = 4
 
 
 class MetlinkApiError(Exception):
@@ -665,6 +666,7 @@ class MetlinkApiClient:
 
         stops = await self.get_stops()
         stop_name_by_id = {str(s.get("stop_id")): s.get("stop_name", "Unknown Stop") for s in stops}
+        default_route_short_name = await self._get_route_short_name(route_id)
 
         sem = asyncio.Semaphore(8)
 
@@ -691,6 +693,13 @@ class MetlinkApiClient:
             trip_id = str(trip.get("trip_id"))
             service_id = str(trip.get("service_id", ""))
             direction_id = trip.get("direction_id")
+            trip_service_label = self._derive_trip_service_label(
+                route_id=str(route_id),
+                default_route_short_name=default_route_short_name,
+                trip=trip,
+                stop_times=stop_times,
+                destination_name=destination_name,
+            )
 
             for st in stop_times:
                 stop_id = str(st.get("stop_id"))
@@ -707,7 +716,10 @@ class MetlinkApiClient:
                 rows.append(
                     {
                         "route_id": str(route_id),
+                        "route_short_name": trip_service_label,
+                        "service_label": trip_service_label,
                         "trip_id": trip_id,
+                        "trip_headsign": trip.get("trip_headsign"),
                         "service_id": service_id,
                         "service_date": date_str,
                         "direction_id": direction_id,
@@ -726,6 +738,48 @@ class MetlinkApiClient:
 
         rows.sort(key=lambda r: self._seconds_for_service_time(r.get("scheduled_departure_time")))
         return rows
+
+    def _derive_trip_service_label(
+        self,
+        route_id: str,
+        default_route_short_name: str,
+        trip: dict[str, Any],
+        stop_times: list[dict[str, Any]],
+        destination_name: str,
+    ) -> str:
+        """Infer a user-facing service label for a trip.
+
+        For ferry route_id 14 (shared MIF/QDF route_id), classify each trip so
+        departures can be distinguished in one combined board.
+        """
+        base = (default_route_short_name or "").strip()
+        if self._transportation_type != FERRY_ROUTE_TYPE:
+            return base
+
+        shared_mif_qdf = str(route_id) == "14" or base.upper() in {"MIF", "QDF"}
+        if not shared_mif_qdf:
+            return base
+
+        text_candidates = [
+            str(trip.get("trip_short_name") or ""),
+            str(trip.get("trip_headsign") or ""),
+            str(destination_name or ""),
+        ]
+        for candidate in text_candidates:
+            upper = candidate.upper()
+            if "MIF" in upper:
+                return "MIF"
+            if "QDF" in upper:
+                return "QDF"
+
+        # MIF services include Mātiu/Somes Island stop 9998.
+        has_matiu_stop = any(str(st.get("stop_id", "")) == "9998" for st in stop_times)
+        matiu_text = " ".join(text_candidates).upper()
+        has_matiu_text = "MĀTIU" in matiu_text or "MATIU" in matiu_text or "SOMES" in matiu_text
+
+        if has_matiu_stop or has_matiu_text:
+            return "MIF"
+        return "QDF"
 
     def _filter_trips_for_service_date(
         self,
