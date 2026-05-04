@@ -88,6 +88,12 @@ async def async_setup_entry(
                 transportation_name,
             )
         )
+        entities.append(
+            MetlinkCardRouteGeometrySensor(
+                geometry_coordinator,
+                transportation_name,
+            )
+        )
         line_routes: list[tuple[str, str]] = []
         seen_route_ids: set[str] = set()
 
@@ -119,6 +125,14 @@ async def async_setup_entry(
         for route_id, route_short_name in line_routes:
             entities.append(
                 MetlinkTrainLineGeometrySensor(
+                    geometry_coordinator,
+                    route_id=route_id,
+                    route_short_name=route_short_name,
+                    transportation_name=transportation_name,
+                )
+            )
+            entities.append(
+                MetlinkCardLineGeometrySensor(
                     geometry_coordinator,
                     route_id=route_id,
                     route_short_name=route_short_name,
@@ -251,118 +265,6 @@ def _type_slug(name: str) -> str:
     return name.lower().replace(" ", "_").replace("/", "_")
 
 
-def _sample_line_coordinates(coords: list[Any], max_points: int) -> list[Any]:
-    """Return evenly sampled coordinates while preserving line endpoints."""
-    if max_points < 2 or len(coords) <= max_points:
-        return coords
-
-    limit = max(2, max_points)
-    step = (len(coords) - 1) / (limit - 1)
-    sampled = [coords[0]]
-    for i in range(1, limit - 1):
-        idx = int(round(i * step))
-        sampled.append(coords[idx])
-    sampled.append(coords[-1])
-    return sampled
-
-
-def _preview_geometry(geometry: dict[str, Any], max_points: int) -> dict[str, Any]:
-    """Return a simplified geometry suitable for recorder-safe attributes."""
-    geom_type = str(geometry.get("type", ""))
-    coords = geometry.get("coordinates")
-
-    if geom_type == "LineString" and isinstance(coords, list):
-        return {
-            "type": "LineString",
-            "coordinates": _sample_line_coordinates(coords, max_points),
-        }
-
-    if geom_type == "MultiLineString" and isinstance(coords, list):
-        return {
-            "type": "MultiLineString",
-            "coordinates": [
-                _sample_line_coordinates(line, max_points)
-                if isinstance(line, list)
-                else line
-                for line in coords
-            ],
-        }
-
-    return geometry
-
-
-def _preview_feature(feature: dict[str, Any], max_points: int) -> dict[str, Any]:
-    """Return a simplified feature with only lightweight properties."""
-    props = feature.get("properties", {})
-    if not isinstance(props, dict):
-        props = {}
-    keep_props = {
-        "route_id": props.get("route_id"),
-        "route_short_name": props.get("route_short_name"),
-        "route_long_name": props.get("route_long_name"),
-        "route_color": props.get("route_color"),
-    }
-
-    geometry = feature.get("geometry", {})
-    if not isinstance(geometry, dict):
-        geometry = {}
-
-    return {
-        "type": "Feature",
-        "properties": {k: v for k, v in keep_props.items() if v is not None},
-        "geometry": _preview_geometry(geometry, max_points),
-    }
-
-
-def _geojson_preview_within_limit(
-    full_geojson: dict[str, Any],
-    *,
-    max_bytes: int = 12000,
-    starting_max_points: int = 96,
-) -> tuple[dict[str, Any], bool, int, int]:
-    """Build a GeoJSON preview constrained to a safe attribute payload size.
-
-    Returns (preview, truncated, preview_feature_count, max_points_used).
-    """
-    full_features = full_geojson.get("features", [])
-    if not isinstance(full_features, list):
-        full_features = []
-
-    max_points = max(8, starting_max_points)
-    feature_limit = len(full_features)
-
-    while True:
-        features = full_features[:feature_limit]
-        preview = {
-            "type": "FeatureCollection",
-            "features": [
-                _preview_feature(feature, max_points)
-                for feature in features
-                if isinstance(feature, dict)
-            ],
-        }
-        size_bytes = len(json.dumps(preview, default=str))
-        if size_bytes <= max_bytes:
-            break
-
-        if max_points > 8:
-            max_points = max(8, max_points // 2)
-            continue
-
-        if feature_limit > 1:
-            feature_limit = max(1, feature_limit // 2)
-            continue
-
-        # At minimum preview; stop shrinking further.
-        break
-
-    truncated = (
-        len(preview.get("features", [])) < len(full_features)
-        or max_points < starting_max_points
-    )
-    return preview, truncated, len(preview.get("features", [])), max_points
-
-
 async def _write_payload_json(
     hass: HomeAssistant,
     subdir: str,
@@ -417,7 +319,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.6.4",
+            "sw_version": "0.6.5",
         }
 
     @property
@@ -537,7 +439,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.6.4",
+            "sw_version": "0.6.5",
         }
 
     @property
@@ -872,26 +774,14 @@ class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return geometry summary with a recorder-safe GeoJSON preview."""
+        """Return geometry summary with file-based full-geometry reference."""
         data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
-        full_geojson = {
-            "type": data.get("type", "FeatureCollection"),
-            "features": data.get("features", []),
-        }
-        preview, truncated, preview_feature_count, preview_max_points = _geojson_preview_within_limit(
-            full_geojson,
-            max_bytes=12000,
-            starting_max_points=96,
-        )
         return {
             "transportation_type": self._transportation_name,
             "route_count": data.get("route_count", 0),
             "feature_count": data.get("feature_count", 0),
             "data_url": self._payload_file_url,
-            "geojson": preview,
-            "geojson_truncated": truncated,
-            "geojson_preview_feature_count": preview_feature_count,
-            "geojson_preview_max_points": preview_max_points,
+            "geojson_source": "data_url",
         }
 
 
@@ -968,26 +858,73 @@ class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return route geometry summary with a recorder-safe GeoJSON preview."""
+        """Return route geometry summary with file-based full-geometry reference."""
         feature = self._feature()
-        features = [feature] if feature else []
-        full_geojson = {
-            "type": "FeatureCollection",
-            "features": features,
-        }
-        preview, truncated, preview_feature_count, preview_max_points = _geojson_preview_within_limit(
-            full_geojson,
-            max_bytes=12000,
-            starting_max_points=160,
-        )
         return {
             "route_id": self._route_id,
             "route_short_name": self._route_short_name,
             "default_color": _train_line_default_color(self._route_short_name),
             "feature_count": 1 if feature else 0,
             "data_url": self._payload_file_url,
-            "geojson": preview,
-            "geojson_truncated": truncated,
-            "geojson_preview_feature_count": preview_feature_count,
-            "geojson_preview_max_points": preview_max_points,
+            "geojson_source": "data_url",
+        }
+
+
+class MetlinkCardRouteGeometrySensor(MetlinkTrainRouteGeometrySensor):
+    """Card-only geometry sensor exposing full geojson from coordinator data."""
+
+    _unrecorded_attributes = frozenset({"geojson"})
+
+    def __init__(self, coordinator, transportation_name: str) -> None:
+        """Initialize card-only route geometry sensor."""
+        super().__init__(coordinator, transportation_name)
+        slug = _type_slug(transportation_name)
+        self._attr_name = f"{transportation_name} :: Route Geometry Card"
+        self._attr_unique_id = f"{DOMAIN}_{slug}_route_geometry_card"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return full geojson for cards while excluding it from recorder."""
+        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
+        return {
+            "transportation_type": self._transportation_name,
+            "route_count": data.get("route_count", 0),
+            "feature_count": data.get("feature_count", 0),
+            "data_url": self._payload_file_url,
+            "geojson_source": "attribute",
+            "geojson": {
+                "type": data.get("type", "FeatureCollection"),
+                "features": data.get("features", []),
+            },
+        }
+
+
+class MetlinkCardLineGeometrySensor(MetlinkTrainLineGeometrySensor):
+    """Card-only per-route geometry sensor exposing full geojson feature."""
+
+    _unrecorded_attributes = frozenset({"geojson"})
+
+    def __init__(self, coordinator, route_id: str, route_short_name: str, transportation_name: str = "Train") -> None:
+        """Initialize card-only route line geometry sensor."""
+        super().__init__(coordinator, route_id, route_short_name, transportation_name)
+        slug = _type_slug(transportation_name)
+        self._attr_name = f"{transportation_name} :: {self._route_short_name} Geometry Card"
+        self._attr_unique_id = f"{DOMAIN}_{slug}_route_geometry_card_{self._route_id}"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return full route geojson for cards while excluding it from recorder."""
+        feature = self._feature()
+        features = [feature] if feature else []
+        return {
+            "route_id": self._route_id,
+            "route_short_name": self._route_short_name,
+            "default_color": _train_line_default_color(self._route_short_name),
+            "feature_count": 1 if feature else 0,
+            "data_url": self._payload_file_url,
+            "geojson_source": "attribute",
+            "geojson": {
+                "type": "FeatureCollection",
+                "features": features,
+            },
         }

@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.5] - 2026-05-04
+
+### Fix - Card-only geometry entities with recorder-safe storage
+
+- Restored full-fidelity `geojson` attributes on new card-only geometry sensors so map cards can render direct entity attributes without track distortion.
+- Added aggregate and per-route `* Geometry Card` entities for each configured transport mode.
+- Marked `geojson` as unrecorded for card-only entities to avoid recorder database bloat while keeping full `data_url` JSON files available.
+- Existing non-card geometry sensors remain file-first and lightweight.
+
 ## [0.6.4] - 2026-05-04
 
 ### Fix - Recorder-safe geometry attributes
