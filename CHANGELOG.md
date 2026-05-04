@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-05-04
+
+### Fix - Recorder-safe geometry attributes
+
+- Added adaptive GeoJSON preview generation for geometry sensor attributes to keep payloads under recorder-safe size limits.
+- Geometry attributes now include a simplified coordinate preview plus truncation metadata fields.
+- Full-resolution geometry remains available through `data_url` JSON payload files.
+
 ## [0.6.3] - 2026-05-04
 
 ### Maintenance - Release metadata alignment
