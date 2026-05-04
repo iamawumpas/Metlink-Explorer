@@ -19,10 +19,12 @@ from .const import (
 )
 from .mode_registry import entry_routes, is_mode_leader, normalize_transportation_type
 
-SUPPORTED_TRACKER_TYPES: set[int] = {2, 4}
+SUPPORTED_TRACKER_TYPES: set[int] = {2, 3, 4, 712}
 MODE_ICONS = {
     "Train": "mdi:train",
     "Ferry": "mdi:ferry",
+    "Bus": "mdi:bus",
+    "School Bus": "mdi:school-bus",
 }
 
 
@@ -178,7 +180,7 @@ class MetlinkVehicleTrackerEntity(CoordinatorEntity, TrackerEntity):
             "name": self._attr_name,
             "manufacturer": "Metlink",
             "model": f"{transportation_name} Vehicle",
-            "sw_version": "0.5.4",
+            "sw_version": "0.7.0",
         }
 
     def _current(self) -> dict[str, Any] | None:

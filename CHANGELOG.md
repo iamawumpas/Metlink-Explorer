@@ -5,6 +5,20 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-05
+
+### Feature - Phase 3: Live vehicle tracking for all transport modes
+
+- **Major feature addition**: Extended live vehicle tracking beyond trains and ferries to include buses and school buses.
+- Added Bus (route type 3) to supported device tracker types.
+- Added School Bus (route type 712) to supported device tracker types.
+- Updated device tracker MODE_ICONS with bus (`mdi:bus`) and school bus (`mdi:school-bus`) icons for map display.
+- Live vehicle GPS positions now available for all transport types via GTFS-RT `/gtfs-rt/vehiclepositions` API endpoint.
+- Home Assistant map cards can now display live bus and school bus movements alongside trains and ferries.
+
+### Breaking Changes
+- None - fully backward compatible. Existing train and ferry tracking remains unchanged.
+
 ## [0.6.6] - 2026-05-04
 
 ### Change - Single geometry sensor set for map cards
