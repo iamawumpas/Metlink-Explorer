@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-05-04
+
+### Maintenance - Release metadata alignment
+
+- Bumped integration release metadata to 0.6.3 across project files.
+- No functional transport-data behavior changes in this release.
+
 ## [0.6.2] - 2026-05-04
 
 ### Fix - Restore geojson attribute to geometry sensors
