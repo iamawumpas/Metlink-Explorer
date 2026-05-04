@@ -88,12 +88,6 @@ async def async_setup_entry(
                 transportation_name,
             )
         )
-        entities.append(
-            MetlinkCardRouteGeometrySensor(
-                geometry_coordinator,
-                transportation_name,
-            )
-        )
         line_routes: list[tuple[str, str]] = []
         seen_route_ids: set[str] = set()
 
@@ -125,14 +119,6 @@ async def async_setup_entry(
         for route_id, route_short_name in line_routes:
             entities.append(
                 MetlinkTrainLineGeometrySensor(
-                    geometry_coordinator,
-                    route_id=route_id,
-                    route_short_name=route_short_name,
-                    transportation_name=transportation_name,
-                )
-            )
-            entities.append(
-                MetlinkCardLineGeometrySensor(
                     geometry_coordinator,
                     route_id=route_id,
                     route_short_name=route_short_name,
@@ -319,7 +305,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.6.5",
+            "sw_version": "0.6.6",
         }
 
     @property
@@ -439,7 +425,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.6.5",
+            "sw_version": "0.6.6",
         }
 
     @property
@@ -721,6 +707,8 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
 class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
     """Expose train route geometries as GeoJSON for map overlays."""
 
+    _unrecorded_attributes = frozenset({"geojson"})
+
     def __init__(self, coordinator, transportation_name: str) -> None:
         """Initialize train route geometry sensor."""
         super().__init__(coordinator)
@@ -774,19 +762,21 @@ class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return geometry summary with file-based full-geometry reference."""
+        """Return full route geometry for map cards, excluding geojson from recorder."""
         data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
         return {
-            "transportation_type": self._transportation_name,
-            "route_count": data.get("route_count", 0),
-            "feature_count": data.get("feature_count", 0),
             "data_url": self._payload_file_url,
-            "geojson_source": "data_url",
+            "geojson": {
+                "type": data.get("type", "FeatureCollection"),
+                "features": data.get("features", []),
+            },
         }
 
 
 class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
     """Expose a single train line geometry as GeoJSON for per-route styling."""
+
+    _unrecorded_attributes = frozenset({"geojson"})
 
     def __init__(self, coordinator, route_id: str, route_short_name: str, transportation_name: str = "Train") -> None:
         """Initialize route line geometry sensor."""
@@ -858,71 +848,12 @@ class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return route geometry summary with file-based full-geometry reference."""
-        feature = self._feature()
-        return {
-            "route_id": self._route_id,
-            "route_short_name": self._route_short_name,
-            "default_color": _train_line_default_color(self._route_short_name),
-            "feature_count": 1 if feature else 0,
-            "data_url": self._payload_file_url,
-            "geojson_source": "data_url",
-        }
-
-
-class MetlinkCardRouteGeometrySensor(MetlinkTrainRouteGeometrySensor):
-    """Card-only geometry sensor exposing full geojson from coordinator data."""
-
-    _unrecorded_attributes = frozenset({"geojson"})
-
-    def __init__(self, coordinator, transportation_name: str) -> None:
-        """Initialize card-only route geometry sensor."""
-        super().__init__(coordinator, transportation_name)
-        slug = _type_slug(transportation_name)
-        self._attr_name = f"{transportation_name} :: Route Geometry Card"
-        self._attr_unique_id = f"{DOMAIN}_{slug}_route_geometry_card"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return full geojson for cards while excluding it from recorder."""
-        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
-        return {
-            "transportation_type": self._transportation_name,
-            "route_count": data.get("route_count", 0),
-            "feature_count": data.get("feature_count", 0),
-            "data_url": self._payload_file_url,
-            "geojson_source": "attribute",
-            "geojson": {
-                "type": data.get("type", "FeatureCollection"),
-                "features": data.get("features", []),
-            },
-        }
-
-
-class MetlinkCardLineGeometrySensor(MetlinkTrainLineGeometrySensor):
-    """Card-only per-route geometry sensor exposing full geojson feature."""
-
-    _unrecorded_attributes = frozenset({"geojson"})
-
-    def __init__(self, coordinator, route_id: str, route_short_name: str, transportation_name: str = "Train") -> None:
-        """Initialize card-only route line geometry sensor."""
-        super().__init__(coordinator, route_id, route_short_name, transportation_name)
-        slug = _type_slug(transportation_name)
-        self._attr_name = f"{transportation_name} :: {self._route_short_name} Geometry Card"
-        self._attr_unique_id = f"{DOMAIN}_{slug}_route_geometry_card_{self._route_id}"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return full route geojson for cards while excluding it from recorder."""
+        """Return full route geometry for map cards, excluding geojson from recorder."""
         feature = self._feature()
         features = [feature] if feature else []
         return {
-            "route_id": self._route_id,
-            "route_short_name": self._route_short_name,
             "default_color": _train_line_default_color(self._route_short_name),
-            "feature_count": 1 if feature else 0,
             "data_url": self._payload_file_url,
-            "geojson_source": "attribute",
             "geojson": {
                 "type": "FeatureCollection",
                 "features": features,
