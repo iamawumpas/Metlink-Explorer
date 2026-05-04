@@ -5,6 +5,53 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-05-04
+
+### Feature - Route geometry sensors for all transport modes
+
+- Added GTFS shapes geometry coordinators and sensors for Ferry, Bus, School Bus, and Cable Car modes — matching the existing Train geometry sensor pattern.
+- Per-route geometry sensors are created for all configured routes in every mode (e.g. `Ferry :: QDF Geometry`, `Bus :: 83 Geometry`).
+- Aggregate mode geometry sensors expose a full GeoJSON FeatureCollection per mode.
+- Geometry refresh uses the same weekly TTL as Train, appropriate for GTFS static shape data.
+
+### Fix - HA recorder 16 kB attribute limit exceeded
+
+- Large payloads (departures boards, route timelines, route geometry) are now written to JSON files under `/config/www/metlink_explorer/` on every coordinator update.
+- Sensor `extra_state_attributes` now contains only lightweight summary fields and a `data_url` pointing to the `/local/metlink_explorer/...` file path.
+- This eliminates all "State attributes exceed maximum size of 16384 bytes" recorder warnings.
+
+### Fix - Redundant live GTFS-RT API calls
+
+- Added a 30-second shared TTL cache for `/gtfs-rt/vehiclepositions` and `/gtfs-rt/tripupdates` on the `MetlinkApiClient` instance.
+- All route coordinators share the same client, so the live feed is downloaded once per 30 seconds regardless of how many routes are configured (previously downloaded once per route per polling cycle).
+
+### Fix - Stop predictions circuit breaker
+
+- `get_stop_predictions()` now tracks per-stop consecutive failures.
+- After 5 consecutive failures (e.g. HTTP 502) a stop is skipped for 15 minutes before being retried.
+- A single `WARNING` is logged when the circuit opens; subsequent skips log at `DEBUG` only.
+- Eliminates the 200-message/minute logging flood from repeated stop prediction failures.
+
+### Fix - DOMAIN NameError in device_tracker platform
+
+- Added missing `DOMAIN` import to `device_tracker.py` — resolves the `NameError: name 'DOMAIN' is not defined` traceback on startup.
+
+### Fix - Noisy log levels for expected data gaps
+
+- "No trips found for route X direction Y" downgraded from `ERROR` to `DEBUG`.
+- "No stop times found for trip ..." downgraded from `WARNING` to `DEBUG` with a note that dated/exception trip IDs are expected to sometimes return empty.
+
+### Fix - Departures board double-compute per update cycle
+
+- `_build_departures()` now runs once per coordinator update (in `_async_write_payload`) and caches the departure count.
+- `native_value` reads the cached count; `extra_state_attributes` reads the cached summary — eliminating the duplicate expensive aggregation call.
+
+### Change - Remove SensorStateClass.MEASUREMENT from all sensors
+
+- Removed `SensorStateClass.MEASUREMENT` from route, direction, and board sensors.
+- HA will no longer attempt to track long-term statistics for these entities, resolving the unit-of-measurement mismatch errors in the recorder.
+- Existing stale statistics can be cleared from Developer Tools → Statistics in the HA UI.
+
 ## [0.5.4] - 2026-04-09
 
 ### Fix - Distinguish MIF and QDF trips in combined ferry board output

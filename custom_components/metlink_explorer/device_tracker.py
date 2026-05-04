@@ -14,6 +14,7 @@ from .const import (
     CONF_API_KEY,
     CONF_ROUTE_ID,
     CONF_TRANSPORTATION_TYPE,
+    DOMAIN,
     TRANSPORTATION_TYPES,
 )
 from .mode_registry import entry_routes, is_mode_leader, normalize_transportation_type

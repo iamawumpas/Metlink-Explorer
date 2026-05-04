@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import json
 import re
+from pathlib import Path
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -22,7 +24,6 @@ from .const import (
     CONF_TRANSPORTATION_TYPE,
     DEFAULT_ACTIVE_DIRECTION,
     DOMAIN,
-    TRAIN_ROUTE_TYPE,
     TRANSPORTATION_TYPES,
 )
 from .mode_registry import entry_routes, is_mode_leader, normalize_transportation_type, same_mode_entries
@@ -79,51 +80,51 @@ async def async_setup_entry(
             )
         )
 
-    if transportation_type == TRAIN_ROUTE_TYPE:
-        geometry_coordinator = runtime.get("geometry_coordinator")
-        if geometry_coordinator is not None:
-            entities.append(
-                MetlinkTrainRouteGeometrySensor(
-                    geometry_coordinator,
-                    transportation_name,
-                )
+    geometry_coordinator = runtime.get("geometry_coordinator")
+    if geometry_coordinator is not None:
+        entities.append(
+            MetlinkTrainRouteGeometrySensor(
+                geometry_coordinator,
+                transportation_name,
             )
-            line_routes: list[tuple[str, str]] = []
-            seen_route_ids: set[str] = set()
+        )
+        line_routes: list[tuple[str, str]] = []
+        seen_route_ids: set[str] = set()
 
-            # Create one per-line entity for every configured train route.
-            for route in routes:
-                route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
+        # Create one per-line entity for every configured route.
+        for route in routes:
+            route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
+            if not route_id or route_id in seen_route_ids:
+                continue
+            seen_route_ids.add(route_id)
+            route_short_name = str(route.get(CONF_ROUTE_SHORT_NAME) or route_id)
+            line_routes.append((route_id, route_short_name))
+
+        geometry_data = geometry_coordinator.data if isinstance(geometry_coordinator.data, dict) else {}
+        geometry_features = geometry_data.get("features", []) if isinstance(geometry_data, dict) else []
+        if isinstance(geometry_features, list):
+            for feature in geometry_features:
+                if not isinstance(feature, dict):
+                    continue
+                props = feature.get("properties", {})
+                if not isinstance(props, dict):
+                    continue
+                route_id = str(props.get("route_id", "")).strip()
                 if not route_id or route_id in seen_route_ids:
                     continue
                 seen_route_ids.add(route_id)
-                route_short_name = str(route.get(CONF_ROUTE_SHORT_NAME) or route_id)
+                route_short_name = str(props.get("route_short_name") or route_id)
                 line_routes.append((route_id, route_short_name))
 
-            geometry_data = geometry_coordinator.data if isinstance(geometry_coordinator.data, dict) else {}
-            geometry_features = geometry_data.get("features", []) if isinstance(geometry_data, dict) else []
-            if isinstance(geometry_features, list):
-                for feature in geometry_features:
-                    if not isinstance(feature, dict):
-                        continue
-                    props = feature.get("properties", {})
-                    if not isinstance(props, dict):
-                        continue
-                    route_id = str(props.get("route_id", "")).strip()
-                    if not route_id or route_id in seen_route_ids:
-                        continue
-                    seen_route_ids.add(route_id)
-                    route_short_name = str(props.get("route_short_name") or route_id)
-                    line_routes.append((route_id, route_short_name))
-
-            for route_id, route_short_name in line_routes:
-                entities.append(
-                    MetlinkTrainLineGeometrySensor(
-                        geometry_coordinator,
-                        route_id=route_id,
-                        route_short_name=route_short_name,
-                    )
+        for route_id, route_short_name in line_routes:
+            entities.append(
+                MetlinkTrainLineGeometrySensor(
+                    geometry_coordinator,
+                    route_id=route_id,
+                    route_short_name=route_short_name,
+                    transportation_name=transportation_name,
                 )
+            )
 
     async_add_entities(entities)
 
@@ -245,6 +246,33 @@ def _train_line_default_color(route_short_name: str | None) -> str:
     return known.get(key, "#00bcd4")
 
 
+def _type_slug(name: str) -> str:
+    """Return a filesystem-safe slug from a transportation type name."""
+    return name.lower().replace(" ", "_").replace("/", "_")
+
+
+async def _write_payload_json(
+    hass: HomeAssistant,
+    subdir: str,
+    filename: str,
+    data: Any,
+) -> str:
+    """Write a JSON payload to /config/www/metlink_explorer/<subdir>/<filename>.
+
+    File I/O runs in an executor so the event loop is not blocked.
+    Returns the /local/ URL for use in sensor attributes.
+    """
+    out_dir = Path(hass.config.path("www", "metlink_explorer", subdir))
+    content = json.dumps(data, default=str)
+
+    def _write() -> None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / filename).write_text(content, encoding="utf-8")
+
+    await hass.async_add_executor_job(_write)
+    return f"/local/metlink_explorer/{subdir}/{filename}"
+
+
 class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
     """Primary route sensor representing both directions."""
 
@@ -270,14 +298,14 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"{route_short_name} :: Route"
         self._attr_unique_id = f"{DOMAIN}_{route_id}_route"
         self._attr_native_unit_of_measurement = "trips"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_entity_registry_enabled_default = True
+        self._payload_file_url: str | None = None
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{route_id}")},
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.5.4",
+            "sw_version": "0.6.0",
         }
 
     @property
@@ -293,9 +321,39 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         """Return if entity is available."""
         return self.coordinator.last_update_success
 
+    async def async_added_to_hass(self) -> None:
+        """Register coordinator listener and write initial JSON payload."""
+        await super().async_added_to_hass()
+        if self.coordinator.data:
+            await self._async_write_payload()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Schedule JSON file write then update HA state."""
+        self.hass.async_create_task(self._async_write_payload())
+        super()._handle_coordinator_update()
+
+    async def _async_write_payload(self) -> None:
+        """Write full route timeline data to a JSON file under /config/www/."""
+        if not self.coordinator.data:
+            return
+        payload = {
+            "route_id": self._route_id,
+            "route_short_name": self._route_short_name,
+            "transportation_type": self._transportation_name,
+            "timetable_rows": self.coordinator.data.get("timetable_rows", []),
+            "timeline_by_direction": self.coordinator.data.get("timeline_by_direction", {}),
+        }
+        self._payload_file_url = await _write_payload_json(
+            self.hass,
+            "routes",
+            f"{self._route_id}_timeline.json",
+            payload,
+        )
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return route-centric attributes for both directions."""
+        """Return route summary; full timeline data is written to the JSON file."""
         if not self.coordinator.data:
             return {}
 
@@ -316,13 +374,10 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "direction_0_destination": (dir0.get("destination_stop") or {}).get("stop_name") if isinstance(dir0, dict) else None,
             "direction_1_destination": (dir1.get("destination_stop") or {}).get("stop_name") if isinstance(dir1, dict) else None,
             "timeline_error": active.get("error") if isinstance(active, dict) else None,
-            "timeline_stops": active.get("stops", []) if isinstance(active, dict) else [],
-            "departure_stop": active.get("departure_stop") if isinstance(active, dict) else None,
-            "destination_stop_timeline": active.get("destination_stop") if isinstance(active, dict) else None,
-            "hub_stops": active.get("hub_stops", []) if isinstance(active, dict) else [],
-            "current_time": active.get("current_time") if isinstance(active, dict) else None,
             "total_stops": active.get("total_stops", 0) if isinstance(active, dict) else 0,
             "real_time_stops": active.get("real_time_stops", 0) if isinstance(active, dict) else 0,
+            "current_time": active.get("current_time") if isinstance(active, dict) else None,
+            "data_url": self._payload_file_url,
         }
 
     @property
@@ -364,14 +419,13 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
         # Preserve existing unique_id format for migration compatibility.
         self._attr_unique_id = f"{DOMAIN}_{route_id}_{direction}"
         self._attr_native_unit_of_measurement = "trips"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_entity_registry_enabled_default = True
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{route_id}")},
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.5.4",
+            "sw_version": "0.6.0",
         }
 
     @property
@@ -409,11 +463,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "direction": self._direction,
             "trip_count": _trip_count_for_direction(self.coordinator.data, self._direction),
             "last_updated": self.coordinator.last_update_success,
-            "timeline_stops": timeline_stops,
             "timeline_error": timeline.get("error"),
-            "departure_stop": dep_stop,
-            "destination_stop_timeline": dest_stop,
-            "hub_stops": timeline.get("hub_stops", []),
             "current_time": timeline.get("current_time"),
             "timeline_departure_stop_name": dep_stop.get("stop_name") if isinstance(dep_stop, dict) else None,
             "timeline_destination_stop_name": dest_stop.get("stop_name") if isinstance(dest_stop, dict) else None,
@@ -457,8 +507,38 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"{transportation_name} :: Departures Board"
         self._attr_unique_id = f"{DOMAIN}_{transportation_type}_board"
         self._attr_native_unit_of_measurement = "departures"
-        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_entity_registry_enabled_default = True
+        self._cached_departure_count: int = 0
+        self._payload_file_url: str | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Register coordinator listener and write initial JSON payload."""
+        await super().async_added_to_hass()
+        await self._async_write_payload()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Schedule JSON file write then update HA state."""
+        self.hass.async_create_task(self._async_write_payload())
+        super()._handle_coordinator_update()
+
+    async def _async_write_payload(self) -> None:
+        """Build departures, cache count, and write full list to a JSON file."""
+        departures, route_count = self._build_departures()
+        self._cached_departure_count = len(departures)
+        slug = _type_slug(self._transportation_name)
+        payload = {
+            "transportation_type": self._transportation_name,
+            "configured_route_count": route_count,
+            "departure_count": len(departures),
+            "departures": departures,
+        }
+        self._payload_file_url = await _write_payload_json(
+            self.hass,
+            "board",
+            f"{slug}_departures.json",
+            payload,
+        )
 
     def _build_departures(self) -> tuple[list[dict[str, Any]], int]:
         """Collect and normalize timetable departures across all routes in this mode."""
@@ -593,9 +673,8 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        """Return number of upcoming departures in board payload."""
-        departures, _ = self._build_departures()
-        return len(departures)
+        """Return number of upcoming departures from last written payload."""
+        return self._cached_departure_count
 
     @property
     def available(self) -> bool:
@@ -604,14 +683,12 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return aggregated departures and metadata."""
-        departures, route_count = self._build_departures()
+        """Return board summary; full departures list is written to the JSON file."""
         return {
             "transportation_type": self._transportation_name,
             "transportation_type_id": self._transportation_type,
-            "configured_route_count": route_count,
-            "departure_count": len(departures),
-            "departures": departures,
+            "departure_count": self._cached_departure_count,
+            "data_url": self._payload_file_url,
         }
 
     @property
@@ -639,6 +716,7 @@ class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = "routes"
         self._attr_entity_registry_enabled_default = True
         self._attr_icon = "mdi:map-marker-path"
+        self._payload_file_url: str | None = None
 
     @property
     def native_value(self) -> int | None:
@@ -651,34 +729,63 @@ class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
         """Return if geometry payload is available."""
         return self.coordinator.last_update_success
 
+    async def async_added_to_hass(self) -> None:
+        """Register coordinator listener and write initial JSON payload."""
+        await super().async_added_to_hass()
+        if self.coordinator.data:
+            await self._async_write_payload()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Schedule JSON file write then update HA state."""
+        self.hass.async_create_task(self._async_write_payload())
+        super()._handle_coordinator_update()
+
+    async def _async_write_payload(self) -> None:
+        """Write full GeoJSON feature collection to a JSON file."""
+        if not self.coordinator.data:
+            return
+        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
+        payload = {
+            "type": data.get("type", "FeatureCollection"),
+            "features": data.get("features", []),
+        }
+        slug = _type_slug(self._transportation_name)
+        self._payload_file_url = await _write_payload_json(
+            self.hass,
+            "geometry",
+            f"{slug}_routes.json",
+            payload,
+        )
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return GeoJSON data and summary attributes."""
+        """Return geometry summary; full GeoJSON is written to the JSON file."""
         data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
         return {
             "transportation_type": self._transportation_name,
-            "geojson": {
-                "type": data.get("type", "FeatureCollection"),
-                "features": data.get("features", []),
-            },
             "route_count": data.get("route_count", 0),
             "feature_count": data.get("feature_count", 0),
+            "data_url": self._payload_file_url,
         }
 
 
 class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
     """Expose a single train line geometry as GeoJSON for per-route styling."""
 
-    def __init__(self, coordinator, route_id: str, route_short_name: str) -> None:
-        """Initialize train line geometry sensor."""
+    def __init__(self, coordinator, route_id: str, route_short_name: str, transportation_name: str = "Train") -> None:
+        """Initialize route line geometry sensor."""
         super().__init__(coordinator)
         self._route_id = str(route_id)
         self._route_short_name = route_short_name
-        self._attr_name = f"Train :: {self._route_short_name} Geometry"
-        self._attr_unique_id = f"{DOMAIN}_train_route_geometry_{self._route_id}"
+        self._transportation_name = transportation_name
+        slug = _type_slug(transportation_name)
+        self._attr_name = f"{transportation_name} :: {self._route_short_name} Geometry"
+        self._attr_unique_id = f"{DOMAIN}_{slug}_route_geometry_{self._route_id}"
         self._attr_native_unit_of_measurement = "features"
         self._attr_entity_registry_enabled_default = True
         self._attr_icon = "mdi:transit-connection-horizontal"
+        self._payload_file_url: str | None = None
 
     def _feature(self) -> dict[str, Any] | None:
         """Return this route's feature from the mode geometry payload."""
@@ -706,18 +813,42 @@ class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
         """Return if geometry payload is available."""
         return self.coordinator.last_update_success
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return route-specific GeoJSON and default style hint."""
+    async def async_added_to_hass(self) -> None:
+        """Register coordinator listener and write initial JSON payload."""
+        await super().async_added_to_hass()
+        if self.coordinator.data:
+            await self._async_write_payload()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Schedule JSON file write then update HA state."""
+        self.hass.async_create_task(self._async_write_payload())
+        super()._handle_coordinator_update()
+
+    async def _async_write_payload(self) -> None:
+        """Write this route's GeoJSON feature to a JSON file."""
         feature = self._feature()
         features = [feature] if feature else []
+        payload = {
+            "type": "FeatureCollection",
+            "features": features,
+        }
+        slug = _type_slug(self._transportation_name)
+        self._payload_file_url = await _write_payload_json(
+            self.hass,
+            "geometry",
+            f"{slug}_{self._route_id}.json",
+            payload,
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return route geometry summary; full GeoJSON is written to the JSON file."""
+        feature = self._feature()
         return {
             "route_id": self._route_id,
             "route_short_name": self._route_short_name,
             "default_color": _train_line_default_color(self._route_short_name),
-            "geojson": {
-                "type": "FeatureCollection",
-                "features": features,
-            },
-            "feature_count": len(features),
+            "feature_count": 1 if feature else 0,
+            "data_url": self._payload_file_url,
         }

@@ -63,6 +63,19 @@ class MetlinkApiClient:
         self._route_geometry_cache: dict[str, tuple[datetime, dict[str, Any]]] = {}
         self._route_geometry_miss_cache: dict[str, datetime] = {}
         self._cache_ttl_seconds = DEFAULT_GTFS_CACHE_TTL_SECONDS
+        # Shared short-lived cache for live GTFS-RT feeds (30s TTL).
+        # All route coordinators share the same api_client instance so one
+        # download serves every route in the same polling cycle.
+        self._vehicle_positions_cache: tuple[datetime, Any] | None = None
+        self._trip_updates_cache: tuple[datetime, Any] | None = None
+        self._live_cache_ttl_seconds = 30
+        # Stop predictions circuit breaker: track consecutive failures per stop.
+        # After _STOP_PRED_FAIL_THRESHOLD failures the stop is skipped for
+        # _STOP_PRED_BACKOFF_SECONDS before being retried.
+        self._stop_pred_fail_count: dict[str, int] = {}
+        self._stop_pred_backoff_until: dict[str, datetime] = {}
+        self._STOP_PRED_FAIL_THRESHOLD = 5
+        self._STOP_PRED_BACKOFF_SECONDS = 900  # 15 minutes
 
     @property
     def _static_cache_ttl_seconds(self) -> int:
@@ -208,7 +221,11 @@ class MetlinkApiClient:
             _LOGGER.debug("Found %d trips for route %s direction %s", len(direction_trips), route_id, direction_id)
             
             if not direction_trips:
-                _LOGGER.error("No trips found for route %s direction %s - this will prevent stop pattern creation", route_id, direction_id)
+                _LOGGER.debug(
+                    "No trips found for route %s direction %s - stop pattern unavailable",
+                    route_id,
+                    direction_id,
+                )
                 _LOGGER.debug("Available trips for route %s: %s", route_id, [f"trip_id={t.get('trip_id')}, direction_id={t.get('direction_id')}" for t in trips[:5]])
                 return []
             
@@ -222,7 +239,7 @@ class MetlinkApiClient:
             _LOGGER.debug("Found %d stop times for trip %s", len(stop_times), trip_id)
             
             if not stop_times:
-                _LOGGER.warning("No stop times found for trip %s", trip_id)
+                _LOGGER.debug("No stop times found for trip %s (dated or exception trip — expected)", trip_id)
                 return []
             
             # Get stop details
@@ -895,39 +912,102 @@ class MetlinkApiClient:
             return 10**9
 
     async def get_vehicle_positions(self) -> list[dict[str, Any]]:
-        """Get real-time vehicle positions."""
+        """Get real-time vehicle positions, shared across all routes (30s TTL)."""
+        now = datetime.now()
+        if (
+            self._vehicle_positions_cache is not None
+            and (now - self._vehicle_positions_cache[0]).total_seconds() < self._live_cache_ttl_seconds
+        ):
+            return self._vehicle_positions_cache[1]
         try:
-            return await self._request(API_ENDPOINTS["vehicle_positions"])
+            data = await self._request(API_ENDPOINTS["vehicle_positions"])
+            self._vehicle_positions_cache = (now, data)
+            return data
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch vehicle positions: %s", exc)
             raise
 
     async def get_trip_updates(self) -> list[dict[str, Any]]:
-        """Get real-time trip updates."""
+        """Get real-time trip updates, shared across all routes (30s TTL)."""
+        now = datetime.now()
+        if (
+            self._trip_updates_cache is not None
+            and (now - self._trip_updates_cache[0]).total_seconds() < self._live_cache_ttl_seconds
+        ):
+            return self._trip_updates_cache[1]
         try:
-            return await self._request(API_ENDPOINTS["trip_updates"])
+            data = await self._request(API_ENDPOINTS["trip_updates"])
+            self._trip_updates_cache = (now, data)
+            return data
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch trip updates: %s", exc)
             raise
 
     async def get_stop_predictions(self, stop_id: str | None = None) -> list[dict[str, Any]]:
-        """Get stop departure predictions for a specific stop."""
+        """Get stop departure predictions for a specific stop.
+
+        A circuit breaker skips stops that have returned consecutive errors
+        (e.g. 502) until the backoff window expires.
+        """
+        if not stop_id:
+            return []
+
+        now = datetime.now()
+        backoff_until = self._stop_pred_backoff_until.get(str(stop_id))
+        if backoff_until and now < backoff_until:
+            _LOGGER.debug(
+                "Stop predictions for stop %s skipped (circuit open until %s)",
+                stop_id,
+                backoff_until.strftime("%H:%M:%S"),
+            )
+            return []
+
         try:
             url = f"{self._base_url}/stop-predictions"
-            params = {"stop_id": stop_id} if stop_id else {}
+            params = {"stop_id": stop_id}
             headers = {"X-API-KEY": self._api_key}
-        
+
             _LOGGER.debug("Fetching stop predictions from %s with params %s", url, params)
-        
+
             async with self._session.get(url, params=params, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
-                    _LOGGER.debug("Got %d predictions for stop %s", len(data) if isinstance(data, list) else 0, stop_id)
+                    _LOGGER.debug(
+                        "Got %d predictions for stop %s",
+                        len(data) if isinstance(data, list) else 0,
+                        stop_id,
+                    )
+                    # Reset failure counter on success.
+                    self._stop_pred_fail_count.pop(str(stop_id), None)
+                    self._stop_pred_backoff_until.pop(str(stop_id), None)
                     return data if isinstance(data, list) else []
+
+                # Count the failure and open the circuit if threshold reached.
+                sid = str(stop_id)
+                fails = self._stop_pred_fail_count.get(sid, 0) + 1
+                self._stop_pred_fail_count[sid] = fails
+                if fails >= self._STOP_PRED_FAIL_THRESHOLD:
+                    self._stop_pred_backoff_until[sid] = now + timedelta(
+                        seconds=self._STOP_PRED_BACKOFF_SECONDS
+                    )
+                    _LOGGER.warning(
+                        "Stop predictions for stop %s have failed %d times (last status %d); "
+                        "pausing requests for %d minutes.",
+                        stop_id,
+                        fails,
+                        response.status,
+                        self._STOP_PRED_BACKOFF_SECONDS // 60,
+                    )
                 else:
-                    _LOGGER.warning("Stop predictions request failed with status %d for stop %s", response.status, stop_id)
-                    return []
-                
+                    _LOGGER.debug(
+                        "Stop predictions request failed with status %d for stop %s (failure %d/%d)",
+                        response.status,
+                        stop_id,
+                        fails,
+                        self._STOP_PRED_FAIL_THRESHOLD,
+                    )
+                return []
+
         except Exception as exc:
             _LOGGER.error("Failed to get stop predictions for stop %s: %s", stop_id, exc)
             return []

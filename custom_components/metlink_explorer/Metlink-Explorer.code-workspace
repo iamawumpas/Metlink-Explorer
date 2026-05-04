@@ -1,0 +1,31 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		}
+	],
+	"settings": {
+		"chat.tools.terminal.autoApprove": {
+			"/^python -m compileall custom_components/metlink_explorer$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"/^python -m pytest -q$/": {
+				"approve": true,
+				"matchCommandLine": true
+			},
+			"git add": true,
+			"git commit": true,
+			"git tag": true,
+			"git remote": true,
+			"gh": true,
+			"Set-Content": true,
+			"git push": true,
+			"git ls-remote": true,
+			"/^python -m compileall custom_components/metlink_explorer; Select-String -Path README\\.md,CHANGELOG\\.md,VERSION,custom_components/metlink_explorer/manifest\\.json,custom_components/metlink_explorer/sensor\\.py,custom_components/metlink_explorer/device_tracker\\.py -Pattern '0\\.4\\.11'$/": {
+				"approve": true,
+				"matchCommandLine": true
+			}
+		}
+	}
+}

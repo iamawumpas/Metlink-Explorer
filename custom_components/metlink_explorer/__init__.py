@@ -88,18 +88,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "routes": routes,
     }
 
-    if int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1)) == TRAIN_ROUTE_TYPE:
+    # Build route geometry coordinator for all transportation modes.
+    # Geometry is based on weekly-cached GTFS shapes and is mode-agnostic.
+    transport_type_int = int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1))
+    if transport_type_int in TRANSPORTATION_TYPES:
         geometry_route_ids: list[str] = []
         seen_route_ids: set[str] = set()
 
-        # Build geometry from installed routes only, unioned across all train
-        # entries sharing this API key.
-        train_entries = same_mode_entries(hass, entry.data.get(CONF_API_KEY), TRAIN_ROUTE_TYPE)
-        if not train_entries:
-            train_entries = [entry]
+        if transport_type_int == TRAIN_ROUTE_TYPE:
+            # Union installed train routes across all train entries for this API key.
+            source_entries = same_mode_entries(hass, entry.data.get(CONF_API_KEY), TRAIN_ROUTE_TYPE) or [entry]
+            geo_mode_key = TRAIN_GEOMETRY_SENSOR_KEY
+        else:
+            source_entries = [entry]
+            type_name = TRANSPORTATION_TYPES.get(transport_type_int, "unknown")
+            geo_mode_key = f"{type_name.lower().replace(' ', '_')}_geometry"
 
-        for train_entry in train_entries:
-            for route in entry_routes(train_entry):
+        for source_entry in source_entries:
+            for route in entry_routes(source_entry):
                 route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
                 if not route_id or route_id in seen_route_ids:
                     continue
@@ -116,7 +122,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         geometry_coordinator = MetlinkRouteGeometryCoordinator(
             hass,
             api_client,
-            mode_key=TRAIN_GEOMETRY_SENSOR_KEY,
+            mode_key=geo_mode_key,
             route_ids=geometry_route_ids,
         )
         await geometry_coordinator.async_config_entry_first_refresh()
