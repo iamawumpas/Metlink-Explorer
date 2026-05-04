@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-05-05
+
+### Fix - Per-route geometry only
+
+- Removed aggregate mode-level route geometry entities from sensor setup.
+- Integration now exposes only per-route geometry entities (for example `Train :: KPL Geometry`, `Bus :: 83 Geometry`).
+- Prevents recreation of `* :: Route Geometry` entities when users want route-by-route map selection.
+
 ## [0.7.0] - 2026-05-05
 
 ### Feature - Phase 3: Live vehicle tracking for all transport modes

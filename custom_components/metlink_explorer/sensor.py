@@ -82,12 +82,6 @@ async def async_setup_entry(
 
     geometry_coordinator = runtime.get("geometry_coordinator")
     if geometry_coordinator is not None:
-        entities.append(
-            MetlinkTrainRouteGeometrySensor(
-                geometry_coordinator,
-                transportation_name,
-            )
-        )
         line_routes: list[tuple[str, str]] = []
         seen_route_ids: set[str] = set()
 
@@ -305,7 +299,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.7.0",
+            "sw_version": "0.7.1",
         }
 
     @property
@@ -425,7 +419,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.7.0",
+            "sw_version": "0.7.1",
         }
 
     @property
