@@ -1044,7 +1044,7 @@ class MetlinkApiClient:
                     "stop_count": 0
                 }
             
-            _LOGGER.info("Processing %d stops in pattern for route %s direction %s", 
+            _LOGGER.debug("Processing %d stops in pattern for route %s direction %s", 
                         len(stop_pattern), route_id, direction_id)
             
             # Get destination (last stop in the pattern)
@@ -1146,15 +1146,20 @@ class MetlinkApiClient:
     async def get_route_timeline_for_card(self, route_id: str, direction_id: int) -> dict[str, Any]:
         """Get route timeline data optimized for Home Assistant card display using stop predictions."""
         try:
-            _LOGGER.info("Getting route timeline for card display: route %s direction %s", route_id, direction_id)
+            _LOGGER.debug("Getting route timeline for card display: route %s direction %s", route_id, direction_id)
             
             # Step 1: Get the static stop pattern from GTFS data
             stop_pattern = await self.get_route_stop_pattern(route_id, direction_id)
             if not stop_pattern:
-                _LOGGER.error("No stop pattern found for route %s direction %s", route_id, direction_id)
-                return {"stops": [], "error": "No stop pattern found"}
+                _LOGGER.debug(
+                    "No stop pattern available for route %s direction %s "
+                    "(route may not operate in this direction or uses non-standard trip IDs)",
+                    route_id,
+                    direction_id,
+                )
+                return {"stops": [], "error": None}
             
-            _LOGGER.info("Found stop pattern with %d stops", len(stop_pattern))
+            _LOGGER.debug("Found stop pattern with %d stops", len(stop_pattern))
             
             # Step 2: Get real-time predictions using the stop-predictions endpoint (batched)
             timeline_stops = []
@@ -1252,7 +1257,7 @@ class MetlinkApiClient:
             # Sort by stop sequence
             timeline_stops.sort(key=lambda x: x["stop_sequence"])
             
-            _LOGGER.info("Built timeline with %d stops, %d with real-time data", 
+            _LOGGER.debug("Built timeline with %d stops, %d with real-time data", 
                         len(timeline_stops), 
                         sum(1 for s in timeline_stops if s["has_real_time"]))
             

@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-05-04
+
+### Fix - Suppress expected missing-direction log noise
+
+- "No stop pattern found for route X direction Y" downgraded from `ERROR` to `DEBUG` with a descriptive note that routes like 14 (shared QDF/MIF) and 8 do not operate symmetrically in both directions.
+- Return value changed from `{"error": "No stop pattern found"}` to `{"error": None}` so sensors do not surface a spurious error state.
+- "Getting route timeline for card display", "Found stop pattern with N stops", "Processing N stops in pattern", and "Built timeline with N stops" downgraded from `INFO` to `DEBUG` — these fired on every 60-second coordinator poll and contributed to the 200-messages/minute logging flood.
+
 ## [0.6.0] - 2026-05-04
 
 ### Feature - Route geometry sensors for all transport modes
