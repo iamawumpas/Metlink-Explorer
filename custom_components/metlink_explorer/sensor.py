@@ -305,7 +305,7 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.6.1",
+            "sw_version": "0.6.2",
         }
 
     @property
@@ -425,7 +425,7 @@ class MetlinkDirectionSensor(CoordinatorEntity, SensorEntity):
             "name": f"{transportation_name} Route {route_short_name}",
             "manufacturer": "Metlink",
             "model": transportation_name,
-            "sw_version": "0.6.1",
+            "sw_version": "0.6.2",
         }
 
     @property
@@ -767,6 +767,10 @@ class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
             "route_count": data.get("route_count", 0),
             "feature_count": data.get("feature_count", 0),
             "data_url": self._payload_file_url,
+            "geojson": {
+                "type": data.get("type", "FeatureCollection"),
+                "features": data.get("features", []),
+            },
         }
 
 
@@ -845,10 +849,15 @@ class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return route geometry summary; full GeoJSON is written to the JSON file."""
         feature = self._feature()
+        features = [feature] if feature else []
         return {
             "route_id": self._route_id,
             "route_short_name": self._route_short_name,
             "default_color": _train_line_default_color(self._route_short_name),
             "feature_count": 1 if feature else 0,
             "data_url": self._payload_file_url,
+            "geojson": {
+                "type": "FeatureCollection",
+                "features": features,
+            },
         }

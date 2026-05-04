@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-05-04
+
+### Fix - Restore geojson attribute to geometry sensors
+
+- `geojson` attribute (GeoJSON FeatureCollection) restored to both the aggregate mode geometry sensor and the per-route line geometry sensor.
+- The 0.6.0 refactor moved geometry to JSON files only, breaking any map card that reads `geojson` directly from sensor attributes.
+- Geometry data is now available in both the `geojson` attribute (for direct card use) and the `data_url` JSON file (for programmatic/file-based access).
+- Note: if a route's geometry payload is very large, the HA recorder 16 kB warning may recur for that entity. Use `data_url` for those cases.
+
 ## [0.6.1] - 2026-05-04
 
 ### Fix - Suppress expected missing-direction log noise
