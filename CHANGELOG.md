@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.16] - 2026-05-10
+
+### Fix - Route geometry rendering and marker scale tuning
+
+- Fixed route coordinate normalization so valid GeoJSON `longitude,latitude` pairs are no longer incorrectly swapped.
+- Restored route line visibility for normal route geometry feeds that already use standard GeoJSON ordering.
+- Reduced live marker size by half from the previous release for better map balance.
+
 ## [0.7.15] - 2026-05-10
 
 ### Fix - Frontend cache-busting and glyph-safe live markers

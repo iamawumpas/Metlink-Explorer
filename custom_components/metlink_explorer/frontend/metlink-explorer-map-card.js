@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.15)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.16)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -274,10 +274,6 @@ class MetlinkExplorerCard extends LitElement {
       return [second, first];
     }
 
-    if (firstLooksLikeLon && secondLooksLikeLat && Math.abs(first) > 90) {
-      return [second, first];
-    }
-
     return [first, second];
   }
 
@@ -405,7 +401,7 @@ class MetlinkExplorerCard extends LitElement {
           source: sourceId,
           paint: {
             "circle-color": ["get", "marker_color"],
-            "circle-radius": 66,
+            "circle-radius": 33,
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 4,
           },
