@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-05-10
+
+### Feature - Phase 3: Transit Stop Marker System (Infrastructure)
+
+- Added `timeline_stops` data to route GeoJSON features for Phase 3 marker rendering.
+- Each route feature now includes stops for both directions (direction 0 and 1) with coordinates, stop names, hub status, and real-time indicators.
+- Frontend can now access stop coordinates via the route geometry entity's `geojson` attribute.
+- Foundation for upcoming tasks: marker extraction, hub collision detection, and stop clickability.
+
 ## [0.7.27] - 2026-05-10
 
 ### Improvement - Map-pin direction badge shape

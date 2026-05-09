@@ -390,12 +390,29 @@ class MetlinkApiClient:
             return None
 
         route_short_name = await self._get_route_short_name(route_id)
+        
+        # Fetch timeline stops for both directions to include in feature properties.
+        timeline_stops_by_direction: dict[int, list[dict[str, Any]]] = {}
+        for direction_id in (0, 1):
+            try:
+                timeline_data = await self.get_route_timeline_for_card(route_id, direction_id)
+                timeline_stops_by_direction[direction_id] = timeline_data.get("stops", [])
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug(
+                    "Failed to fetch timeline stops for route %s direction %s: %s",
+                    route_id,
+                    direction_id,
+                    exc,
+                )
+                timeline_stops_by_direction[direction_id] = []
+        
         feature = {
             "type": "Feature",
             "properties": {
                 "route_id": route_id,
                 "route_short_name": route_short_name,
                 "shape_count": len(lines),
+                "timeline_stops": timeline_stops_by_direction,
             },
             "geometry": {
                 "type": "MultiLineString" if len(lines) > 1 else "LineString",
