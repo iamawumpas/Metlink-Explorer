@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.12] - 2026-05-09
+
+### Fix - Harden map render pipeline for live tracking
+
+- Added null-safe handling in route geometry parsing when `hass`, `geojson`, or `geojson.features` are missing/malformed.
+- Added guarded route rendering with explicit error handling so failures in route line rendering no longer prevent live marker rendering.
+- Added style-load skip logs and route render start/end logs to confirm render flow.
+- Live marker rendering now continues even when one or more geometry entities are invalid.
+
 ## [0.7.11] - 2026-05-09
 
 ### Debug - Map lifecycle diagnostics

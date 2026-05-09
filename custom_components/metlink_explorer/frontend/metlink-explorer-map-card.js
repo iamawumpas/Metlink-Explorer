@@ -259,13 +259,18 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   _parseRouteGeometry(entityId) {
-    const state = this.hass.states[entityId];
+    const states = this.hass?.states;
+    if (!states) return null;
+
+    const state = states[entityId];
     if (!state || !state.attributes || !state.attributes.geojson) return null;
 
     let geojson = state.attributes.geojson;
     if (typeof geojson === 'string') {
       try { geojson = JSON.parse(geojson); } catch (e) { return null; }
     }
+
+    if (!geojson || !Array.isArray(geojson.features)) return null;
 
     return geojson.features
       .filter(f => f.geometry && (f.geometry.type === "MultiLineString" || f.geometry.type === "LineString"))
@@ -280,7 +285,11 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   _renderLiveVehicles() {
-    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this.map) return;
+    if (!this.map.isStyleLoaded()) {
+      console.log("[MetlinkExplorer] _renderLiveVehicles skipped: style not loaded");
+      return;
+    }
 
     const liveSources = Array.from({ length: 200 }, (_, i) => `live-source-${i}`);
     liveSources.forEach((sourceId) => {
@@ -379,51 +388,61 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   _renderRoutes() {
-    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this.map) return;
+    if (!this.map.isStyleLoaded()) {
+      console.log("[MetlinkExplorer] _renderRoutes skipped: style not loaded");
+      return;
+    }
 
-    const categories = ['ferry', 'bus', 'train'];
-    
-    // Clear existing
-    const currentSources = Array.from({length: 100}, (_, i) => `route-source-${i}`);
-    currentSources.forEach(s => {
-      if (this.map.getLayer(`layer-${s}`)) this.map.removeLayer(`layer-${s}`);
-      if (this.map.getSource(s)) this.map.removeSource(s);
-    });
+    console.log('[MetlinkExplorer] _renderRoutes start');
 
-    let layerIdx = 0;
-    categories.forEach(cat => {
-      const entries = this.config[`${cat}_entities`] || [];
-      [...entries].reverse().forEach(entry => {
-        const features = this._parseRouteGeometry(entry.entity);
-        if (!features) return;
-
-        const sourceId = `route-source-${layerIdx}`;
-        this.map.addSource(sourceId, {
-          type: 'geojson',
-          data: { type: 'FeatureCollection', features: features }
-        });
-
-        const weight = entry.weight || 6;
-        const dashBase = DASH_MAP[entry.style] || [];
-        // Scale dasharray by weight to keep gaps visible at lower zooms
-        const dashArray = dashBase.map(v => v * (weight / 3));
-
-        this.map.addLayer({
-          id: `layer-${sourceId}`,
-          type: 'line',
-          source: sourceId,
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: {
-            'line-color': entry.color || '#ffa500',
-            'line-width': weight,
-            ...(dashArray.length > 0 ? { 'line-dasharray': dashArray } : {})
-          }
-        });
-        layerIdx++;
+    try {
+      const categories = ['ferry', 'bus', 'train'];
+      
+      // Clear existing
+      const currentSources = Array.from({length: 100}, (_, i) => `route-source-${i}`);
+      currentSources.forEach(s => {
+        if (this.map.getLayer(`layer-${s}`)) this.map.removeLayer(`layer-${s}`);
+        if (this.map.getSource(s)) this.map.removeSource(s);
       });
-    });
 
+      let layerIdx = 0;
+      categories.forEach(cat => {
+        const entries = this.config[`${cat}_entities`] || [];
+        [...entries].reverse().forEach(entry => {
+          const features = this._parseRouteGeometry(entry.entity);
+          if (!features) return;
+
+          const sourceId = `route-source-${layerIdx}`;
+          this.map.addSource(sourceId, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: features }
+          });
+
+          const weight = entry.weight || 6;
+          const dashBase = DASH_MAP[entry.style] || [];
+          // Scale dasharray by weight to keep gaps visible at lower zooms
+          const dashArray = dashBase.map(v => v * (weight / 3));
+
+          this.map.addLayer({
+            id: `layer-${sourceId}`,
+            type: 'line',
+            source: sourceId,
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': entry.color || '#ffa500',
+              'line-width': weight,
+              ...(dashArray.length > 0 ? { 'line-dasharray': dashArray } : {})
+            }
+          });
+          layerIdx++;
+        });
+      });
+    } catch (err) {
+      console.error('[MetlinkExplorer] _renderRoutes error', err);
+    }
     this._renderLiveVehicles();
+    console.log('[MetlinkExplorer] _renderRoutes end');
   }
 
   updated(changedProps) {
