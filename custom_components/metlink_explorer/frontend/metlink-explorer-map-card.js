@@ -6,7 +6,7 @@ import {
 
 console.log("[MetlinkExplorer] map card script loaded");
 
-const loadMapLibre = new Promise((resolve) => {
+const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
     const link = document.createElement("link");
     link.rel = "stylesheet";
@@ -14,8 +14,22 @@ const loadMapLibre = new Promise((resolve) => {
     document.head.appendChild(link);
     const script = document.createElement("script");
     script.src = "https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js";
-    script.onload = () => resolve();
+    script.onload = () => {
+      console.log("[MetlinkExplorer] MapLibre script loaded");
+      resolve();
+    };
+    script.onerror = () => {
+      console.error("[MetlinkExplorer] MapLibre script failed to load");
+      reject(new Error("MapLibre load failed"));
+    };
     document.head.appendChild(script);
+
+    setTimeout(() => {
+      if (!window.maplibregl) {
+        console.error("[MetlinkExplorer] MapLibre still unavailable after timeout");
+        reject(new Error("MapLibre timeout"));
+      }
+    }, 10000);
   }
 });
 
@@ -51,6 +65,13 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   setConfig(config) {
+    console.log("[MetlinkExplorer] setConfig called", {
+      trainEntities: Array.isArray(config?.train_entities) ? config.train_entities.length : 0,
+      busEntities: Array.isArray(config?.bus_entities) ? config.bus_entities.length : 0,
+      ferryEntities: Array.isArray(config?.ferry_entities) ? config.ferry_entities.length : 0,
+      centerMap: config?.center_map,
+      zoom: config?.zoom,
+    });
     this.config = {
       train_entities: [],
       bus_entities: [],
@@ -406,6 +427,12 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   updated(changedProps) {
+    if (changedProps.has('config')) {
+      console.log('[MetlinkExplorer] updated(config)');
+    }
+    if (changedProps.has('hass')) {
+      console.log('[MetlinkExplorer] updated(hass)');
+    }
     if (this.map) {
       if (changedProps.has('config')) {
         const oldConfig = changedProps.get('config');
@@ -419,13 +446,24 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   async firstUpdated() {
-    await loadMapLibre;
-    this._initMap();
+    console.log('[MetlinkExplorer] firstUpdated start');
+    try {
+      await loadMapLibre;
+      console.log('[MetlinkExplorer] firstUpdated MapLibre ready');
+      this._initMap();
+    } catch (err) {
+      console.error('[MetlinkExplorer] firstUpdated failed before _initMap', err);
+    }
   }
 
   _initMap() {
     const container = this.shadowRoot.getElementById('map');
-    if (!container || this.map) return;
+    if (!container || this.map) {
+      console.log('[MetlinkExplorer] _initMap skipped', { hasContainer: !!container, hasMap: !!this.map });
+      return;
+    }
+
+    console.log('[MetlinkExplorer] _initMap creating map');
 
     this.map = new maplibregl.Map({
       container: container,
@@ -446,9 +484,14 @@ class MetlinkExplorerCard extends LitElement {
     });
 
     this.map.on('load', () => {
+      console.log('[MetlinkExplorer] map load event');
       this.map.resize();
       this._centerMap();
       this._renderRoutes();
+    });
+
+    this.map.on('error', (event) => {
+      console.error('[MetlinkExplorer] map error event', event?.error || event);
     });
 
     this._resizeObserver = new ResizeObserver(() => {

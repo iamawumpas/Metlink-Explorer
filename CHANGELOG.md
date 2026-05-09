@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.11] - 2026-05-09
+
+### Debug - Map lifecycle diagnostics
+
+- Added detailed map card lifecycle logs for `setConfig`, `updated(config/hass)`, `firstUpdated`, `_initMap`, map `load`, and map `error` events.
+- Added explicit MapLibre loader success/failure logging, script load timeout diagnostics, and load error handling.
+- These diagnostics identify whether live marker rendering is blocked before map initialization or during map style load.
+
 ## [0.7.10] - 2026-05-09
 
 ### Fix - Live marker matching when geometry is missing
