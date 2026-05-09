@@ -1,6 +1,7 @@
 """Device tracker platform for live Metlink vehicle positions."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
@@ -171,6 +172,8 @@ class MetlinkVehicleTrackerEntity(CoordinatorEntity, TrackerEntity):
         self._route_ids = route_ids
         self._vehicle_id = vehicle_id
         self._initial_data = initial_data
+        self._last_seen_data: dict[str, Any] | None = initial_data if initial_data else None
+        self._last_seen_at: datetime | None = datetime.now() if initial_data else None
 
         self._attr_unique_id = f"{DOMAIN}_{transportation_name.lower()}_vehicle_{vehicle_id}"
         self._attr_name = f"{transportation_name} {initial_data.get('label', vehicle_id)}"
@@ -180,14 +183,28 @@ class MetlinkVehicleTrackerEntity(CoordinatorEntity, TrackerEntity):
             "name": self._attr_name,
             "manufacturer": "Metlink",
             "model": f"{transportation_name} Vehicle",
-            "sw_version": "0.7.4",
+            "sw_version": "0.7.5",
         }
 
     def _current(self) -> dict[str, Any] | None:
-        """Return latest normalized data for this vehicle."""
+        """Return latest normalized data for this vehicle.
+
+        Keep a short grace window after a vehicle disappears so end-of-line
+        removals are not abrupt.
+        """
         vehicle_positions = self.coordinator.data.get("vehicle_positions") if self.coordinator.data else None
         positions = _extract_positions(vehicle_positions, self._route_ids)
-        return positions.get(self._vehicle_id) or self._initial_data
+        current = positions.get(self._vehicle_id)
+        if current is not None:
+            self._last_seen_data = current
+            self._last_seen_at = datetime.now()
+            return current
+
+        if self._last_seen_data is not None and self._last_seen_at is not None:
+            if (datetime.now() - self._last_seen_at).total_seconds() <= 120:
+                return self._last_seen_data
+
+        return None
 
     @property
     def available(self) -> bool:
@@ -225,4 +242,10 @@ class MetlinkVehicleTrackerEntity(CoordinatorEntity, TrackerEntity):
             "bearing": current.get("bearing"),
             "speed": current.get("speed"),
             "timestamp": current.get("timestamp"),
+            "vehicle_positions_fetched_at": (
+                self.coordinator.data.get("vehicle_positions_fetched_at")
+                if self.coordinator.data
+                else None
+            ),
+            "last_seen_at": self._last_seen_at.isoformat() if self._last_seen_at else None,
         }

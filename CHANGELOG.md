@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2026-05-09
+
+### Feature - Route-driven live vehicle tracking on map card
+
+- Reworked bundled `card` + `editor` live tracking from per-vehicle selection to per-route toggles.
+- Added `Live Tracking` toggle on each configured route row in the editor.
+- Live markers now render route labels (for example `HVL`, `83`) inside the marker with automatic high-contrast text color.
+- Marker background color now follows each route's configured line color.
+- Live rendering now only uses active tracker positions with recent GTFS-RT timestamps (default 120-second freshness window).
+- Vehicle trackers now keep a 2-minute grace period after disappearing from live feed, then drop from map naturally.
+- Added live metadata attribute `vehicle_positions_fetched_at` and ensured first coordinator update resets live cache for a fresh post-reload fetch.
+
 ## [0.7.4] - 2026-05-09
 
 ### Feature - Live vehicle tracking in bundled map card

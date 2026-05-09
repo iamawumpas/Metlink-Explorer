@@ -26,6 +26,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Initialize route coordinator."""
         self.api_client = api_client
         self.route_id = str(route_id)
+        self._live_cache_primed = False
 
         super().__init__(
             hass,
@@ -37,8 +38,13 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data for the route in both directions."""
         try:
+            if not self._live_cache_primed:
+                self.api_client.reset_live_caches()
+                self._live_cache_primed = True
+
             trips = await self.api_client.get_trips_for_route(self.route_id)
             vehicle_positions = await self.api_client.get_vehicle_positions()
+            vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
             trip_updates = await self.api_client.get_trip_updates()
             today_str = datetime.now().strftime("%Y%m%d")
             tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
@@ -91,6 +97,11 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "route_id": self.route_id,
                 "trips": trips,
                 "vehicle_positions": vehicle_positions,
+                "vehicle_positions_fetched_at": (
+                    vehicle_positions_fetched_at.isoformat()
+                    if vehicle_positions_fetched_at
+                    else None
+                ),
                 "trip_updates": trip_updates,
                 "timetable_rows": timetable_rows,
                 "timeline_by_direction": timeline_by_direction,

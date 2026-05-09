@@ -53,11 +53,91 @@ class MetlinkExplorerCard extends LitElement {
       train_entities: [],
       bus_entities: [],
       ferry_entities: [],
-      train_live_entities: [],
-      bus_live_entities: [],
-      ferry_live_entities: [],
+      live_max_age_seconds: 120,
       ...config,
     };
+  }
+
+  _hexToRgb(hex) {
+    const normalized = String(hex || "").replace("#", "");
+    if (normalized.length !== 6) return null;
+    const value = Number.parseInt(normalized, 16);
+    if (Number.isNaN(value)) return null;
+    return {
+      r: (value >> 16) & 255,
+      g: (value >> 8) & 255,
+      b: value & 255,
+    };
+  }
+
+  _contrastTextColor(backgroundHex) {
+    const rgb = this._hexToRgb(backgroundHex);
+    if (!rgb) return "#ffffff";
+    const luminance = (0.299 * rgb.r) + (0.587 * rgb.g) + (0.114 * rgb.b);
+    return luminance > 150 ? "#000000" : "#ffffff";
+  }
+
+  _parseTrackerTimestamp(value) {
+    if (value === null || value === undefined) return null;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    return numeric;
+  }
+
+  _routeMetaFromFeatures(features) {
+    if (!Array.isArray(features) || features.length === 0) return null;
+    const first = features[0];
+    const props = first?.properties || {};
+    const routeId = props.route_id ? String(props.route_id) : null;
+    const routeShort = props.route_short_name ? String(props.route_short_name) : routeId;
+    if (!routeId) return null;
+    return {
+      routeId,
+      routeLabel: routeShort || routeId,
+    };
+  }
+
+  _liveFeaturesForRoute(routeEntry, mode, routeMeta) {
+    if (!this.hass || !routeMeta) return [];
+    const maxAge = Number(this.config.live_max_age_seconds || 120);
+    const nowEpoch = Date.now() / 1000;
+    const markerColor = routeEntry.color || VEHICLE_COLORS[mode] || "#ff9800";
+    const textColor = this._contrastTextColor(markerColor);
+
+    return Object.entries(this.hass.states)
+      .filter(([entityId, state]) => {
+        if (!entityId.startsWith("device_tracker.")) return false;
+        if (!state || !state.attributes) return false;
+        if (state.attributes.restored === true) return false;
+
+        const routeId = state.attributes.route_id ? String(state.attributes.route_id) : "";
+        if (!routeId || routeId !== routeMeta.routeId) return false;
+
+        const lat = Number(state.attributes.latitude);
+        const lon = Number(state.attributes.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+
+        const ts = this._parseTrackerTimestamp(state.attributes.timestamp);
+        if (!ts) return false;
+        return (nowEpoch - ts) <= maxAge;
+      })
+      .map(([entityId, state]) => {
+        const lat = Number(state.attributes.latitude);
+        const lon = Number(state.attributes.longitude);
+        return {
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [lon, lat],
+          },
+          properties: {
+            entity_id: entityId,
+            route_label: routeMeta.routeLabel,
+            marker_color: markerColor,
+            text_color: textColor,
+          },
+        };
+      });
   }
 
   connectedCallback() {
@@ -102,34 +182,11 @@ class MetlinkExplorerCard extends LitElement {
       .map(f => ({
         type: "Feature",
         geometry: f.geometry,
-        properties: { entity_id: entityId }
+        properties: {
+          ...(f.properties || {}),
+          entity_id: entityId,
+        }
       }));
-  }
-
-  _parseLiveTracker(entry, mode) {
-    if (!entry || !entry.entity || !this.hass) return null;
-    const state = this.hass.states[entry.entity];
-    if (!state || !state.attributes) return null;
-
-    const latitude = Number(state.attributes.latitude);
-    const longitude = Number(state.attributes.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-
-    const routeId = state.attributes.route_id;
-    const labelBase = state.attributes.label || state.attributes.friendly_name || entry.entity;
-    const label = routeId ? `${labelBase} (${routeId})` : labelBase;
-
-    return {
-      type: "Feature",
-      geometry: {
-        type: "Point",
-        coordinates: [longitude, latitude],
-      },
-      properties: {
-        label,
-        mode,
-      },
-    };
   }
 
   _renderLiveVehicles() {
@@ -147,10 +204,16 @@ class MetlinkExplorerCard extends LitElement {
     const categories = ["train", "bus", "ferry"];
     let sourceIndex = 0;
     categories.forEach((mode) => {
-      const liveEntries = this.config[`${mode}_live_entities`] || [];
-      [...liveEntries].reverse().forEach((entry) => {
-        const feature = this._parseLiveTracker(entry, mode);
-        if (!feature) return;
+      const routeEntries = this.config[`${mode}_entities`] || [];
+      [...routeEntries].reverse().forEach((entry) => {
+        if (entry.live_tracking !== true) return;
+
+        const routeFeatures = this._parseRouteGeometry(entry.entity);
+        const routeMeta = this._routeMetaFromFeatures(routeFeatures || []);
+        if (!routeMeta) return;
+
+        const vehicleFeatures = this._liveFeaturesForRoute(entry, mode, routeMeta);
+        if (vehicleFeatures.length === 0) return;
 
         const sourceId = `live-source-${sourceIndex}`;
         const circleLayerId = `layer-${sourceId}`;
@@ -159,7 +222,7 @@ class MetlinkExplorerCard extends LitElement {
           type: "geojson",
           data: {
             type: "FeatureCollection",
-            features: [feature],
+            features: vehicleFeatures,
           },
         });
 
@@ -168,31 +231,30 @@ class MetlinkExplorerCard extends LitElement {
           type: "circle",
           source: sourceId,
           paint: {
-            "circle-color": entry.color || VEHICLE_COLORS[mode] || "#ff9800",
-            "circle-radius": entry.size || 7,
+            "circle-color": ["get", "marker_color"],
+            "circle-radius": 11,
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 1.5,
           },
         });
 
-        if (entry.show_label !== false) {
-          this.map.addLayer({
-            id: textLayerId,
-            type: "symbol",
-            source: sourceId,
-            layout: {
-              "text-field": ["get", "label"],
-              "text-size": 11,
-              "text-offset": [0, 1.2],
-              "text-anchor": "top",
-            },
-            paint: {
-              "text-color": "#ffffff",
-              "text-halo-color": "#000000",
-              "text-halo-width": 1.2,
-            },
-          });
-        }
+        this.map.addLayer({
+          id: textLayerId,
+          type: "symbol",
+          source: sourceId,
+          layout: {
+            "text-field": ["get", "route_label"],
+            "text-size": 10,
+            "text-offset": [0, 0],
+            "text-anchor": "center",
+            "text-allow-overlap": true,
+          },
+          paint: {
+            "text-color": ["get", "text_color"],
+            "text-halo-color": "#000000",
+            "text-halo-width": 0.8,
+          },
+        });
 
         sourceIndex += 1;
       });

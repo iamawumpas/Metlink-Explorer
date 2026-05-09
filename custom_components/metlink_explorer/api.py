@@ -927,6 +927,17 @@ class MetlinkApiClient:
             _LOGGER.error("Failed to fetch vehicle positions: %s", exc)
             raise
 
+    def reset_live_caches(self) -> None:
+        """Clear live GTFS-RT caches so next request forces a fresh download."""
+        self._vehicle_positions_cache = None
+        self._trip_updates_cache = None
+
+    def vehicle_positions_fetched_at(self) -> datetime | None:
+        """Return timestamp of latest vehicle positions fetch/cache fill."""
+        if self._vehicle_positions_cache is None:
+            return None
+        return self._vehicle_positions_cache[0]
+
     async def get_trip_updates(self) -> list[dict[str, Any]]:
         """Get real-time trip updates, shared across all routes (30s TTL)."""
         now = datetime.now()
