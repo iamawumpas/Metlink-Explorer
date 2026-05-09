@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-05-10
+
+### Fix - Hub stops now render from route geometry
+
+- Added explicit `hub_stops` data to route geometry features so the frontend can render hubs without relying only on nested timeline scans.
+- Hub rendering now falls back to `timeline_stops` when needed and logs when no hub stops are detected.
+- The editor toggle remains per-route, so MEL, HVL, and bus routes can independently show hub markers.
+
 ## [0.8.1] - 2026-05-10
 
 ### Feature - Hub stop toggle and rendering foundation

@@ -413,6 +413,7 @@ class MetlinkApiClient:
                 "route_short_name": route_short_name,
                 "shape_count": len(lines),
                 "timeline_stops": timeline_stops_by_direction,
+                "hub_stops": [stop for stops in timeline_stops_by_direction.values() for stop in stops if isinstance(stop, dict) and stop.get("is_hub")],
             },
             "geometry": {
                 "type": "MultiLineString" if len(lines) > 1 else "LineString",

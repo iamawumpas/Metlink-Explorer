@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.1)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.2)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -663,12 +663,22 @@ class MetlinkExplorerCard extends LitElement {
           if (entry.show_hubs === true) {
             const hubStops = [];
             for (const feature of features) {
-              const timelineStops = feature?.properties?.timeline_stops || {};
-              for (const directionStops of Object.values(timelineStops)) {
-                if (!Array.isArray(directionStops)) continue;
-                for (const stop of directionStops) {
-                  if (stop?.is_hub === true && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
-                    hubStops.push(stop);
+              const props = feature?.properties || {};
+              const directHubStops = Array.isArray(props.hub_stops) ? props.hub_stops : [];
+              for (const stop of directHubStops) {
+                if (stop && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
+                  hubStops.push(stop);
+                }
+              }
+
+              if (hubStops.length === 0) {
+                const timelineStops = props.timeline_stops || {};
+                for (const directionStops of Object.values(timelineStops)) {
+                  if (!Array.isArray(directionStops)) continue;
+                  for (const stop of directionStops) {
+                    if (stop?.is_hub === true && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
+                      hubStops.push(stop);
+                    }
                   }
                 }
               }
@@ -722,6 +732,8 @@ class MetlinkExplorerCard extends LitElement {
                   'icon-ignore-placement': true,
                 },
               });
+            } else {
+              console.log(`[MetlinkExplorer] No hub stops found for ${entry.entity} (${cat})`);
             }
           }
 
