@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.19] - 2026-05-10
+
+### Fix - Frontend cache-bust release
+
+- Bumped the integration version to force Home Assistant and HACS to fetch the latest bundled frontend assets.
+- Updated the map card build marker so the console clearly shows the `0.7.19` frontend bundle.
+
 ## [0.7.18] - 2026-05-10
 
 ### Feature - Route ID text overlay on live markers
