@@ -421,23 +421,23 @@ class MetlinkExplorerCard extends LitElement {
         vehicleFeatures.forEach((feature) => {
           const [lon, lat] = feature.geometry.coordinates;
           const routeLabel = feature.properties.route_label || "";
-          const textColor = feature.properties.text_color || "#000000";
+          const textColor = feature.properties.text_color || "#ffffff";
           
           const el = document.createElement("div");
-          el.style.cssText = `
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: ${iconSize * 2}px;
-            height: ${iconSize * 2}px;
-            font-size: ${fontSize}px;
-            font-weight: bold;
-            color: ${textColor};
-            text-anchor: middle;
-            pointer-events: none;
-            white-space: nowrap;
-          `;
+          el.style.display = "flex";
+          el.style.alignItems = "center";
+          el.style.justifyContent = "center";
+          el.style.width = (iconSize * 2) + "px";
+          el.style.height = (iconSize * 2) + "px";
+          el.style.fontSize = fontSize + "px";
+          el.style.fontWeight = "bold";
+          el.style.color = textColor;
+          el.style.pointerEvents = "none";
+          el.style.whiteSpace = "nowrap";
+          el.style.textShadow = "0 0 2px rgba(0,0,0,0.5), 0 0 4px rgba(0,0,0,0.3)";
           el.textContent = routeLabel;
+
+          console.log(`[MetlinkExplorer] Creating text marker for route ${routeLabel} at [${lon}, ${lat}], color=${textColor}, size=${fontSize}px`);
 
           const marker = new window.maplibregl.Marker({
             element: el,
@@ -445,6 +445,7 @@ class MetlinkExplorerCard extends LitElement {
           }).setLngLat([lon, lat]).addTo(this.map);
 
           this._liveMarkers.push(marker);
+          console.log(`[MetlinkExplorer] Text marker added, total markers: ${this._liveMarkers.length}`);
         });
 
         sourceIndex += 1;
