@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.27] - 2026-05-10
+
+### Improvement - Map-pin direction badge shape
+
+- Redesigned the direction-aware vehicle icon to a map-pin silhouette (round body with pointed tail).
+- Kept route label text on a separate non-rotating symbol layer so labels stay upright.
+- Adjusted bearing mapping so the pin tip continues to point in the direction of travel.
+
 ## [0.7.26] - 2026-05-10
 
 ### Feature - Direction-aware vehicle icons

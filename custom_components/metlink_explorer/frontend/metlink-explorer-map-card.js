@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.26)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.27)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -118,9 +118,9 @@ class MetlinkExplorerCard extends LitElement {
   _ensureBadgeShape(imageId, markerColor, diameter, borderWidth, dpr) {
     if (!this.map || this.map.hasImage(imageId)) return;
 
-    // Teardrop canvas: 1.3× taller than wide so the tail fits above the circle.
+    // Map-pin canvas: taller than wide so the pointed tail fits below the circle.
     // Circle center sits at canvas center so icon-anchor:"center" = vehicle coordinate.
-    const tailFactor = 1.3;
+    const tailFactor = 1.5;
     const pixelW = Math.max(1, Math.round(diameter * dpr));
     const pixelH = Math.max(1, Math.round(diameter * tailFactor * dpr));
     const canvas = document.createElement("canvas");
@@ -132,16 +132,17 @@ class MetlinkExplorerCard extends LitElement {
     ctx.scale(dpr, dpr);
 
     const cssH = diameter * tailFactor;
-    const cx   = diameter / 2;
-    const cy   = cssH / 2;          // circle center at canvas center
-    const r    = Math.max(8, diameter / 2 - borderWidth);
-    const tipY = borderWidth;        // tip at top (bearing=0 → north)
+    const cx = diameter / 2;
+    const cy = cssH / 2; // circle center at canvas center
+    const r = Math.max(8, diameter / 2 - borderWidth);
+    const tipY = cssH - borderWidth; // classic map-pin point at bottom
 
     ctx.beginPath();
     ctx.moveTo(cx, tipY);
-    ctx.quadraticCurveTo(cx - r * 0.15, cy - r, cx - r, cy); // left side
-    ctx.arc(cx, cy, r, Math.PI, 0, true);                      // bottom arc
-    ctx.quadraticCurveTo(cx + r * 0.15, cy - r, cx, tipY);   // right side
+    ctx.quadraticCurveTo(cx - r * 0.35, cy + r * 1.05, cx - r, cy + r * 0.15);
+    ctx.bezierCurveTo(cx - r, cy - r * 0.65, cx - r * 0.45, cy - r, cx, cy - r);
+    ctx.bezierCurveTo(cx + r * 0.45, cy - r, cx + r, cy - r * 0.65, cx + r, cy + r * 0.15);
+    ctx.quadraticCurveTo(cx + r * 0.35, cy + r * 1.05, cx, tipY);
     ctx.closePath();
 
     ctx.fillStyle = markerColor;
@@ -300,6 +301,8 @@ class MetlinkExplorerCard extends LitElement {
         const rawBearing = state.attributes.bearing;
         const bearing = (rawBearing !== null && rawBearing !== undefined && Number.isFinite(Number(rawBearing)))
           ? Number(rawBearing) : 0;
+        // The pin artwork points down at 0deg, so rotate by +180deg to align tip with travel bearing.
+        const iconBearing = (bearing + 180) % 360;
         return {
           type: "Feature",
           geometry: {
@@ -312,7 +315,7 @@ class MetlinkExplorerCard extends LitElement {
             marker_color: markerColor,
             text_color: textColor,
             text_halo_color: textColor === "#000000" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.45)",
-            bearing: bearing,
+            bearing: iconBearing,
           },
         };
       });
