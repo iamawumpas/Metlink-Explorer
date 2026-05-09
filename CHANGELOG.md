@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.13] - 2026-05-09
+
+### Fix - Normalize route geometry coordinates
+
+- Added route geometry coordinate normalization in the bundled map card.
+- Obvious reversed lat/lon pairs in LineString and MultiLineString route geometry are now corrected before rendering.
+- Tracker GPS data remains unchanged; the fix applies only to route geometry GeoJSON at render time.
+
 ## [0.7.12] - 2026-05-09
 
 ### Fix - Harden map render pipeline for live tracking

@@ -258,6 +258,51 @@ class MetlinkExplorerCard extends LitElement {
     return styles[style] || styles['voyager'];
   }
 
+  _normalizeCoordinatePair(pair) {
+    if (!Array.isArray(pair) || pair.length < 2) return pair;
+
+    const first = Number(pair[0]);
+    const second = Number(pair[1]);
+    if (!Number.isFinite(first) || !Number.isFinite(second)) return pair;
+
+    const firstLooksLikeLat = Math.abs(first) <= 90;
+    const secondLooksLikeLon = Math.abs(second) <= 180;
+    const secondLooksLikeLat = Math.abs(second) <= 90;
+    const firstLooksLikeLon = Math.abs(first) <= 180;
+
+    if (firstLooksLikeLat && secondLooksLikeLon && (!firstLooksLikeLon || Math.abs(second) > 90)) {
+      return [second, first];
+    }
+
+    if (firstLooksLikeLon && secondLooksLikeLat && Math.abs(first) > 90) {
+      return [second, first];
+    }
+
+    return [first, second];
+  }
+
+  _normalizeGeometryCoordinates(coordinates) {
+    if (!Array.isArray(coordinates) || coordinates.length === 0) return coordinates;
+
+    if (typeof coordinates[0]?.[0] === "number") {
+      return coordinates.map((pair) => this._normalizeCoordinatePair(pair));
+    }
+
+    return coordinates.map((segment) => this._normalizeGeometryCoordinates(segment));
+  }
+
+  _normalizeRouteGeometry(geometry) {
+    if (!geometry || typeof geometry !== "object") return geometry;
+    const type = geometry.type;
+    if (type !== "LineString" && type !== "MultiLineString") return geometry;
+
+    const coordinates = this._normalizeGeometryCoordinates(geometry.coordinates);
+    return {
+      ...geometry,
+      coordinates,
+    };
+  }
+
   _parseRouteGeometry(entityId) {
     const states = this.hass?.states;
     if (!states) return null;
@@ -276,7 +321,7 @@ class MetlinkExplorerCard extends LitElement {
       .filter(f => f.geometry && (f.geometry.type === "MultiLineString" || f.geometry.type === "LineString"))
       .map(f => ({
         type: "Feature",
-        geometry: f.geometry,
+        geometry: this._normalizeRouteGeometry(f.geometry),
         properties: {
           ...(f.properties || {}),
           entity_id: entityId,
