@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-05-09
+
+### Feature - Bundled Metlink Explorer Map Card
+
+- Added `frontend/` subfolder containing the Metlink Explorer Map Card and its editor JavaScript files.
+- Map card and editor are now served directly by Home Assistant at `/metlink_explorer_frontend/` via `hass.http.register_static_path()`.
+- Card is automatically registered as a Lovelace frontend resource via `add_extra_js_url()` — no manual resource registration required.
+- Added `frontend` to `manifest.json` dependencies.
+- Users who previously installed the card manually from `/www/metlink-explorer-map-card/` can delete those files; the integration now handles serving them.
+- Updated editor lazy-import URL from `/local/metlink-explorer-map-card/metlink-explorer-editor.js` to `/metlink_explorer_frontend/metlink-explorer-editor.js`.
+
 ## [0.7.1] - 2026-05-05
 
 ### Fix - Per-route geometry only

@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -27,6 +30,20 @@ from .mode_registry import entry_routes, merged_routes, same_mode_entries
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.DEVICE_TRACKER]
+
+FRONTEND_URL_BASE = "/metlink_explorer_frontend"
+FRONTEND_DIR = Path(__file__).parent / "frontend"
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Register frontend static path and card resource."""
+    hass.http.register_static_path(
+        FRONTEND_URL_BASE,
+        str(FRONTEND_DIR),
+        cache_headers=False,
+    )
+    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-explorer-map-card.js")
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
