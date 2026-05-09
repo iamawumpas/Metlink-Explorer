@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.23] - 2026-05-10
+
+### Fix - Badge border and dark-text halo
+
+- Removed the extra thick white ring by dropping the legacy hidden circle layer.
+- Dark (black) route text now uses a white halo for cleaner contrast.
+
 ## [0.7.22] - 2026-05-10
 
 ### Fix - Route-locked badge rendering

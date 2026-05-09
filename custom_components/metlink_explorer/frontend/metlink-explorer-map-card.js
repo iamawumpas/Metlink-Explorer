@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.21)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.23)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -134,11 +134,14 @@ class MetlinkExplorerCard extends LitElement {
     ctx.stroke();
 
     if (routeLabel) {
+      const normalizedText = String(textColor || "").trim().toLowerCase();
+      const isDarkText = normalizedText === "#000000" || normalizedText === "black" || normalizedText === "rgb(0,0,0)";
+      const haloColor = isDarkText ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.45)";
       ctx.font = `700 ${fontSize}px Arial, Helvetica, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.lineJoin = "round";
-      ctx.strokeStyle = "rgba(0,0,0,0.45)";
+      ctx.strokeStyle = haloColor;
       ctx.lineWidth = Math.max(2, Math.round(fontSize * 0.14));
       ctx.strokeText(routeLabel, center, center + 0.5);
       ctx.fillStyle = textColor;
@@ -385,10 +388,8 @@ class MetlinkExplorerCard extends LitElement {
 
     const liveSources = Array.from({ length: 200 }, (_, i) => `live-source-${i}`);
     liveSources.forEach((sourceId) => {
-      const circleLayerId = `layer-${sourceId}`;
       const badgeLayerId = `badge-${sourceId}`;
       if (this.map.getLayer(badgeLayerId)) this.map.removeLayer(badgeLayerId);
-      if (this.map.getLayer(circleLayerId)) this.map.removeLayer(circleLayerId);
       if (this.map.getSource(sourceId)) this.map.removeSource(sourceId);
     });
 
@@ -441,7 +442,6 @@ class MetlinkExplorerCard extends LitElement {
         }
 
         const sourceId = `live-source-${sourceIndex}`;
-        const circleLayerId = `layer-${sourceId}`;
         const badgeLayerId = `badge-${sourceId}`;
 
         const featuresWithBadge = vehicleFeatures.map((feature) => {
@@ -465,19 +465,6 @@ class MetlinkExplorerCard extends LitElement {
           data: {
             type: "FeatureCollection",
             features: featuresWithBadge,
-          },
-        });
-
-        this.map.addLayer({
-          id: circleLayerId,
-          type: "circle",
-          source: sourceId,
-          paint: {
-            "circle-color": ["get", "marker_color"],
-            "circle-radius": iconSize,
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 4,
-            "circle-opacity": 0,
           },
         });
 
