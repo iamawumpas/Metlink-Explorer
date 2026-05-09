@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.19)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.20)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -359,7 +359,8 @@ class MetlinkExplorerCard extends LitElement {
     console.log(`[MetlinkExplorer] _renderLiveVehicles: ${allTrackers.length} device_tracker entities; nowEpoch=${nowEpoch.toFixed(0)}, maxAge=${maxAge}s`);
 
     const iconSize = Number(this.config.icon_size || 33);
-    const fontSize = Math.max(8, Math.round(iconSize * 0.4));
+    const badgeDiameter = Math.max(24, Math.round(iconSize * 2));
+    const fontSize = Math.max(14, Math.round(iconSize * 0.92));
 
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
@@ -417,27 +418,36 @@ class MetlinkExplorerCard extends LitElement {
           },
         });
 
-        // Add text markers for each vehicle
+        // Add badge markers for each vehicle so the route label is always visible.
         vehicleFeatures.forEach((feature) => {
           const [lon, lat] = feature.geometry.coordinates;
           const routeLabel = feature.properties.route_label || "";
+          const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
           const textColor = feature.properties.text_color || "#ffffff";
           
           const el = document.createElement("div");
+          el.style.boxSizing = "border-box";
           el.style.display = "flex";
           el.style.alignItems = "center";
           el.style.justifyContent = "center";
-          el.style.width = (iconSize * 2) + "px";
-          el.style.height = (iconSize * 2) + "px";
+          el.style.width = badgeDiameter + "px";
+          el.style.height = badgeDiameter + "px";
+          el.style.borderRadius = "50%";
+          el.style.background = markerColor;
+          el.style.border = "4px solid #ffffff";
           el.style.fontSize = fontSize + "px";
           el.style.fontWeight = "bold";
+          el.style.lineHeight = "1";
           el.style.color = textColor;
           el.style.pointerEvents = "none";
+          el.style.userSelect = "none";
+          el.style.overflow = "hidden";
           el.style.whiteSpace = "nowrap";
-          el.style.textShadow = "0 0 2px rgba(0,0,0,0.5), 0 0 4px rgba(0,0,0,0.3)";
+          el.style.textShadow = "0 0 2px rgba(0,0,0,0.75), 0 0 5px rgba(0,0,0,0.5)";
+          el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.35)";
           el.textContent = routeLabel;
 
-          console.log(`[MetlinkExplorer] Creating text marker for route ${routeLabel} at [${lon}, ${lat}], color=${textColor}, size=${fontSize}px`);
+          console.log(`[MetlinkExplorer] Creating badge marker for route ${routeLabel} at [${lon}, ${lat}], background=${markerColor}, color=${textColor}, size=${fontSize}px`);
 
           const marker = new window.maplibregl.Marker({
             element: el,
@@ -445,7 +455,7 @@ class MetlinkExplorerCard extends LitElement {
           }).setLngLat([lon, lat]).addTo(this.map);
 
           this._liveMarkers.push(marker);
-          console.log(`[MetlinkExplorer] Text marker added, total markers: ${this._liveMarkers.length}`);
+          console.log(`[MetlinkExplorer] Badge marker added, total markers: ${this._liveMarkers.length}`);
         });
 
         sourceIndex += 1;

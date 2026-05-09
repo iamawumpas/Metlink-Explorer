@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.20] - 2026-05-10
+
+### Fix - Visible live route badge labels
+
+- Reworked live vehicle markers into circular badges with centered route labels.
+- Increased the route label size substantially so it is readable on the map.
+- Bumped the frontend build marker to force HACS and browser caches to fetch the new bundle.
+
 ## [0.7.19] - 2026-05-10
 
 ### Fix - Frontend cache-bust release
