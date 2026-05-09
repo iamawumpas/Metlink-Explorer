@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.8] - 2026-05-09
+
+### Debug - Live tracking console diagnostics
+
+- Added `console.debug` output to `_renderLiveVehicles` in the bundled map card to trace live tracking pipeline:
+  - Logs total device_tracker entity count and current epoch time
+  - For each route entry: logs whether `live_tracking` is enabled, routeMeta, and matched vehicle count
+  - If no vehicles matched, logs each tracker that passed route matching with its coords/freshness/restored status
+- Temporary diagnostic release to identify root cause of live tracking not appearing
+
 ## [0.7.7] - 2026-05-09
 
 ### Feature - Bundle departure board card into integration

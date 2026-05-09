@@ -239,17 +239,44 @@ class MetlinkExplorerCard extends LitElement {
 
     const categories = ["train", "bus", "ferry"];
     let sourceIndex = 0;
+    const nowEpoch = Date.now() / 1000;
+    const maxAge = Number(this.config.live_max_age_seconds || 120);
+    const allTrackers = Object.entries(this.hass?.states || {})
+      .filter(([id]) => id.startsWith("device_tracker."));
+    console.debug(`[MetlinkExplorer] _renderLiveVehicles: ${allTrackers.length} device_tracker entities; nowEpoch=${nowEpoch.toFixed(0)}, maxAge=${maxAge}s`);
+
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
       [...routeEntries].reverse().forEach((entry) => {
-        if (entry.live_tracking !== true) return;
+        if (entry.live_tracking !== true) {
+          console.debug(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} — skipping`);
+          return;
+        }
 
         const routeFeatures = this._parseRouteGeometry(entry.entity);
         const routeMeta = this._routeMetaFromFeatures(routeFeatures || []);
+        console.debug(`[MetlinkExplorer] ${mode} entry ${entry.entity}: routeFeatures=${routeFeatures?.length ?? "null"}, routeMeta=${JSON.stringify(routeMeta)}`);
         if (!routeMeta) return;
 
         const vehicleFeatures = this._liveFeaturesForRoute(entry, mode, routeMeta);
-        if (vehicleFeatures.length === 0) return;
+        console.debug(`[MetlinkExplorer] ${mode} entry ${entry.entity}: vehicleFeatures=${vehicleFeatures.length}`);
+        if (vehicleFeatures.length === 0) {
+          // Log why each tracker was rejected
+          allTrackers.forEach(([entityId, state]) => {
+            const attrs = state?.attributes || {};
+            const restored = attrs.restored === true;
+            const matches = this._matchesRoute(state, routeMeta);
+            const lat = Number(attrs.latitude);
+            const lon = Number(attrs.longitude);
+            const hasCoords = Number.isFinite(lat) && Number.isFinite(lon);
+            const ts = this._parseTrackerTimestamp(attrs.timestamp);
+            const fresh = ts ? (nowEpoch - ts) <= maxAge : false;
+            if (matches) {
+              console.debug(`[MetlinkExplorer]   MATCHED ${entityId}: restored=${restored}, hasCoords=${hasCoords}, ts=${ts}, fresh=${fresh}, lat=${lat}, lon=${lon}`);
+            }
+          });
+          return;
+        }
 
         const sourceId = `live-source-${sourceIndex}`;
         const circleLayerId = `layer-${sourceId}`;
