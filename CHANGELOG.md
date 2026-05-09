@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.6] - 2026-05-09
+
+### Fix - Bus live route matching from trip_id prefix
+
+- Updated bundled `card` live matching logic to derive route key from `trip_id` prefix (first characters before the first `_`).
+- This fixes Metlink route variants where live tracker `route_id` values differ from geometry route identifiers (for example `830` live feed maps to route `83`).
+- Added fallback matching using `route_id` and route label for resilience when `trip_id` is missing.
+
 ## [0.7.5] - 2026-05-09
 
 ### Feature - Route-driven live vehicle tracking on map card

@@ -97,6 +97,43 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
+  _tripRouteKey(tripId) {
+    if (!tripId) return "";
+    const tripText = String(tripId);
+    const underscoreIdx = tripText.indexOf("_");
+    if (underscoreIdx <= 0) return "";
+    return tripText.slice(0, underscoreIdx).trim();
+  }
+
+  _routeKeys(routeMeta) {
+    const keys = new Set();
+    if (!routeMeta) return keys;
+    keys.add(String(routeMeta.routeId || "").trim());
+    keys.add(String(routeMeta.routeLabel || "").trim());
+    return new Set([...keys].filter(Boolean));
+  }
+
+  _vehicleRouteKeys(state) {
+    const attrs = state?.attributes || {};
+    const keys = new Set();
+    const fromTrip = this._tripRouteKey(attrs.trip_id);
+    if (fromTrip) keys.add(fromTrip);
+    const routeId = attrs.route_id ? String(attrs.route_id).trim() : "";
+    if (routeId) keys.add(routeId);
+    return keys;
+  }
+
+  _matchesRoute(state, routeMeta) {
+    const routeKeys = this._routeKeys(routeMeta);
+    if (routeKeys.size === 0) return false;
+    const vehicleKeys = this._vehicleRouteKeys(state);
+    if (vehicleKeys.size === 0) return false;
+    for (const key of vehicleKeys) {
+      if (routeKeys.has(key)) return true;
+    }
+    return false;
+  }
+
   _liveFeaturesForRoute(routeEntry, mode, routeMeta) {
     if (!this.hass || !routeMeta) return [];
     const maxAge = Number(this.config.live_max_age_seconds || 120);
@@ -110,8 +147,7 @@ class MetlinkExplorerCard extends LitElement {
         if (!state || !state.attributes) return false;
         if (state.attributes.restored === true) return false;
 
-        const routeId = state.attributes.route_id ? String(state.attributes.route_id) : "";
-        if (!routeId || routeId !== routeMeta.routeId) return false;
+        if (!this._matchesRoute(state, routeMeta)) return false;
 
         const lat = Number(state.attributes.latitude);
         const lon = Number(state.attributes.longitude);
