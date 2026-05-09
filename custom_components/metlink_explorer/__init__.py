@@ -1,6 +1,7 @@
 """The Metlink Explorer integration."""
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -34,15 +35,26 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.DEVICE_T
 
 FRONTEND_URL_BASE = "/metlink_explorer_frontend"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
+MANIFEST_PATH = Path(__file__).parent / "manifest.json"
+
+
+def _frontend_asset_version() -> str:
+    """Return frontend cache-busting version from manifest."""
+    try:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        return str(manifest.get("version", "dev"))
+    except Exception:  # pragma: no cover - best effort fallback
+        return "dev"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Register frontend static path and card resource."""
+    asset_version = _frontend_asset_version()
     await hass.http.async_register_static_paths(
         [StaticPathConfig(FRONTEND_URL_BASE, str(FRONTEND_DIR), cache_headers=False)]
     )
-    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-explorer-map-card.js")
-    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-departure-board-card.js")
+    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-explorer-map-card.js?v={asset_version}")
+    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-departure-board-card.js?v={asset_version}")
     return True
 
 

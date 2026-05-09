@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.15)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -391,7 +391,6 @@ class MetlinkExplorerCard extends LitElement {
 
         const sourceId = `live-source-${sourceIndex}`;
         const circleLayerId = `layer-${sourceId}`;
-        const textLayerId = `label-${sourceId}`;
         this.map.addSource(sourceId, {
           type: "geojson",
           data: {
@@ -406,27 +405,9 @@ class MetlinkExplorerCard extends LitElement {
           source: sourceId,
           paint: {
             "circle-color": ["get", "marker_color"],
-            "circle-radius": 11,
+            "circle-radius": 66,
             "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 1.5,
-          },
-        });
-
-        this.map.addLayer({
-          id: textLayerId,
-          type: "symbol",
-          source: sourceId,
-          layout: {
-            "text-field": ["get", "route_label"],
-            "text-size": 10,
-            "text-offset": [0, 0],
-            "text-anchor": "center",
-            "text-allow-overlap": true,
-          },
-          paint: {
-            "text-color": ["get", "text_color"],
-            "text-halo-color": "#000000",
-            "text-halo-width": 0.8,
+            "circle-stroke-width": 4,
           },
         });
 

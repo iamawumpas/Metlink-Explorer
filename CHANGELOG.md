@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.15] - 2026-05-10
+
+### Fix - Frontend cache-busting and glyph-safe live markers
+
+- Removed live marker text symbol rendering from the bundled map card so styles without `glyphs` no longer throw `text-field` errors.
+- Increased live marker circle size by 500 percent for improved visibility.
+- Added versioned frontend resource URLs via `?v=<manifest version>` so Home Assistant/browser reloads pull the latest bundled card assets reliably.
+- Added a map card startup build marker log to confirm which frontend build is running.
+
 ## [0.7.14] - 2026-05-10
 
 ### Fix - Live tracking render scheduling and legacy defaults
