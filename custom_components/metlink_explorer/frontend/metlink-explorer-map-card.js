@@ -331,8 +331,10 @@ class MetlinkExplorerCard extends LitElement {
 
   _renderLiveVehicles() {
     if (!this.map) return;
+
     if (!this.map.isStyleLoaded()) {
-      console.log("[MetlinkExplorer] _renderLiveVehicles skipped: style not loaded");
+      console.log("[MetlinkExplorer] _renderLiveVehicles deferred: style not loaded");
+      this.map.once('idle', () => this._renderLiveVehicles());
       return;
     }
 
@@ -356,7 +358,8 @@ class MetlinkExplorerCard extends LitElement {
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
       [...routeEntries].reverse().forEach((entry) => {
-        if (entry.live_tracking !== true) {
+        const liveTrackingEnabled = entry.live_tracking !== false;
+        if (!liveTrackingEnabled) {
           console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} — skipping`);
           return;
         }
@@ -486,7 +489,7 @@ class MetlinkExplorerCard extends LitElement {
     } catch (err) {
       console.error('[MetlinkExplorer] _renderRoutes error', err);
     }
-    this._renderLiveVehicles();
+    this.map.once('idle', () => this._renderLiveVehicles());
     console.log('[MetlinkExplorer] _renderRoutes end');
   }
 

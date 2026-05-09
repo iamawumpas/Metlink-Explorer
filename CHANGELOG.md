@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.14] - 2026-05-10
+
+### Fix - Live tracking render scheduling and legacy defaults
+
+- Live tracking now defaults to enabled when `live_tracking` is missing from a saved route entry, preserving existing dashboards created before the toggle existed.
+- Live marker rendering is deferred until the map is idle if MapLibre still reports the style as unstable.
+- This prevents the live-marker pass from being skipped during the initial route render cycle.
+
 ## [0.7.13] - 2026-05-09
 
 ### Fix - Normalize route geometry coordinates
