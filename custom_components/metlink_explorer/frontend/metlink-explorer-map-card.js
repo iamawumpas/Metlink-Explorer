@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.20)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.21)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -351,7 +351,6 @@ class MetlinkExplorerCard extends LitElement {
     });
 
     const categories = ["train", "bus", "ferry"];
-    let sourceIndex = 0;
     const nowEpoch = Date.now() / 1000;
     const maxAge = Number(this.config.live_max_age_seconds || 120);
     const allTrackers = Object.entries(this.hass?.states || {})
@@ -360,7 +359,9 @@ class MetlinkExplorerCard extends LitElement {
 
     const iconSize = Number(this.config.icon_size || 33);
     const badgeDiameter = Math.max(24, Math.round(iconSize * 2));
-    const fontSize = Math.max(14, Math.round(iconSize * 0.92));
+    const fontSize = Math.max(12, Math.round(iconSize * 0.78));
+    const borderWidth = Math.max(2, Math.round(iconSize * 0.12));
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
 
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
@@ -396,69 +397,60 @@ class MetlinkExplorerCard extends LitElement {
           return;
         }
 
-        const sourceId = `live-source-${sourceIndex}`;
-        const circleLayerId = `layer-${sourceId}`;
-        this.map.addSource(sourceId, {
-          type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: vehicleFeatures,
-          },
-        });
-
-        this.map.addLayer({
-          id: circleLayerId,
-          type: "circle",
-          source: sourceId,
-          paint: {
-            "circle-color": ["get", "marker_color"],
-            "circle-radius": iconSize,
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 4,
-          },
-        });
-
-        // Add badge markers for each vehicle so the route label is always visible.
+        // Render as crisp canvas badges to avoid fuzzy text on transformed DOM markers.
         vehicleFeatures.forEach((feature) => {
           const [lon, lat] = feature.geometry.coordinates;
           const routeLabel = feature.properties.route_label || "";
           const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
           const textColor = feature.properties.text_color || "#ffffff";
-          
-          const el = document.createElement("div");
-          el.style.boxSizing = "border-box";
-          el.style.display = "flex";
-          el.style.alignItems = "center";
-          el.style.justifyContent = "center";
-          el.style.width = badgeDiameter + "px";
-          el.style.height = badgeDiameter + "px";
-          el.style.borderRadius = "50%";
-          el.style.background = markerColor;
-          el.style.border = "4px solid #ffffff";
-          el.style.fontSize = fontSize + "px";
-          el.style.fontWeight = "bold";
-          el.style.lineHeight = "1";
-          el.style.color = textColor;
-          el.style.pointerEvents = "none";
-          el.style.userSelect = "none";
-          el.style.overflow = "hidden";
-          el.style.whiteSpace = "nowrap";
-          el.style.textShadow = "0 0 2px rgba(0,0,0,0.75), 0 0 5px rgba(0,0,0,0.5)";
-          el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.35)";
-          el.textContent = routeLabel;
 
-          console.log(`[MetlinkExplorer] Creating badge marker for route ${routeLabel} at [${lon}, ${lat}], background=${markerColor}, color=${textColor}, size=${fontSize}px`);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.round(badgeDiameter * dpr);
+          canvas.height = Math.round(badgeDiameter * dpr);
+          canvas.style.width = `${badgeDiameter}px`;
+          canvas.style.height = `${badgeDiameter}px`;
+          canvas.style.pointerEvents = "none";
+          canvas.style.userSelect = "none";
+          canvas.style.display = "block";
+
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            const center = badgeDiameter / 2;
+            const radius = Math.max(8, center - borderWidth);
+
+            ctx.clearRect(0, 0, badgeDiameter, badgeDiameter);
+            ctx.beginPath();
+            ctx.arc(center, center, radius, 0, Math.PI * 2);
+            ctx.fillStyle = markerColor;
+            ctx.fill();
+            ctx.lineWidth = borderWidth;
+            ctx.strokeStyle = "#ffffff";
+            ctx.stroke();
+
+            if (routeLabel) {
+              ctx.font = `700 ${fontSize}px Arial, Helvetica, sans-serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.lineJoin = "round";
+              ctx.strokeStyle = "rgba(0,0,0,0.45)";
+              ctx.lineWidth = Math.max(2, Math.round(fontSize * 0.14));
+              ctx.strokeText(routeLabel, center, center + 0.5);
+              ctx.fillStyle = textColor;
+              ctx.fillText(routeLabel, center, center + 0.5);
+            }
+          }
+
+          console.log(`[MetlinkExplorer] Creating canvas badge for route ${routeLabel} at [${lon}, ${lat}], size=${fontSize}px, dpr=${dpr}`);
 
           const marker = new window.maplibregl.Marker({
-            element: el,
+            element: canvas,
             anchor: "center",
           }).setLngLat([lon, lat]).addTo(this.map);
 
           this._liveMarkers.push(marker);
           console.log(`[MetlinkExplorer] Badge marker added, total markers: ${this._liveMarkers.length}`);
         });
-
-        sourceIndex += 1;
       });
     });
   }
@@ -535,7 +527,7 @@ class MetlinkExplorerCard extends LitElement {
         this._centerMap();
         this._renderRoutes();
       }
-      if (changedProps.has('hass')) this._renderRoutes();
+      if (changedProps.has('hass')) this._renderLiveVehicles();
     }
     this._forceSectionBreakout();
   }
