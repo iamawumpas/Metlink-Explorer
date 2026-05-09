@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.7] - 2026-05-09
+
+### Feature - Bundle departure board card into integration
+
+- Added `metlink-departure-board-card.js` to the integration's bundled frontend resources.
+- Card is now auto-loaded alongside the map card via `add_extra_js_url` in `async_setup`.
+- Users can remove any manually installed `/local/metlink-departure-board-card.js` resource from Lovelace Resources — it is now served automatically from the integration at `/metlink_explorer_frontend/metlink-departure-board-card.js`.
+
 ## [0.7.6] - 2026-05-09
 
 ### Fix - Bus live route matching from trip_id prefix

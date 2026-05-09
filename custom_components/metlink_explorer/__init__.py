@@ -42,6 +42,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         [StaticPathConfig(FRONTEND_URL_BASE, str(FRONTEND_DIR), cache_headers=False)]
     )
     add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-explorer-map-card.js")
+    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-departure-board-card.js")
     return True
 
 
