@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-05-10
+
+### Feature - Hub stop toggle and rendering foundation
+
+- Added a per-route `Show Hub Stops` toggle in the editor.
+- Exposed hub-stop rendering support in the map card using route timeline stop data.
+- Added collision helpers so overlapping hub markers can be separated on the map.
+- Began mode-specific hub marker support for train and bus-style hub badges.
+
 ## [0.8.0] - 2026-05-10
 
 ### Feature - Phase 3: Transit Stop Marker System (Infrastructure)

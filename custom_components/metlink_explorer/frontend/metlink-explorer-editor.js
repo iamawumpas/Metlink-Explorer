@@ -30,6 +30,7 @@ class MetlinkExplorerEditor extends LitElement {
       bus_entities: [],
       ferry_entities: [],
       icon_size: 33,
+      show_hubs: false,
       ...config
     };
   }
@@ -52,6 +53,7 @@ class MetlinkExplorerEditor extends LitElement {
       weight: 6, 
       style: 'solid',
       live_tracking: false,
+      show_hubs: false,
     }];
     this._updateConfig({ [key]: newEntities });
   }
@@ -192,6 +194,10 @@ class MetlinkExplorerEditor extends LitElement {
                   <div class="style-item">
                     <label>Live Tracking</label>
                     <input type="checkbox" .checked=${entry.live_tracking === true} @change=${(e) => this._handleEntryChange(type, idx, 'live_tracking', e.target.checked)}>
+                  </div>
+                  <div class="style-item">
+                    <label>Show Hub Stops</label>
+                    <input type="checkbox" .checked=${entry.show_hubs === true} @change=${(e) => this._handleEntryChange(type, idx, 'show_hubs', e.target.checked)}>
                   </div>
                 </div>
               </div>

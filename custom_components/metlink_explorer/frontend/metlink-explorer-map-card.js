@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.0)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.1)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -182,6 +182,67 @@ class MetlinkExplorerCard extends LitElement {
 
     const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
+  }
+
+  _ensureHubMarkerImage(imageId, diameter, dpr) {
+    if (!this.map || this.map.hasImage(imageId)) return;
+
+    const pixelSize = Math.max(1, Math.round(diameter * dpr));
+    const canvas = document.createElement("canvas");
+    canvas.width = pixelSize;
+    canvas.height = pixelSize;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.scale(dpr, dpr);
+
+    const center = diameter / 2;
+    const radius = Math.max(4, center - 2);
+    ctx.clearRect(0, 0, diameter, diameter);
+    ctx.beginPath();
+    ctx.arc(center, center, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#000000";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+
+    const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
+    this.map.addImage(imageId, imageData, { pixelRatio: dpr });
+  }
+
+  _computeHubCollisionOffsets(hubs, diameterPixels) {
+    const grouped = new Map();
+    const precision = 1e-5;
+
+    for (const hub of hubs || []) {
+      const lat = Number(hub.stop_lat);
+      const lon = Number(hub.stop_lon);
+      const stopId = String(hub.stop_id || "");
+      if (!stopId || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const key = `${Math.round(lat / precision) * precision},${Math.round(lon / precision) * precision}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push({ ...hub, stop_id: stopId });
+    }
+
+    const offsets = {};
+    for (const group of grouped.values()) {
+      if (group.length === 1) {
+        offsets[group[0].stop_id] = { offsetX: 0, offsetY: 0 };
+        continue;
+      }
+
+      const radius = Math.max(12, Math.round(diameterPixels * 1.2));
+      for (let i = 0; i < group.length; i++) {
+        const angle = (i / group.length) * Math.PI * 2;
+        offsets[group[i].stop_id] = {
+          offsetX: Math.round(Math.cos(angle) * radius),
+          offsetY: Math.round(Math.sin(angle) * radius),
+        };
+      }
+    }
+
+    return offsets;
   }
 
   _parseTrackerTimestamp(value) {
@@ -453,7 +514,7 @@ class MetlinkExplorerCard extends LitElement {
       [...routeEntries].reverse().forEach((entry) => {
         const liveTrackingEnabled = entry.live_tracking !== false;
         if (!liveTrackingEnabled) {
-          console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} — skipping`);
+          console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} ÔÇö skipping`);
           return;
         }
 
@@ -598,6 +659,72 @@ class MetlinkExplorerCard extends LitElement {
               ...(dashArray.length > 0 ? { 'line-dasharray': dashArray } : {})
             }
           });
+
+          if (entry.show_hubs === true) {
+            const hubStops = [];
+            for (const feature of features) {
+              const timelineStops = feature?.properties?.timeline_stops || {};
+              for (const directionStops of Object.values(timelineStops)) {
+                if (!Array.isArray(directionStops)) continue;
+                for (const stop of directionStops) {
+                  if (stop?.is_hub === true && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
+                    hubStops.push(stop);
+                  }
+                }
+              }
+            }
+
+            if (hubStops.length > 0) {
+              const hubDiameter = Math.max(16, Math.round(33 * 0.78));
+              const offsets = this._computeHubCollisionOffsets(hubStops, hubDiameter);
+              const hubFeatures = hubStops.map((stop) => {
+                const stopId = String(stop.stop_id || '');
+                const offset = offsets[stopId] || { offsetX: 0, offsetY: 0 };
+                const projected = this.map.project([Number(stop.stop_lon), Number(stop.stop_lat)]);
+                const adjusted = this.map.unproject([projected.x + offset.offsetX, projected.y + offset.offsetY]);
+                return {
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [adjusted.lng, adjusted.lat],
+                  },
+                  properties: {
+                    stop_id: stopId,
+                    stop_name: String(stop.stop_name || 'Hub'),
+                    mode: cat,
+                  },
+                };
+              });
+
+              const hubSourceId = `hub-source-${sourceId}`;
+              if (!this.map.getSource(hubSourceId)) {
+                this.map.addSource(hubSourceId, {
+                  type: 'geojson',
+                  data: { type: 'FeatureCollection', features: hubFeatures },
+                });
+              } else {
+                this.map.getSource(hubSourceId).setData({ type: 'FeatureCollection', features: hubFeatures });
+              }
+
+              const hubImageId = `hub-marker-${cat}-${hubDiameter}`;
+              this._ensureHubMarkerImage(hubImageId, hubDiameter, cat, Math.max(1, window.devicePixelRatio || 1));
+
+              const hubLayerId = `hub-layer-${sourceId}`;
+              if (this.map.getLayer(hubLayerId)) this.map.removeLayer(hubLayerId);
+              this.map.addLayer({
+                id: hubLayerId,
+                type: 'symbol',
+                source: hubSourceId,
+                layout: {
+                  'icon-image': hubImageId,
+                  'icon-anchor': 'center',
+                  'icon-allow-overlap': true,
+                  'icon-ignore-placement': true,
+                },
+              });
+            }
+          }
+
           layerIdx++;
         });
       });
