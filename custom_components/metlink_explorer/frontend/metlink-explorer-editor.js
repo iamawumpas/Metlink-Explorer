@@ -29,6 +29,7 @@ class MetlinkExplorerEditor extends LitElement {
       train_entities: [],
       bus_entities: [],
       ferry_entities: [],
+      icon_size: 33,
       ...config
     };
   }
@@ -115,6 +116,15 @@ class MetlinkExplorerEditor extends LitElement {
              .selector=${{ number: { min: 10, max: 18, step: 1, mode: "slider" } }}
              .value=${this._config.zoom}
              @value-changed=${(e) => this._updateConfig({zoom: e.detail.value})}
+           ></ha-selector>
+        </div>
+        <div class="full-width">
+            <label class="manual-label">Icon Size</label>
+            <ha-selector
+             .hass=${this.hass}
+             .selector=${{ number: { min: 8, max: 80, step: 1, mode: "slider" } }}
+             .value=${this._config.icon_size ?? 33}
+             @value-changed=${(e) => this._updateConfig({icon_size: Number(e.detail.value)})}
            ></ha-selector>
         </div>
         ${this._renderSection('train', 'Train Routes', ['train', 'geometry'])}

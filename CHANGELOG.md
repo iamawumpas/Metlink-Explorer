@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.17] - 2026-05-10
+
+### Feature - Configurable live marker icon size
+
+- Added an `Icon Size` slider to the map card editor directly under the `Zoom Level` slider.
+- New `icon_size` card config value is now applied to live marker circle radius at render time.
+- Default icon size is `33`, matching the previous release behavior until adjusted.
+
 ## [0.7.16] - 2026-05-10
 
 ### Fix - Route geometry rendering and marker scale tuning

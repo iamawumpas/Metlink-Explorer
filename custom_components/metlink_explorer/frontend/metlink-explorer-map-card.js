@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.16)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.17)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -61,7 +61,7 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   static getStubConfig() {
-    return { center_map: "zone.home", zoom: 12, map_style: "voyager" };
+    return { center_map: "zone.home", zoom: 12, map_style: "voyager", icon_size: 33 };
   }
 
   setConfig(config) {
@@ -71,12 +71,14 @@ class MetlinkExplorerCard extends LitElement {
       ferryEntities: Array.isArray(config?.ferry_entities) ? config.ferry_entities.length : 0,
       centerMap: config?.center_map,
       zoom: config?.zoom,
+      iconSize: config?.icon_size,
     });
     this.config = {
       train_entities: [],
       bus_entities: [],
       ferry_entities: [],
       live_max_age_seconds: 120,
+      icon_size: 33,
       ...config,
     };
   }
@@ -401,7 +403,7 @@ class MetlinkExplorerCard extends LitElement {
           source: sourceId,
           paint: {
             "circle-color": ["get", "marker_color"],
-            "circle-radius": 33,
+            "circle-radius": Number(this.config.icon_size || 33),
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 4,
           },
