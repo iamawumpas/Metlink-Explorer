@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.22] - 2026-05-10
+
+### Fix - Route-locked badge rendering
+
+- Replaced DOM Marker badges with map-native symbol badges generated from canvas images.
+- Badge positions are now tied directly to map source coordinates, preventing drift during zoom/pan.
+- Retained high-DPI rendering for sharper route label text.
+
 ## [0.7.21] - 2026-05-10
 
 ### Fix - Marker alignment and sharper route labels
