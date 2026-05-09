@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-05-09
+
+### Fix - Frontend static path API compatibility
+
+- Fixed `AttributeError: 'HomeAssistantHTTP' object has no attribute 'register_static_path'` introduced in 0.7.2.
+- Updated `async_setup` to use `hass.http.async_register_static_paths()` with `StaticPathConfig` dataclass, matching the current Home Assistant HTTP API.
+
 ## [0.7.2] - 2026-05-09
 
 ### Feature - Bundled Metlink Explorer Map Card

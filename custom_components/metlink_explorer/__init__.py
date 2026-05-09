@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -37,10 +38,8 @@ FRONTEND_DIR = Path(__file__).parent / "frontend"
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Register frontend static path and card resource."""
-    hass.http.register_static_path(
-        FRONTEND_URL_BASE,
-        str(FRONTEND_DIR),
-        cache_headers=False,
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(FRONTEND_URL_BASE, str(FRONTEND_DIR), cache_headers=False)]
     )
     add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-explorer-map-card.js")
     return True
