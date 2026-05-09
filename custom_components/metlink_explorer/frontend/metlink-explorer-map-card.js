@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.25)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.26)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -104,16 +104,61 @@ class MetlinkExplorerCard extends LitElement {
     return luminance > 150 ? "#000000" : "#ffffff";
   }
 
-  _badgeImageId(routeLabel, markerColor, textColor, diameter, fontSize, borderWidth) {
-    const safeLabel = String(routeLabel || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+  _badgeShapeId(markerColor, diameter, borderWidth) {
     const safeBg = String(markerColor || "").replace("#", "");
-    const safeFg = String(textColor || "").replace("#", "");
-    return `metlink-badge-${safeLabel}-${safeBg}-${safeFg}-${diameter}-${fontSize}-${borderWidth}`;
+    return `metlink-shape-${safeBg}-${diameter}-${borderWidth}`;
   }
 
-  _ensureBadgeImage(imageId, routeLabel, markerColor, textColor, diameter, fontSize, borderWidth, dpr) {
+  _badgeTextId(routeLabel, textColor, diameter, fontSize) {
+    const safeLabel = String(routeLabel || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const safeFg = String(textColor || "").replace("#", "");
+    return `metlink-text-${safeLabel}-${safeFg}-${diameter}-${fontSize}`;
+  }
+
+  _ensureBadgeShape(imageId, markerColor, diameter, borderWidth, dpr) {
     if (!this.map || this.map.hasImage(imageId)) return;
 
+    // Teardrop canvas: 1.3× taller than wide so the tail fits above the circle.
+    // Circle center sits at canvas center so icon-anchor:"center" = vehicle coordinate.
+    const tailFactor = 1.3;
+    const pixelW = Math.max(1, Math.round(diameter * dpr));
+    const pixelH = Math.max(1, Math.round(diameter * tailFactor * dpr));
+    const canvas = document.createElement("canvas");
+    canvas.width = pixelW;
+    canvas.height = pixelH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.scale(dpr, dpr);
+
+    const cssH = diameter * tailFactor;
+    const cx   = diameter / 2;
+    const cy   = cssH / 2;          // circle center at canvas center
+    const r    = Math.max(8, diameter / 2 - borderWidth);
+    const tipY = borderWidth;        // tip at top (bearing=0 → north)
+
+    ctx.beginPath();
+    ctx.moveTo(cx, tipY);
+    ctx.quadraticCurveTo(cx - r * 0.15, cy - r, cx - r, cy); // left side
+    ctx.arc(cx, cy, r, Math.PI, 0, true);                      // bottom arc
+    ctx.quadraticCurveTo(cx + r * 0.15, cy - r, cx, tipY);   // right side
+    ctx.closePath();
+
+    ctx.fillStyle = markerColor;
+    ctx.fill();
+    ctx.lineWidth = borderWidth;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+
+    const imageData = ctx.getImageData(0, 0, pixelW, pixelH);
+    this.map.addImage(imageId, imageData, { pixelRatio: dpr });
+  }
+
+  _ensureBadgeText(imageId, routeLabel, textColor, haloColor, diameter, fontSize, dpr) {
+    if (!this.map || this.map.hasImage(imageId) || !routeLabel) return;
+
+    // Square canvas matching the circle diameter. Rendered as a separate non-rotating
+    // symbol layer so the route label always stays upright regardless of vehicle heading.
     const pixelSize = Math.max(1, Math.round(diameter * dpr));
     const canvas = document.createElement("canvas");
     canvas.width = pixelSize;
@@ -124,31 +169,15 @@ class MetlinkExplorerCard extends LitElement {
     ctx.scale(dpr, dpr);
 
     const center = diameter / 2;
-    const radius = Math.max(8, center - borderWidth);
-
-    ctx.clearRect(0, 0, diameter, diameter);
-    ctx.beginPath();
-    ctx.arc(center, center, radius, 0, Math.PI * 2);
-    ctx.fillStyle = markerColor;
-    ctx.fill();
-    ctx.lineWidth = borderWidth;
-    ctx.strokeStyle = "#ffffff";
-    ctx.stroke();
-
-    if (routeLabel) {
-      const normalizedText = String(textColor || "").trim().toLowerCase();
-      const isDarkText = normalizedText === "#000000" || normalizedText === "black" || normalizedText === "rgb(0,0,0)";
-      const haloColor = isDarkText ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.45)";
-      ctx.font = `700 ${fontSize}px Arial, Helvetica, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.lineJoin = "round";
-      ctx.strokeStyle = haloColor;
-      ctx.lineWidth = Math.max(2, Math.round(fontSize * 0.14));
-      ctx.strokeText(routeLabel, center, center + 0.5);
-      ctx.fillStyle = textColor;
-      ctx.fillText(routeLabel, center, center + 0.5);
-    }
+    ctx.font = `700 ${fontSize}px Arial, Helvetica, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = haloColor || "rgba(0,0,0,0.45)";
+    ctx.lineWidth = Math.max(2, Math.round(fontSize * 0.14));
+    ctx.strokeText(routeLabel, center, center + 0.5);
+    ctx.fillStyle = textColor;
+    ctx.fillText(routeLabel, center, center + 0.5);
 
     const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
@@ -268,6 +297,9 @@ class MetlinkExplorerCard extends LitElement {
       .map(([entityId, state]) => {
         const lat = Number(state.attributes.latitude);
         const lon = Number(state.attributes.longitude);
+        const rawBearing = state.attributes.bearing;
+        const bearing = (rawBearing !== null && rawBearing !== undefined && Number.isFinite(Number(rawBearing)))
+          ? Number(rawBearing) : 0;
         return {
           type: "Feature",
           geometry: {
@@ -279,6 +311,8 @@ class MetlinkExplorerCard extends LitElement {
             route_label: routeMeta.routeLabel,
             marker_color: markerColor,
             text_color: textColor,
+            text_halo_color: textColor === "#000000" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.45)",
+            bearing: bearing,
           },
         };
       });
@@ -390,9 +424,11 @@ class MetlinkExplorerCard extends LitElement {
 
     const liveSources = Array.from({ length: 200 }, (_, i) => `live-source-${i}`);
     liveSources.forEach((sourceId) => {
-      const badgeLayerId = `badge-${sourceId}`;
-      if (this.map.getLayer(badgeLayerId)) this.map.removeLayer(badgeLayerId);
-      if (this.map.getSource(sourceId)) this.map.removeSource(sourceId);
+      const textLayerId  = `text-${sourceId}`;
+      const shapeLayerId = `shape-${sourceId}`;
+      if (this.map.getLayer(textLayerId))  this.map.removeLayer(textLayerId);
+      if (this.map.getLayer(shapeLayerId)) this.map.removeLayer(shapeLayerId);
+      if (this.map.getSource(sourceId))    this.map.removeSource(sourceId);
     });
 
     const categories = ["train", "bus", "ferry"];
@@ -444,20 +480,25 @@ class MetlinkExplorerCard extends LitElement {
         }
 
         const sourceId = `live-source-${sourceIndex}`;
-        const badgeLayerId = `badge-${sourceId}`;
+        const shapeLayerId = `shape-${sourceId}`;
+        const textLayerId  = `text-${sourceId}`;
 
         const featuresWithBadge = vehicleFeatures.map((feature) => {
-          const routeLabel = feature.properties.route_label || "";
+          const routeLabel  = feature.properties.route_label || "";
           const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
-          const textColor = feature.properties.text_color || "#ffffff";
-          const badgeId = this._badgeImageId(routeLabel, markerColor, textColor, badgeDiameter, fontSize, borderWidth);
-          this._ensureBadgeImage(badgeId, routeLabel, markerColor, textColor, badgeDiameter, fontSize, borderWidth, dpr);
+          const textColor   = feature.properties.text_color || "#ffffff";
+          const haloColor   = feature.properties.text_halo_color || "rgba(0,0,0,0.45)";
+          const shapeId = this._badgeShapeId(markerColor, badgeDiameter, borderWidth);
+          const textId  = this._badgeTextId(routeLabel, textColor, badgeDiameter, fontSize);
+          this._ensureBadgeShape(shapeId, markerColor, badgeDiameter, borderWidth, dpr);
+          this._ensureBadgeText(textId, routeLabel, textColor, haloColor, badgeDiameter, fontSize, dpr);
 
           return {
             ...feature,
             properties: {
               ...feature.properties,
-              badge_id: badgeId,
+              shape_badge_id: shapeId,
+              text_badge_id:  textId,
             },
           };
         });
@@ -470,19 +511,38 @@ class MetlinkExplorerCard extends LitElement {
           },
         });
 
+        // Shape layer: teardrop icon rotates with vehicle bearing.
         this.map.addLayer({
-          id: badgeLayerId,
+          id: shapeLayerId,
           type: "symbol",
           source: sourceId,
           layout: {
-            "icon-image": ["get", "badge_id"],
+            "icon-image": ["get", "shape_badge_id"],
             "icon-anchor": "center",
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
+            "icon-rotate": ["get", "bearing"],
+            "icon-rotation-alignment": "map",
+            "icon-pitch-alignment": "map",
           },
         });
 
-        console.log(`[MetlinkExplorer] Badge symbol layer added for ${sourceId}, features=${featuresWithBadge.length}`);
+        // Text layer: separate non-rotating layer so the label stays upright.
+        this.map.addLayer({
+          id: textLayerId,
+          type: "symbol",
+          source: sourceId,
+          layout: {
+            "icon-image": ["get", "text_badge_id"],
+            "icon-anchor": "center",
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            "icon-rotation-alignment": "viewport",
+            "icon-pitch-alignment": "viewport",
+          },
+        });
+
+        console.log(`[MetlinkExplorer] Teardrop symbol layers added for ${sourceId}, features=${featuresWithBadge.length}`);
 
         sourceIndex += 1;
       });

@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.26] - 2026-05-10
+
+### Feature - Direction-aware vehicle icons
+
+- Vehicle markers now render as a teardrop shape pointing in the direction of travel.
+- Bearing is read from the `bearing` attribute of each `device_tracker` entity (supplied by the Metlink GTFS-RT feed).
+- The teardrop shape rotates with `icon-rotate: bearing` on a dedicated MapLibre symbol layer.
+- Route label text is drawn on a separate non-rotating symbol layer, so the badge text always stays upright regardless of vehicle heading.
+- Vehicles with no bearing reported default to pointing north (0°).
+
 ## [0.7.25] - 2026-05-10
 
 ### Fix - Route line dash patterns
