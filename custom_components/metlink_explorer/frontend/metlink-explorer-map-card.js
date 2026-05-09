@@ -243,23 +243,23 @@ class MetlinkExplorerCard extends LitElement {
     const maxAge = Number(this.config.live_max_age_seconds || 120);
     const allTrackers = Object.entries(this.hass?.states || {})
       .filter(([id]) => id.startsWith("device_tracker."));
-    console.debug(`[MetlinkExplorer] _renderLiveVehicles: ${allTrackers.length} device_tracker entities; nowEpoch=${nowEpoch.toFixed(0)}, maxAge=${maxAge}s`);
+    console.log(`[MetlinkExplorer] _renderLiveVehicles: ${allTrackers.length} device_tracker entities; nowEpoch=${nowEpoch.toFixed(0)}, maxAge=${maxAge}s`);
 
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
       [...routeEntries].reverse().forEach((entry) => {
         if (entry.live_tracking !== true) {
-          console.debug(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} — skipping`);
+          console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} — skipping`);
           return;
         }
 
         const routeFeatures = this._parseRouteGeometry(entry.entity);
         const routeMeta = this._routeMetaFromFeatures(routeFeatures || []);
-        console.debug(`[MetlinkExplorer] ${mode} entry ${entry.entity}: routeFeatures=${routeFeatures?.length ?? "null"}, routeMeta=${JSON.stringify(routeMeta)}`);
+        console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: routeFeatures=${routeFeatures?.length ?? "null"}, routeMeta=${JSON.stringify(routeMeta)}`);
         if (!routeMeta) return;
 
         const vehicleFeatures = this._liveFeaturesForRoute(entry, mode, routeMeta);
-        console.debug(`[MetlinkExplorer] ${mode} entry ${entry.entity}: vehicleFeatures=${vehicleFeatures.length}`);
+        console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: vehicleFeatures=${vehicleFeatures.length}`);
         if (vehicleFeatures.length === 0) {
           // Log why each tracker was rejected
           allTrackers.forEach(([entityId, state]) => {
@@ -272,7 +272,7 @@ class MetlinkExplorerCard extends LitElement {
             const ts = this._parseTrackerTimestamp(attrs.timestamp);
             const fresh = ts ? (nowEpoch - ts) <= maxAge : false;
             if (matches) {
-              console.debug(`[MetlinkExplorer]   MATCHED ${entityId}: restored=${restored}, hasCoords=${hasCoords}, ts=${ts}, fresh=${fresh}, lat=${lat}, lon=${lon}`);
+              console.log(`[MetlinkExplorer]   MATCHED ${entityId}: restored=${restored}, hasCoords=${hasCoords}, ts=${ts}, fresh=${fresh}, lat=${lat}, lon=${lon}`);
             }
           });
           return;
