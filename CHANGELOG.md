@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.9] - 2026-05-09
+
+### Debug - Map card load diagnostics
+
+- Added a top-level map card script load log: `[MetlinkExplorer] map card script loaded`.
+- Added safe custom element registration with explicit logs for both first registration and already-registered cases.
+- This confirms whether Home Assistant is loading the bundled map card resource before diagnosing live-marker matching.
+
 ## [0.7.8] - 2026-05-09
 
 ### Debug - Live tracking console diagnostics

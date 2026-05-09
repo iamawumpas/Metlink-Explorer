@@ -4,6 +4,8 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
+console.log("[MetlinkExplorer] map card script loaded");
+
 const loadMapLibre = new Promise((resolve) => {
   if (window.maplibregl) { resolve(); } else {
     const link = document.createElement("link");
@@ -465,4 +467,9 @@ class MetlinkExplorerCard extends LitElement {
   }
 }
 
-customElements.define("metlink-explorer-map-card", MetlinkExplorerCard);
+if (!customElements.get("metlink-explorer-map-card")) {
+  customElements.define("metlink-explorer-map-card", MetlinkExplorerCard);
+  console.log("[MetlinkExplorer] custom element registered: metlink-explorer-map-card");
+} else {
+  console.log("[MetlinkExplorer] custom element already registered: metlink-explorer-map-card");
+}
