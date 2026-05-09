@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.24)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.25)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -33,16 +33,15 @@ const loadMapLibre = new Promise((resolve, reject) => {
   }
 });
 
-const DASH_BASE_PX = 16;
+// Dash values are in line-width units (MapLibre native). No pixel conversion.
+// A value of 1 = one line-width. Round line-caps close a 1-unit dash into a circle (dot).
 const DASH_MAP = {
   "solid": [],
-  // Dash lengths are defined in pixels at the default 16px reference so the
-  // visible pitch stays consistent regardless of the selected line thickness.
-  "dotted": [DASH_BASE_PX, DASH_BASE_PX],
-  "dashed": [DASH_BASE_PX * 2, DASH_BASE_PX],
-  "dash-dot": [DASH_BASE_PX * 2, DASH_BASE_PX, DASH_BASE_PX / 2, DASH_BASE_PX],
-  "sparse-dotted": [DASH_BASE_PX / 2, DASH_BASE_PX * 1.5],
-  "long-dash": [DASH_BASE_PX * 3, DASH_BASE_PX],
+  "dotted": [1, 2.5],
+  "dashed": [4, 2],
+  "dash-dot": [4, 2, 1, 2],
+  "sparse-dotted": [1, 5],
+  "long-dash": [10, 3],
 };
 
 const VEHICLE_COLORS = {
@@ -523,8 +522,7 @@ class MetlinkExplorerCard extends LitElement {
           });
 
           const weight = Math.max(1, Number(entry.weight || 6));
-          const dashBase = DASH_MAP[entry.style] || [];
-          const dashArray = dashBase.map((segmentPx) => Math.max(0.5, segmentPx / weight));
+          const dashArray = DASH_MAP[entry.style] || [];
 
           this.map.addLayer({
             id: `layer-${sourceId}`,

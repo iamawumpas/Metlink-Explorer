@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.25] - 2026-05-10
+
+### Fix - Route line dash patterns
+
+- Rewrote dash pattern definitions to use MapLibre line-width units instead of pixel values.
+- Removed the pixel-to-line-width division, which was causing patterns to appear wrong at all zoom levels.
+- `dotted` now renders as true circles (1-unit dash closed by round line-cap) with correct spacing.
+- All styles (`dashed`, `dash-dot`, `sparse-dotted`, `long-dash`) now have values matched to their descriptors.
+- Pattern pitch is now inherently zoom-stable; line thickness control is unchanged.
+
 ## [0.7.24] - 2026-05-10
 
 ### Fix - Stable route dash pitch
