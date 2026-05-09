@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.23)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.24)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -33,13 +33,16 @@ const loadMapLibre = new Promise((resolve, reject) => {
   }
 });
 
+const DASH_BASE_PX = 16;
 const DASH_MAP = {
   "solid": [],
-  "dotted": [1, 1],
-  "dashed": [3, 3],
-  "dash-dot": [4, 2, 1, 2],
-  "sparse-dotted": [1, 5],
-  "long-dash": [8, 4]
+  // Dash lengths are defined in pixels at the default 16px reference so the
+  // visible pitch stays consistent regardless of the selected line thickness.
+  "dotted": [DASH_BASE_PX, DASH_BASE_PX],
+  "dashed": [DASH_BASE_PX * 2, DASH_BASE_PX],
+  "dash-dot": [DASH_BASE_PX * 2, DASH_BASE_PX, DASH_BASE_PX / 2, DASH_BASE_PX],
+  "sparse-dotted": [DASH_BASE_PX / 2, DASH_BASE_PX * 1.5],
+  "long-dash": [DASH_BASE_PX * 3, DASH_BASE_PX],
 };
 
 const VEHICLE_COLORS = {
@@ -519,10 +522,9 @@ class MetlinkExplorerCard extends LitElement {
             data: { type: 'FeatureCollection', features: features }
           });
 
-          const weight = entry.weight || 6;
+          const weight = Math.max(1, Number(entry.weight || 6));
           const dashBase = DASH_MAP[entry.style] || [];
-          // Scale dasharray by weight to keep gaps visible at lower zooms
-          const dashArray = dashBase.map(v => v * (weight / 3));
+          const dashArray = dashBase.map((segmentPx) => Math.max(0.5, segmentPx / weight));
 
           this.map.addLayer({
             id: `layer-${sourceId}`,
