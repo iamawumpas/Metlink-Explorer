@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.7.17)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.7.18)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -336,6 +336,11 @@ class MetlinkExplorerCard extends LitElement {
       return;
     }
 
+    // Clear existing markers
+    if (!this._liveMarkers) this._liveMarkers = [];
+    this._liveMarkers.forEach(m => m.remove());
+    this._liveMarkers = [];
+
     const liveSources = Array.from({ length: 200 }, (_, i) => `live-source-${i}`);
     liveSources.forEach((sourceId) => {
       const circleLayerId = `layer-${sourceId}`;
@@ -352,6 +357,9 @@ class MetlinkExplorerCard extends LitElement {
     const allTrackers = Object.entries(this.hass?.states || {})
       .filter(([id]) => id.startsWith("device_tracker."));
     console.log(`[MetlinkExplorer] _renderLiveVehicles: ${allTrackers.length} device_tracker entities; nowEpoch=${nowEpoch.toFixed(0)}, maxAge=${maxAge}s`);
+
+    const iconSize = Number(this.config.icon_size || 33);
+    const fontSize = Math.max(8, Math.round(iconSize * 0.4));
 
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
@@ -403,10 +411,40 @@ class MetlinkExplorerCard extends LitElement {
           source: sourceId,
           paint: {
             "circle-color": ["get", "marker_color"],
-            "circle-radius": Number(this.config.icon_size || 33),
+            "circle-radius": iconSize,
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 4,
           },
+        });
+
+        // Add text markers for each vehicle
+        vehicleFeatures.forEach((feature) => {
+          const [lon, lat] = feature.geometry.coordinates;
+          const routeLabel = feature.properties.route_label || "";
+          const textColor = feature.properties.text_color || "#000000";
+          
+          const el = document.createElement("div");
+          el.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: ${iconSize * 2}px;
+            height: ${iconSize * 2}px;
+            font-size: ${fontSize}px;
+            font-weight: bold;
+            color: ${textColor};
+            text-anchor: middle;
+            pointer-events: none;
+            white-space: nowrap;
+          `;
+          el.textContent = routeLabel;
+
+          const marker = new window.maplibregl.Marker({
+            element: el,
+            anchor: "center",
+          }).setLngLat([lon, lat]).addTo(this.map);
+
+          this._liveMarkers.push(marker);
         });
 
         sourceIndex += 1;
