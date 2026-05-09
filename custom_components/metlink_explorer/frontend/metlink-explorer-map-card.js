@@ -26,6 +26,12 @@ const DASH_MAP = {
   "long-dash": [8, 4]
 };
 
+const VEHICLE_COLORS = {
+  train: "#1e88e5",
+  bus: "#43a047",
+  ferry: "#00acc1",
+};
+
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
     return { hass: {}, config: {} };
@@ -43,7 +49,15 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   setConfig(config) {
-    this.config = config;
+    this.config = {
+      train_entities: [],
+      bus_entities: [],
+      ferry_entities: [],
+      train_live_entities: [],
+      bus_live_entities: [],
+      ferry_live_entities: [],
+      ...config,
+    };
   }
 
   connectedCallback() {
@@ -92,6 +106,99 @@ class MetlinkExplorerCard extends LitElement {
       }));
   }
 
+  _parseLiveTracker(entry, mode) {
+    if (!entry || !entry.entity || !this.hass) return null;
+    const state = this.hass.states[entry.entity];
+    if (!state || !state.attributes) return null;
+
+    const latitude = Number(state.attributes.latitude);
+    const longitude = Number(state.attributes.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+    const routeId = state.attributes.route_id;
+    const labelBase = state.attributes.label || state.attributes.friendly_name || entry.entity;
+    const label = routeId ? `${labelBase} (${routeId})` : labelBase;
+
+    return {
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: [longitude, latitude],
+      },
+      properties: {
+        label,
+        mode,
+      },
+    };
+  }
+
+  _renderLiveVehicles() {
+    if (!this.map || !this.map.isStyleLoaded()) return;
+
+    const liveSources = Array.from({ length: 200 }, (_, i) => `live-source-${i}`);
+    liveSources.forEach((sourceId) => {
+      const circleLayerId = `layer-${sourceId}`;
+      const textLayerId = `label-${sourceId}`;
+      if (this.map.getLayer(textLayerId)) this.map.removeLayer(textLayerId);
+      if (this.map.getLayer(circleLayerId)) this.map.removeLayer(circleLayerId);
+      if (this.map.getSource(sourceId)) this.map.removeSource(sourceId);
+    });
+
+    const categories = ["train", "bus", "ferry"];
+    let sourceIndex = 0;
+    categories.forEach((mode) => {
+      const liveEntries = this.config[`${mode}_live_entities`] || [];
+      [...liveEntries].reverse().forEach((entry) => {
+        const feature = this._parseLiveTracker(entry, mode);
+        if (!feature) return;
+
+        const sourceId = `live-source-${sourceIndex}`;
+        const circleLayerId = `layer-${sourceId}`;
+        const textLayerId = `label-${sourceId}`;
+        this.map.addSource(sourceId, {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [feature],
+          },
+        });
+
+        this.map.addLayer({
+          id: circleLayerId,
+          type: "circle",
+          source: sourceId,
+          paint: {
+            "circle-color": entry.color || VEHICLE_COLORS[mode] || "#ff9800",
+            "circle-radius": entry.size || 7,
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 1.5,
+          },
+        });
+
+        if (entry.show_label !== false) {
+          this.map.addLayer({
+            id: textLayerId,
+            type: "symbol",
+            source: sourceId,
+            layout: {
+              "text-field": ["get", "label"],
+              "text-size": 11,
+              "text-offset": [0, 1.2],
+              "text-anchor": "top",
+            },
+            paint: {
+              "text-color": "#ffffff",
+              "text-halo-color": "#000000",
+              "text-halo-width": 1.2,
+            },
+          });
+        }
+
+        sourceIndex += 1;
+      });
+    });
+  }
+
   _renderRoutes() {
     if (!this.map || !this.map.isStyleLoaded()) return;
 
@@ -136,6 +243,8 @@ class MetlinkExplorerCard extends LitElement {
         layerIdx++;
       });
     });
+
+    this._renderLiveVehicles();
   }
 
   updated(changedProps) {

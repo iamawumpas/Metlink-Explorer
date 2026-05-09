@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-05-09
+
+### Feature - Live vehicle tracking in bundled map card
+
+- Added live vehicle marker rendering to the bundled map card (`card`) for train, bus, and ferry trackers.
+- Added new `*_live_entities` config arrays for selecting individual `device_tracker` entities per mode.
+- Added live marker styling options in the bundled editor (`editor`): marker color, marker size, and label toggle.
+- Route layers and live vehicle layers now render together in a single map update cycle.
+
 ## [0.7.3] - 2026-05-09
 
 ### Fix - Frontend static path API compatibility

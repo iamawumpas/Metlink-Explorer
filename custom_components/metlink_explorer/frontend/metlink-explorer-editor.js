@@ -29,6 +29,9 @@ class MetlinkExplorerEditor extends LitElement {
       train_entities: [],
       bus_entities: [],
       ferry_entities: [],
+      train_live_entities: [],
+      bus_live_entities: [],
+      ferry_live_entities: [],
       ...config
     };
   }
@@ -77,6 +80,41 @@ class MetlinkExplorerEditor extends LitElement {
     this._updateConfig({ [key]: newEntities });
   }
 
+  _addLiveEntity(type) {
+    const key = `${type}_live_entities`;
+    const randomColor = RANDOM_COLORS[Math.floor(Math.random() * RANDOM_COLORS.length)];
+    const newEntities = [...(this._config[key] || []), {
+      entity: '',
+      color: randomColor,
+      size: 7,
+      show_label: true
+    }];
+    this._updateConfig({ [key]: newEntities });
+  }
+
+  _handleLiveEntryChange(type, index, field, value) {
+    const key = `${type}_live_entities`;
+    const newEntities = (this._config[key] || []).map((item, i) =>
+      i === index ? { ...item, [field]: value } : item
+    );
+    this._updateConfig({ [key]: newEntities });
+  }
+
+  _moveLiveEntity(type, index, direction) {
+    const key = `${type}_live_entities`;
+    const newEntities = [...(this._config[key] || [])];
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= newEntities.length) return;
+    [newEntities[index], newEntities[newIndex]] = [newEntities[newIndex], newEntities[index]];
+    this._updateConfig({ [key]: newEntities });
+  }
+
+  _removeLiveEntity(type, index) {
+    const key = `${type}_live_entities`;
+    const newEntities = (this._config[key] || []).filter((_, i) => i !== index);
+    this._updateConfig({ [key]: newEntities });
+  }
+
   render() {
     if (!this.hass || !this._config) return html`<div>Loading...</div>`;
     return html`
@@ -119,6 +157,9 @@ class MetlinkExplorerEditor extends LitElement {
         ${this._renderSection('train', 'Train Routes', ['train', 'geometry'])}
         ${this._renderSection('bus', 'Bus Routes', ['bus', 'geometry'])}
         ${this._renderSection('ferry', 'Ferry Routes', ['ferry', 'geometry'])}
+        ${this._renderLiveSection('train', 'Live Trains', ['train'])}
+        ${this._renderLiveSection('bus', 'Live Buses', ['bus'])}
+        ${this._renderLiveSection('ferry', 'Live Ferries', ['ferry'])}
       </div>
     `;
   }
@@ -185,6 +226,77 @@ class MetlinkExplorerEditor extends LitElement {
         </div>
         <mwc-button @click=${() => this._addEntity(type)}>
           <ha-icon icon="mdi:plus"></ha-icon> Add ${type} Route
+        </mwc-button>
+      </div>
+    `;
+  }
+
+  _renderLiveSection(type, title, filters) {
+    const entities = this._config[`${type}_live_entities`] || [];
+    const allSelected = [
+      ...(this._config.train_live_entities || []),
+      ...(this._config.bus_live_entities || []),
+      ...(this._config.ferry_live_entities || [])
+    ].map(e => e.entity).filter(e => e !== '');
+
+    return html`
+      <div class="section">
+        <div class="section-header">${title}</div>
+        <div class="entity-list">
+          ${entities.map((entry, idx) => {
+            const filteredEntities = Object.keys(this.hass.states).filter(eid => {
+              if (!eid.startsWith("device_tracker.")) return false;
+              const stateObj = this.hass.states[eid];
+              const entityIdLower = eid.toLowerCase();
+              const friendlyNameLower = (stateObj.attributes.friendly_name || "").toLowerCase();
+              const routeLower = String(stateObj.attributes.route_id || "").toLowerCase();
+              const matchesFilter = filters.some(f =>
+                entityIdLower.includes(f.toLowerCase())
+                || friendlyNameLower.includes(f.toLowerCase())
+                || routeLower.includes(f.toLowerCase())
+              );
+              const isNotSelected = !allSelected.includes(eid) || eid === entry.entity;
+              return matchesFilter && isNotSelected;
+            });
+
+            return html`
+              <div class="entity-row">
+                <div class="row-main">
+                  <ha-selector
+                    .hass=${this.hass}
+                    .selector=${{ select: { mode: "dropdown", options: filteredEntities.map(eid => ({
+                      value: eid,
+                      label: this.hass.states[eid].attributes.friendly_name || eid
+                    }))}}}
+                    .value=${entry.entity}
+                    @value-changed=${(e) => this._handleLiveEntryChange(type, idx, 'entity', e.detail.value)}
+                  ></ha-selector>
+                  <div class="controls">
+                    <ha-icon icon="mdi:arrow-up" @click=${() => this._moveLiveEntity(type, idx, -1)}></ha-icon>
+                    <ha-icon icon="mdi:arrow-down" @click=${() => this._moveLiveEntity(type, idx, 1)}></ha-icon>
+                    <ha-icon icon="mdi:delete" @click=${() => this._removeLiveEntity(type, idx)}></ha-icon>
+                  </div>
+                </div>
+                <div class="row-styling">
+                  <div class="style-item">
+                    <label>Marker Color</label>
+                    <input type="color" .value=${entry.color || '#ffa500'} @input=${(e) => this._handleLiveEntryChange(type, idx, 'color', e.target.value)}>
+                  </div>
+                  <div class="style-item">
+                    <label>Marker Size (${entry.size || 7}px)</label>
+                    <input type="range" min="4" max="16" .value=${entry.size || 7} @input=${(e) => this._handleLiveEntryChange(type, idx, 'size', parseInt(e.target.value))}>
+                  </div>
+                  <div class="style-item">
+                    <label>Show Label</label>
+                    <input type="checkbox" .checked=${entry.show_label !== false} @change=${(e) => this._handleLiveEntryChange(type, idx, 'show_label', e.target.checked)}>
+                  </div>
+                </div>
+              </div>
+            `;
+          })}
+        </div>
+        <mwc-button @click=${() => this._addLiveEntity(type)}>
+          <ha-icon icon="mdi:plus"></ha-icon> Add ${type} Vehicle
         </mwc-button>
       </div>
     `;
