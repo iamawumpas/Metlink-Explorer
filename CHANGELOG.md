@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.10] - 2026-05-09
+
+### Fix - Live marker matching when geometry is missing
+
+- Updated the bundled map card to fall back to route metadata derived from route entity attributes and entity ID patterns (for example `sensor.bus_83_geometry`) when `geojson` is unavailable.
+- Normalized route key matching to be case-insensitive for route IDs and labels.
+- This allows live bus/train/ferry markers to render even when route geometry payloads are empty or unavailable.
+
 ## [0.7.9] - 2026-05-09
 
 ### Debug - Map card load diagnostics

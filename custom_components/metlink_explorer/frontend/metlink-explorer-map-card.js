@@ -99,6 +99,37 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
+  _routeMetaFallback(entry) {
+    const state = this.hass?.states?.[entry?.entity] || null;
+    const attrs = state?.attributes || {};
+
+    const attrRouteId = attrs.route_id ? String(attrs.route_id).trim() : "";
+    const attrRouteShort = attrs.route_short_name ? String(attrs.route_short_name).trim() : "";
+    if (attrRouteId || attrRouteShort) {
+      return {
+        routeId: attrRouteId || attrRouteShort,
+        routeLabel: attrRouteShort || attrRouteId,
+      };
+    }
+
+    const entityId = String(entry?.entity || "");
+    const parts = entityId.split(".");
+    const objectId = parts.length > 1 ? parts[1] : entityId;
+    const match = objectId.match(/^(?:train|bus|ferry)_(.+?)_(?:route_)?geometry$/i);
+    if (!match) return null;
+
+    const token = String(match[1] || "").trim();
+    if (!token) return null;
+    return {
+      routeId: token,
+      routeLabel: token.toUpperCase(),
+    };
+  }
+
+  _normalizeKey(key) {
+    return String(key || "").trim().toLowerCase();
+  }
+
   _tripRouteKey(tripId) {
     if (!tripId) return "";
     const tripText = String(tripId);
@@ -110,8 +141,8 @@ class MetlinkExplorerCard extends LitElement {
   _routeKeys(routeMeta) {
     const keys = new Set();
     if (!routeMeta) return keys;
-    keys.add(String(routeMeta.routeId || "").trim());
-    keys.add(String(routeMeta.routeLabel || "").trim());
+    keys.add(this._normalizeKey(routeMeta.routeId));
+    keys.add(this._normalizeKey(routeMeta.routeLabel));
     return new Set([...keys].filter(Boolean));
   }
 
@@ -119,9 +150,9 @@ class MetlinkExplorerCard extends LitElement {
     const attrs = state?.attributes || {};
     const keys = new Set();
     const fromTrip = this._tripRouteKey(attrs.trip_id);
-    if (fromTrip) keys.add(fromTrip);
+    if (fromTrip) keys.add(this._normalizeKey(fromTrip));
     const routeId = attrs.route_id ? String(attrs.route_id).trim() : "";
-    if (routeId) keys.add(routeId);
+    if (routeId) keys.add(this._normalizeKey(routeId));
     return keys;
   }
 
@@ -256,7 +287,7 @@ class MetlinkExplorerCard extends LitElement {
         }
 
         const routeFeatures = this._parseRouteGeometry(entry.entity);
-        const routeMeta = this._routeMetaFromFeatures(routeFeatures || []);
+        const routeMeta = this._routeMetaFromFeatures(routeFeatures || []) || this._routeMetaFallback(entry);
         console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: routeFeatures=${routeFeatures?.length ?? "null"}, routeMeta=${JSON.stringify(routeMeta)}`);
         if (!routeMeta) return;
 
