@@ -802,7 +802,7 @@ class MetlinkExplorerCard extends LitElement {
     if (![lastLon, lastLat, lastTs].every(Number.isFinite)) return 0;
 
     const dt = Math.max(0, (timestampMs - lastTs) / 1000);
-    if (dt < 1) return 0;
+    if (dt < 2) return prevState.speedMps || 0;
 
     const meters = this._segmentLengthMeters([lastLon, lastLat], [lon, lat]);
     if (!Number.isFinite(meters) || meters <= 0) return 0;
@@ -827,11 +827,9 @@ class MetlinkExplorerCard extends LitElement {
     let finalS = baseS;
 
     if (Number.isFinite(state.correctionFromS) && Number.isFinite(state.correctionStartMs)) {
-      const dt = Math.max(0, (nowMs - state.anchorTimestampMs) / 1000);
-      const corrTrackS = Math.max(0, Math.min(total, state.correctionFromS + (state.signedSpeedMps * dt)));
       const elapsed = Math.max(0, nowMs - state.correctionStartMs);
       const alpha = Math.max(0, Math.min(1, elapsed / Math.max(1, this._correctionDurationMs)));
-      finalS = corrTrackS + ((baseS - corrTrackS) * alpha);
+      finalS = state.correctionFromS + ((baseS - state.correctionFromS) * alpha);
       if (alpha >= 1) {
         state.correctionFromS = null;
         state.correctionStartMs = null;
@@ -1229,17 +1227,16 @@ class MetlinkExplorerCard extends LitElement {
       const speedMps = this._normalizeSpeedMps(feature.properties.speed_kmh, previous, lon, lat, timestampMs, mode);
       const predictedFromPrevious = previous ? this._predictSAt(previous, nowMs) : projection.s;
       const correctionGap = Math.abs(projection.s - predictedFromPrevious);
-      const shouldSmoothCorrect = previous && correctionGap <= 400;
+      const shouldSmoothCorrect = previous && correctionGap <= 400 && !Number.isFinite(previous.correctionFromS);
       const sDelta = projection.s - predictedFromPrevious;
       const isNearStop = speedMps < 1.0;
       const directionThreshold = isNearStop ? 6 : 2;
-      const travelDirection = previous
-        ? (sDelta > directionThreshold
-          ? 1
-          : (sDelta < (-directionThreshold)
-            ? -1
-            : (previous.travelDirection || 1)))
-        : 1;
+      let travelDirection = previous ? previous.travelDirection : 1;
+      if (sDelta > directionThreshold) {
+        travelDirection = 1;
+      } else if (sDelta < (-directionThreshold)) {
+        travelDirection = -1;
+      }
       const signedSpeedMps = speedMps * travelDirection;
 
       const routeLabel  = feature.properties.route_label || "";

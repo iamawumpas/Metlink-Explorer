@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.5] - 2026-05-11
+
+### Critical Fix - Predictive movement speed and backward tracking
+
+- **Fixed backward tracking after data updates**: Removed velocity from correction blend calculation so the correction starting point remains fixed during the 5-second interpolation window. Previously, negative `signedSpeedMps` (when moving backward on route) would move the correction point backward, creating visible backward motion during blending.
+- **Fixed excessive predicted speed**: Increased minimum time window for inferred speed calculation from 1 second to 2 seconds and now returns previous speed during short intervals to reduce noise spikes and unnatural acceleration.
+- **Fixed direction flipping during correction**: Travel direction is now preserved during correction blending instead of being recalculated on every update. Only significant position deltas (>6m near stops, >2m elsewhere) now change direction, preventing erratic reversals.
+- **Added protection against double correction**: Prevents initiating a new correction blend if one is already in progress (`!Number.isFinite(previous.correctionFromS)` check added).
+- Updated frontend build marker to `0.10.5`.
+
 ## [0.10.4] - 2026-05-11
 
 ### Fix - Badge pointer orientation fallback for route-tangent heading
