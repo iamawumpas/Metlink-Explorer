@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.5)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.6)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -747,6 +747,7 @@ class MetlinkExplorerCard extends LitElement {
       });
 
       let layerIdx = 0;
+      const trainHubLayerIds = [];
       categories.forEach(cat => {
         const entries = this.config[`${cat}_entities`] || [];
         [...entries].reverse().forEach(entry => {
@@ -792,6 +793,7 @@ class MetlinkExplorerCard extends LitElement {
 
             if (hubStops.length > 0) {
               const hubDiameter = Math.max(16, Math.round(33 * 0.78));
+              const markerDiameter = cat === 'train' ? Math.max(32, Math.round(hubDiameter * 2)) : hubDiameter;
               const uniqueStops = new Map();
               hubStops.forEach((stop) => {
                 const key = `${String(stop.stop_id || "")}:${Number(stop.stop_lat)}:${Number(stop.stop_lon)}`;
@@ -832,8 +834,8 @@ class MetlinkExplorerCard extends LitElement {
                 this.map.getSource(hubSourceId).setData({ type: 'FeatureCollection', features: hubFeatures });
               }
 
-              const hubImageId = `hub-marker-${cat}-${hubDiameter}`;
-              this._ensureHubMarkerImage(hubImageId, hubDiameter, cat, Math.max(1, window.devicePixelRatio || 1));
+              const hubImageId = `hub-marker-${cat}-${markerDiameter}`;
+              this._ensureHubMarkerImage(hubImageId, markerDiameter, cat, Math.max(1, window.devicePixelRatio || 1));
 
               const hubLayerId = `hub-layer-${sourceId}`;
               if (this.map.getLayer(hubLayerId)) this.map.removeLayer(hubLayerId);
@@ -848,6 +850,9 @@ class MetlinkExplorerCard extends LitElement {
                   'icon-ignore-placement': true,
                 },
               });
+              if (cat === 'train') {
+                trainHubLayerIds.push(hubLayerId);
+              }
             } else {
               console.log(`[MetlinkExplorer] No hub stops found for ${entry.entity} (${cat})`);
             }
@@ -855,6 +860,17 @@ class MetlinkExplorerCard extends LitElement {
 
           layerIdx++;
         });
+      });
+
+      // Keep train hub badges at the very top, above bus badges and vehicle icons.
+      trainHubLayerIds.forEach((layerId) => {
+        if (this.map.getLayer(layerId)) {
+          try {
+            this.map.moveLayer(layerId);
+          } catch (_) {
+            // Best effort.
+          }
+        }
       });
     } catch (err) {
       console.error('[MetlinkExplorer] _renderRoutes error', err);
