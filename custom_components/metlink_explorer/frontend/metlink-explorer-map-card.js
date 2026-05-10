@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.4)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.9.8)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -50,21 +50,6 @@ const VEHICLE_COLORS = {
   ferry: "#00acc1",
 };
 
-const MODE_MAX_SPEED_MPS = {
-  train: 40 / 3.6,
-  bus: 25 / 3.6,
-  ferry: 20,
-};
-
-const MODE_MAX_INFERRED_SPEED_MPS = {
-  train: 40 / 3.6,
-  bus: 25 / 3.6,
-  ferry: 20 / 3.6,
-};
-
-const DESTINATION_DWELL_MS = 60000;
-const DESTINATION_EPSILON_METERS = 4;
-
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
     return { hass: {}, config: {} };
@@ -74,13 +59,9 @@ class MetlinkExplorerCard extends LitElement {
     super();
     this._liveGpsSnapshot = "";
     this._liveSlotHashes = new Map();
-    this._vehicleMotionState = new Map();
+    this._vehicleLastPositions = new Map();
     this._activeVehicleSources = new Set();
     this._pendingLiveRender = false;
-    this._predictionTimer = null;
-    this._predictionIntervalMs = 2000;
-    this._correctionDurationMs = 5000;
-    this._lastZoomBucket = null;
   }
 
   static async getConfigElement() {
@@ -643,334 +624,13 @@ class MetlinkExplorerCard extends LitElement {
           properties: {
             entity_id: entityId,
             route_label: routeMeta.routeLabel,
-            route_key: routeMeta.routeId,
             marker_color: markerColor,
             text_color: textColor,
             text_halo_color: textColor === "#000000" ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.45)",
             bearing: iconBearing,
-            speed_kmh: Number(state.attributes.speed),
-            timestamp: this._parseTrackerTimestamp(state.attributes.timestamp),
           },
         };
       });
-  }
-
-  _segmentLengthMeters(a, b) {
-    const lon1 = Number(a?.[0]);
-    const lat1 = Number(a?.[1]);
-    const lon2 = Number(b?.[0]);
-    const lat2 = Number(b?.[1]);
-    if (![lon1, lat1, lon2, lat2].every(Number.isFinite)) return 0;
-
-    const avgLatRad = ((lat1 + lat2) / 2) * (Math.PI / 180);
-    const metersPerDegLat = 111320;
-    const metersPerDegLon = Math.max(1, 111320 * Math.cos(avgLatRad));
-    const dx = (lon2 - lon1) * metersPerDegLon;
-    const dy = (lat2 - lat1) * metersPerDegLat;
-    return Math.hypot(dx, dy);
-  }
-
-  _buildPathModel(routeFeatures) {
-    if (!Array.isArray(routeFeatures) || routeFeatures.length === 0) return null;
-
-    const points = [];
-    const pushPoint = (coord) => {
-      const lon = Number(coord?.[0]);
-      const lat = Number(coord?.[1]);
-      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-      const last = points[points.length - 1];
-      if (last && Math.abs(last[0] - lon) < 1e-9 && Math.abs(last[1] - lat) < 1e-9) return;
-      points.push([lon, lat]);
-    };
-
-    routeFeatures.forEach((feature) => {
-      const geom = feature?.geometry;
-      if (!geom) return;
-      if (geom.type === "LineString" && Array.isArray(geom.coordinates)) {
-        geom.coordinates.forEach(pushPoint);
-      } else if (geom.type === "MultiLineString" && Array.isArray(geom.coordinates)) {
-        geom.coordinates.forEach((segment) => {
-          if (Array.isArray(segment)) segment.forEach(pushPoint);
-        });
-      }
-    });
-
-    if (points.length < 2) return null;
-
-    const cumulative = [0];
-    for (let i = 1; i < points.length; i++) {
-      cumulative.push(cumulative[i - 1] + this._segmentLengthMeters(points[i - 1], points[i]));
-    }
-
-    return {
-      points,
-      cumulative,
-      totalMeters: cumulative[cumulative.length - 1],
-    };
-  }
-
-  _projectToPath(pathModel, lon, lat, preferredSegmentIndex = null) {
-    if (!pathModel || !Array.isArray(pathModel.points) || pathModel.points.length < 2) return null;
-
-    const targetLon = Number(lon);
-    const targetLat = Number(lat);
-    if (!Number.isFinite(targetLon) || !Number.isFinite(targetLat)) return null;
-
-    const avgLatRad = targetLat * (Math.PI / 180);
-    const metersPerDegLat = 111320;
-    const metersPerDegLon = Math.max(1, 111320 * Math.cos(avgLatRad));
-
-    let best = null;
-    for (let i = 1; i < pathModel.points.length; i++) {
-      const a = pathModel.points[i - 1];
-      const b = pathModel.points[i];
-      const ax = a[0] * metersPerDegLon;
-      const ay = a[1] * metersPerDegLat;
-      const bx = b[0] * metersPerDegLon;
-      const by = b[1] * metersPerDegLat;
-      const px = targetLon * metersPerDegLon;
-      const py = targetLat * metersPerDegLat;
-
-      const abx = bx - ax;
-      const aby = by - ay;
-      const abLenSq = (abx * abx) + (aby * aby);
-      if (abLenSq <= 0) continue;
-
-      const apx = px - ax;
-      const apy = py - ay;
-      const t = Math.max(0, Math.min(1, ((apx * abx) + (apy * aby)) / abLenSq));
-      const qx = ax + (abx * t);
-      const qy = ay + (aby * t);
-      const dx = px - qx;
-      const dy = py - qy;
-      const dist = Math.hypot(dx, dy);
-      const segLenMeters = pathModel.cumulative[i] - pathModel.cumulative[i - 1];
-      const s = pathModel.cumulative[i - 1] + (segLenMeters * t);
-
-      const continuityPenalty = Number.isFinite(preferredSegmentIndex)
-        ? Math.abs(i - preferredSegmentIndex) * 6
-        : 0;
-      const score = dist + continuityPenalty;
-
-      if (!best || score < best.score) {
-        best = {
-          s,
-          segmentIndex: i,
-          distanceMeters: dist,
-          score,
-        };
-      }
-    }
-
-    return best;
-  }
-
-  _interpolateOnPath(pathModel, s) {
-    if (!pathModel || !Array.isArray(pathModel.points) || pathModel.points.length < 2) return null;
-    const total = Number(pathModel.totalMeters || 0);
-    const target = Math.max(0, Math.min(total, Number(s) || 0));
-
-    let idx = 1;
-    while (idx < pathModel.cumulative.length && pathModel.cumulative[idx] < target) idx += 1;
-    idx = Math.min(idx, pathModel.points.length - 1);
-
-    const s0 = pathModel.cumulative[idx - 1];
-    const s1 = pathModel.cumulative[idx];
-    const span = Math.max(1e-9, s1 - s0);
-    const t = Math.max(0, Math.min(1, (target - s0) / span));
-
-    const a = pathModel.points[idx - 1];
-    const b = pathModel.points[idx];
-    const lon = a[0] + ((b[0] - a[0]) * t);
-    const lat = a[1] + ((b[1] - a[1]) * t);
-
-    return { lon, lat, segmentIndex: idx, s: target };
-  }
-
-  _normalizeSpeedMps(speedKmh, prevState, lon, lat, timestampMs, mode) {
-    const maxSpeed = Number(MODE_MAX_SPEED_MPS[mode]) || 25;
-    const maxInferredSpeed = Number(MODE_MAX_INFERRED_SPEED_MPS[mode]) || maxSpeed;
-    const parsedSpeed = Number(speedKmh);
-    if (Number.isFinite(parsedSpeed) && parsedSpeed > 0) {
-      return Math.max(0, Math.min(maxSpeed, parsedSpeed / 3.6));
-    }
-
-    if (!prevState) return 0;
-    const lastLon = Number(prevState.lastActualLon);
-    const lastLat = Number(prevState.lastActualLat);
-    const lastTs = Number(prevState.lastActualTimestampMs);
-    if (![lastLon, lastLat, lastTs].every(Number.isFinite)) return 0;
-
-    const dt = Math.max(0, (timestampMs - lastTs) / 1000);
-    if (dt < 2) return prevState.speedMps || 0;
-
-    const meters = this._segmentLengthMeters([lastLon, lastLat], [lon, lat]);
-    if (!Number.isFinite(meters) || meters <= 0) return 0;
-    return Math.max(0, Math.min(maxInferredSpeed, meters / dt));
-  }
-
-  _predictSAt(state, nowMs) {
-    const total = Number(state?.pathModel?.totalMeters || 0);
-    if (total <= 0) return 0;
-    const dt = Math.max(0, (nowMs - state.anchorTimestampMs) / 1000);
-    const baseS = state.anchorS + (state.signedSpeedMps * dt);
-    return Math.max(0, Math.min(total, baseS));
-  }
-
-  _predictedPosition(state, nowMs) {
-    if (!state?.pathModel) return null;
-
-    const total = Number(state.pathModel.totalMeters || 0);
-    if (total <= 0) return null;
-
-    let finalS;
-
-    if (Number.isFinite(state.correctionFromS) && Number.isFinite(state.correctionStartMs)) {
-      const elapsed = Math.max(0, nowMs - state.correctionStartMs);
-      const alpha = Math.max(0, Math.min(1, elapsed / Math.max(1, this._correctionDurationMs)));
-      finalS = state.correctionFromS + ((state.anchorS - state.correctionFromS) * alpha);
-      if (alpha >= 1) {
-        state.correctionFromS = null;
-        state.correctionStartMs = null;
-      }
-    } else {
-      finalS = this._predictSAt(state, nowMs);
-    }
-
-    const terminalS = state.travelDirection >= 0 ? total : 0;
-    const isAtTerminal = Math.abs(finalS - terminalS) <= DESTINATION_EPSILON_METERS;
-    if (isAtTerminal) {
-      finalS = terminalS;
-      if (!Number.isFinite(state.reachedDestinationAtMs)) {
-        state.reachedDestinationAtMs = nowMs;
-      }
-      const dwell = nowMs - state.reachedDestinationAtMs;
-      if (dwell > DESTINATION_DWELL_MS) {
-        return null;
-      }
-    } else {
-      state.reachedDestinationAtMs = null;
-    }
-
-    const point = this._interpolateOnPath(state.pathModel, finalS);
-    if (!point) return null;
-    return { ...point, s: finalS };
-  }
-
-  _bearingDegrees(fromLon, fromLat, toLon, toLat) {
-    const lon1 = Number(fromLon) * (Math.PI / 180);
-    const lat1 = Number(fromLat) * (Math.PI / 180);
-    const lon2 = Number(toLon) * (Math.PI / 180);
-    const lat2 = Number(toLat) * (Math.PI / 180);
-    if (![lon1, lat1, lon2, lat2].every(Number.isFinite)) return 0;
-
-    const dLon = lon2 - lon1;
-    const y = Math.sin(dLon) * Math.cos(lat2);
-    const x = (Math.cos(lat1) * Math.sin(lat2)) - (Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon));
-    const brng = (Math.atan2(y, x) * (180 / Math.PI) + 360) % 360;
-    return (brng + 180) % 360;
-  }
-
-  _pathBearingForS(pathModel, s, travelDirection, fallbackBearing) {
-    const direction = travelDirection >= 0 ? 1 : -1;
-    const delta = 8;
-    const total = Number(pathModel?.totalMeters || 0);
-    if (total <= 0) return Number(fallbackBearing) || 0;
-
-    const backS = Math.max(0, Math.min(total, s - (delta * direction)));
-    const frontS = Math.max(0, Math.min(total, s + (delta * direction)));
-    const p1 = this._interpolateOnPath(pathModel, backS);
-    const p2 = this._interpolateOnPath(pathModel, frontS);
-    if (!p1 || !p2) return Number(fallbackBearing) || 0;
-    const tangentBearing = this._bearingDegrees(p1.lon, p1.lat, p2.lon, p2.lat);
-    const oppositeBearing = (tangentBearing + 180) % 360;
-    const fallback = Number(fallbackBearing);
-    if (!Number.isFinite(fallback)) return tangentBearing;
-
-    const angularDiff = (a, b) => {
-      const d = Math.abs(((a - b + 540) % 360) - 180);
-      return Number.isFinite(d) ? d : 180;
-    };
-
-    const tangentDiff = angularDiff(tangentBearing, fallback);
-    const oppositeDiff = angularDiff(oppositeBearing, fallback);
-    return oppositeDiff < tangentDiff ? oppositeBearing : tangentBearing;
-  }
-
-  _suggestPredictionIntervalMs(activeCount = this._activeVehicleSources.size) {
-    const zoom = Number(this.map?.getZoom?.() || 12);
-    if (activeCount <= 8 && zoom >= 13) return 1000;
-    if (activeCount <= 25 && zoom >= 11) return 1500;
-    if (activeCount <= 60) return 2000;
-    return 3000;
-  }
-
-  _refreshPredictionTimer(force = false) {
-    const nextMs = this._suggestPredictionIntervalMs();
-    const zoom = Number(this.map?.getZoom?.() || 12);
-    const zoomBucket = Math.floor(zoom);
-    if (!force && this._predictionTimer && nextMs === this._predictionIntervalMs && zoomBucket === this._lastZoomBucket) {
-      return;
-    }
-
-    this._lastZoomBucket = zoomBucket;
-    this._predictionIntervalMs = nextMs;
-    if (this._predictionTimer) {
-      clearInterval(this._predictionTimer);
-      this._predictionTimer = null;
-    }
-    this._predictionTimer = setInterval(() => this._tickPredictionLoop(), this._predictionIntervalMs);
-  }
-
-  _featureFromMotionState(state, point) {
-    const bearing = this._pathBearingForS(
-      state.pathModel,
-      point.s,
-      state.travelDirection,
-      state.sensorFallbackBearing
-    );
-    state.lastIconBearing = bearing;
-
-    state.lastRenderedPoint = { lon: point.lon, lat: point.lat };
-    state.lastS = point.s;
-
-    return {
-      type: "Feature",
-      geometry: {
-        type: "Point",
-        coordinates: [point.lon, point.lat],
-      },
-      properties: {
-        ...state.properties,
-        bearing,
-      },
-    };
-  }
-
-  _tickPredictionLoop() {
-    if (!this.map || !this.map.isStyleLoaded()) return;
-    if (this._activeVehicleSources.size === 0 || this._vehicleMotionState.size === 0) return;
-
-    const nowMs = Date.now();
-    const sourcesToDeactivate = new Set();
-    for (const [entityId, state] of this._vehicleMotionState.entries()) {
-      if (!this._activeVehicleSources.has(state.sourceId)) continue;
-      const point = this._predictedPosition(state, nowMs);
-      if (!point) {
-        this._setLiveSourceData(state.sourceId, []);
-        this._vehicleMotionState.delete(entityId);
-        sourcesToDeactivate.add(state.sourceId);
-        continue;
-      }
-      const feature = this._featureFromMotionState(state, point);
-      this._setLiveSourceData(state.sourceId, [feature]);
-      this._vehicleMotionState.set(entityId, state);
-    }
-    if (sourcesToDeactivate.size > 0) {
-      const nextActive = new Set(this._activeVehicleSources);
-      sourcesToDeactivate.forEach((sourceId) => nextActive.delete(sourceId));
-      this._activeVehicleSources = nextActive;
-    }
   }
 
   _featureCollectionHash(features) {
@@ -1076,7 +736,6 @@ class MetlinkExplorerCard extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this._refreshPredictionTimer(true);
     setTimeout(() => this._forceSectionBreakout(), 500);
   }
 
@@ -1189,7 +848,7 @@ class MetlinkExplorerCard extends LitElement {
     const dpr = Math.max(1, window.devicePixelRatio || 1);
 
     // Collect matched vehicles across all route entries; last entry wins per entity.
-    const vehicleMap = new Map(); // entityId -> { feature, mode, routeFeatures }
+    const vehicleMap = new Map(); // entityId -> { feature, mode }
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
       [...routeEntries].reverse().forEach((entry) => {
@@ -1200,48 +859,35 @@ class MetlinkExplorerCard extends LitElement {
         const vehicleFeatures = this._liveFeaturesForRoute(entry, mode, routeMeta);
         vehicleFeatures.forEach((feature) => {
           const entityId = feature.properties.entity_id;
-          if (entityId) vehicleMap.set(entityId, { feature, mode, routeFeatures: routeFeatures || [] });
+          if (entityId) vehicleMap.set(entityId, { feature, mode });
         });
       });
     });
 
     const newActiveSources = new Set();
     let updatedCount = 0;
-    const nowMs = Date.now();
 
-    vehicleMap.forEach(({ feature, mode, routeFeatures }, entityId) => {
+    vehicleMap.forEach(({ feature, mode }, entityId) => {
       const coords = feature.geometry?.coordinates || [];
       const lon = Number(coords[0]);
       const lat = Number(coords[1]);
+      const bearing = Number.isFinite(Number(feature.properties.bearing)) ? Number(feature.properties.bearing) : 0;
+
+      // Epsilon guard: skip setData when vehicle hasn't moved meaningfully.
+      const last = this._vehicleLastPositions.get(entityId);
       const safeId = entityId.replace(/\./g, '-');
       const sourceId = `live-vehicle-${safeId}`;
       newActiveSources.add(sourceId);
 
-      const pathModel = this._buildPathModel(routeFeatures);
-      if (!pathModel || pathModel.totalMeters <= 0) return;
-
-      const previous = this._vehicleMotionState.get(entityId) || null;
-      const projection = this._projectToPath(pathModel, lon, lat, previous?.preferredSegmentIndex);
-      if (!projection) return;
-
-      const timestampMs = Number(feature.properties.timestamp) > 0 ? Number(feature.properties.timestamp) * 1000 : nowMs;
-      const speedMps = this._normalizeSpeedMps(feature.properties.speed_kmh, previous, lon, lat, timestampMs, mode);
-      const predictedFromPrevious = previous ? this._predictSAt(previous, nowMs) : projection.s;
-      const correctionGap = Math.abs(projection.s - predictedFromPrevious);
-      const shouldSmoothCorrect = previous && correctionGap <= 400 && !Number.isFinite(previous.correctionFromS);
-      const sDelta = projection.s - predictedFromPrevious;
-      const isNearStop = speedMps < 1.0;
-      const directionThreshold = isNearStop ? 6 : 2;
-      let travelDirection = previous ? previous.travelDirection : 1;
-      const isInCorrection = previous && Number.isFinite(previous.correctionFromS);
-      if (!isInCorrection) {
-        if (sDelta > directionThreshold) {
-          travelDirection = 1;
-        } else if (sDelta < (-directionThreshold)) {
-          travelDirection = -1;
-        }
+      if (last &&
+          Math.abs(lat - last.lat) < 0.00001 &&
+          Math.abs(lon - last.lon) < 0.00001 &&
+          Math.abs(bearing - last.bearing) < 0.5) {
+        this._ensureLiveLayers(sourceId);
+        return;
       }
-      const signedSpeedMps = speedMps * travelDirection;
+
+      this._vehicleLastPositions.set(entityId, { lat, lon, bearing });
 
       const routeLabel  = feature.properties.route_label || "";
       const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
@@ -1257,34 +903,7 @@ class MetlinkExplorerCard extends LitElement {
         properties: { ...feature.properties, shape_badge_id: shapeId, text_badge_id: textId },
       };
 
-      const motionState = {
-        sourceId,
-        pathModel,
-        anchorS: projection.s,
-        anchorTimestampMs: nowMs,
-        speedMps: speedMps < 0.3 ? 0 : speedMps,
-        signedSpeedMps: speedMps < 0.3 ? 0 : signedSpeedMps,
-        travelDirection,
-        preferredSegmentIndex: projection.segmentIndex,
-        correctionFromS: shouldSmoothCorrect ? predictedFromPrevious : null,
-        correctionStartMs: shouldSmoothCorrect ? nowMs : null,
-        properties: { ...featureWithBadge.properties },
-        lastActualLon: lon,
-        lastActualLat: lat,
-        lastActualTimestampMs: timestampMs,
-        lastRenderedPoint: null,
-        lastS: projection.s,
-        sensorFallbackBearing: Number(featureWithBadge.properties.bearing || 0),
-        lastIconBearing: Number(featureWithBadge.properties.bearing || 0),
-        reachedDestinationAtMs: null,
-      };
-      this._vehicleMotionState.set(entityId, motionState);
-
-      const initialPoint = this._predictedPosition(motionState, nowMs);
-      if (!initialPoint) return;
-      const initialFeature = this._featureFromMotionState(motionState, initialPoint);
-
-      this._setLiveSourceData(sourceId, [initialFeature]);
+      this._setLiveSourceData(sourceId, [featureWithBadge]);
       this._ensureLiveLayers(sourceId);
       updatedCount++;
     });
@@ -1295,15 +914,9 @@ class MetlinkExplorerCard extends LitElement {
         this._setLiveSourceData(sourceId, []);
       }
     });
-    for (const [entityId, state] of this._vehicleMotionState.entries()) {
-      if (!newActiveSources.has(state.sourceId)) {
-        this._vehicleMotionState.delete(entityId);
-      }
-    }
     this._activeVehicleSources = newActiveSources;
-    this._refreshPredictionTimer();
 
-    console.log(`[MetlinkExplorer] live vehicles: ${vehicleMap.size} matched, ${updatedCount} sync updates, prediction every ${this._predictionIntervalMs}ms`);
+    console.log(`[MetlinkExplorer] live vehicles: ${vehicleMap.size} matched, ${updatedCount} setData calls`);
 
     // Hub layers must remain above vehicle badges.
     this._bringHubLayersToFront();
@@ -1562,12 +1175,7 @@ class MetlinkExplorerCard extends LitElement {
       console.log('[MetlinkExplorer] map load event');
       this.map.resize();
       this._centerMap();
-      this._refreshPredictionTimer(true);
       this._renderRoutes();
-    });
-
-    this.map.on('zoomend', () => {
-      this._refreshPredictionTimer();
     });
 
     this.map.on('error', (event) => {
@@ -1609,10 +1217,6 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._predictionTimer) {
-      clearInterval(this._predictionTimer);
-      this._predictionTimer = null;
-    }
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
