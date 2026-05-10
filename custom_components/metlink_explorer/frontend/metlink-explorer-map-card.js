@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.6)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.7)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -249,6 +249,46 @@ class MetlinkExplorerCard extends LitElement {
 
     const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
+  }
+
+  async _ensureTrainHubImage(imageId, diameter, dpr) {
+    if (!this.map || this.map.hasImage(imageId)) return;
+
+    const pixelSize = Math.max(1, Math.round(diameter * dpr));
+    let rawImg;
+    try {
+      const result = await this.map.loadImage('/metlink_explorer_frontend/train.png');
+      rawImg = result.data;
+    } catch (e) {
+      console.warn('[MetlinkExplorer] Failed to load train.png, falling back to canvas badge', e);
+      this._ensureHubMarkerImage(imageId, diameter, 'train', dpr);
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = pixelSize;
+    canvas.height = pixelSize;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Rotate 90 degrees clockwise.
+    ctx.translate(pixelSize / 2, pixelSize / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(rawImg, -pixelSize / 2, -pixelSize / 2, pixelSize, pixelSize);
+
+    // Strip white/near-white background pixels.
+    const imgData = ctx.getImageData(0, 0, pixelSize, pixelSize);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 230 && d[i + 1] > 230 && d[i + 2] > 230) {
+        d[i + 3] = 0;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const finalData = ctx.getImageData(0, 0, pixelSize, pixelSize);
+    if (this.map.hasImage(imageId)) return; // Guard against double-add during await.
+    this.map.addImage(imageId, finalData, { pixelRatio: dpr });
   }
 
   _computeHubCollisionOffsets(hubs, separationMeters = 24) {
@@ -696,7 +736,7 @@ class MetlinkExplorerCard extends LitElement {
     this._bringHubLayersToFront();
   }
 
-  _renderRoutes() {
+  async _renderRoutes() {
     if (!this.map) return;
     if (!this.map.isStyleLoaded()) {
       console.log("[MetlinkExplorer] _renderRoutes skipped: style not loaded");
@@ -835,7 +875,11 @@ class MetlinkExplorerCard extends LitElement {
               }
 
               const hubImageId = `hub-marker-${cat}-${markerDiameter}`;
-              this._ensureHubMarkerImage(hubImageId, markerDiameter, cat, Math.max(1, window.devicePixelRatio || 1));
+              if (cat === 'train') {
+                await this._ensureTrainHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
+              } else {
+                this._ensureHubMarkerImage(hubImageId, markerDiameter, cat, Math.max(1, window.devicePixelRatio || 1));
+              }
 
               const hubLayerId = `hub-layer-${sourceId}`;
               if (this.map.getLayer(hubLayerId)) this.map.removeLayer(hubLayerId);
