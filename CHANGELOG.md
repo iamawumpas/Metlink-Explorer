@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5] - 2026-05-10
+
+### Fix - Hub layering and shared-location split
+
+- Hub/stop layers are now moved to the highest map layer so they render above live bus/train badges.
+- Shared train+bus hub coordinates now split around the center point with train on the left and bus on the right.
+
 ## [0.8.4] - 2026-05-10
 
 ### Fix - Hub inference source alignment

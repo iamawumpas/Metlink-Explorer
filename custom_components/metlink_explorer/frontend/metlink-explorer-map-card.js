@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.4)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.5)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -289,6 +289,40 @@ class MetlinkExplorerCard extends LitElement {
     }
 
     return offsets;
+  }
+
+  _hubCoordKey(lon, lat, precision = 1e-5) {
+    const safeLon = Number(lon);
+    const safeLat = Number(lat);
+    if (!Number.isFinite(safeLon) || !Number.isFinite(safeLat)) return "";
+    const lonKey = Math.round(safeLon / precision) * precision;
+    const latKey = Math.round(safeLat / precision) * precision;
+    return `${latKey},${lonKey}`;
+  }
+
+  _sharedHubSideOffset(lat, mode) {
+    if (mode !== "train" && mode !== "bus") return { dLon: 0, dLat: 0 };
+    const latRad = (Number.isFinite(Number(lat)) ? Number(lat) : 0) * (Math.PI / 180);
+    const metersPerDegLon = Math.max(1, 111320 * Math.cos(latRad));
+    const sideMeters = 18;
+    const dir = mode === "train" ? -1 : 1;
+    return {
+      dLon: (dir * sideMeters) / metersPerDegLon,
+      dLat: 0,
+    };
+  }
+
+  _bringHubLayersToFront() {
+    if (!this.map) return;
+    for (let i = 0; i < 200; i++) {
+      const layerId = `hub-layer-route-source-${i}`;
+      if (!this.map.getLayer(layerId)) continue;
+      try {
+        this.map.moveLayer(layerId);
+      } catch (_) {
+        // Best effort: if layer ordering changes mid-render, next refresh will retry.
+      }
+    }
   }
 
   _parseTrackerTimestamp(value) {
@@ -657,6 +691,9 @@ class MetlinkExplorerCard extends LitElement {
         sourceIndex += 1;
       });
     });
+
+    // Hub layers are rendered by _renderRoutes; ensure they stay above vehicle badges.
+    this._bringHubLayersToFront();
   }
 
   _renderRoutes() {
@@ -670,6 +707,35 @@ class MetlinkExplorerCard extends LitElement {
 
     try {
       const categories = ['ferry', 'bus', 'train'];
+      const hubCoordModes = new Map();
+
+      // First pass: collect shared hub coordinates across all enabled route entries.
+      categories.forEach((cat) => {
+        const entries = this.config[`${cat}_entities`] || [];
+        [...entries].reverse().forEach((entry) => {
+          if (entry.show_hubs !== true) return;
+          const features = this._parseRouteGeometry(entry.entity);
+          if (!features) return;
+
+          for (const feature of features) {
+            const timelineStops = feature?.properties?.timeline_stops || {};
+            for (const directionStops of Object.values(timelineStops)) {
+              if (!Array.isArray(directionStops)) continue;
+              for (const stop of directionStops) {
+                const isHub = stop?.is_hub === true || String(stop?.is_hub).toLowerCase() === 'true';
+                const lon = Number(stop?.stop_lon);
+                const lat = Number(stop?.stop_lat);
+                if (!isHub || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+
+                const key = this._hubCoordKey(lon, lat);
+                if (!key) continue;
+                if (!hubCoordModes.has(key)) hubCoordModes.set(key, new Set());
+                hubCoordModes.get(key).add(cat);
+              }
+            }
+          }
+        });
+      });
       
       // Clear existing
       const currentSources = Array.from({length: 100}, (_, i) => `route-source-${i}`);
@@ -738,11 +804,15 @@ class MetlinkExplorerCard extends LitElement {
                 const offset = offsets[stopId] || { dLon: 0, dLat: 0 };
                 const baseLon = Number(stop.stop_lon);
                 const baseLat = Number(stop.stop_lat);
+                const coordKey = this._hubCoordKey(baseLon, baseLat);
+                const sharedModes = hubCoordModes.get(coordKey);
+                const hasTrainBusShare = sharedModes?.has('train') && sharedModes?.has('bus');
+                const sharedOffset = hasTrainBusShare ? this._sharedHubSideOffset(baseLat, cat) : { dLon: 0, dLat: 0 };
                 return {
                   type: 'Feature',
                   geometry: {
                     type: 'Point',
-                    coordinates: [baseLon + offset.dLon, baseLat + offset.dLat],
+                    coordinates: [baseLon + offset.dLon + sharedOffset.dLon, baseLat + offset.dLat + sharedOffset.dLat],
                   },
                   properties: {
                     stop_id: stopId,
