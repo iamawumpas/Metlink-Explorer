@@ -55,6 +55,14 @@ class MetlinkExplorerCard extends LitElement {
     return { hass: {}, config: {} };
   }
 
+  constructor() {
+    super();
+    this._liveSourceCount = 0;
+    this._liveSlotHashes = new Map();
+    this._liveRenderTimer = null;
+    this._liveRenderThrottleMs = 30000;
+  }
+
   static async getConfigElement() {
     try {
       await import("/metlink_explorer_frontend/metlink-explorer-editor.js");
@@ -624,6 +632,100 @@ class MetlinkExplorerCard extends LitElement {
       });
   }
 
+  _featureCollectionHash(features) {
+    if (!Array.isArray(features) || features.length === 0) return "";
+    return features
+      .map((feature) => {
+        const props = feature?.properties || {};
+        const coords = feature?.geometry?.coordinates || [];
+        const lon = Number(coords[0]);
+        const lat = Number(coords[1]);
+        return [
+          props.entity_id || "",
+          Number.isFinite(lon) ? lon.toFixed(6) : "",
+          Number.isFinite(lat) ? lat.toFixed(6) : "",
+          Number.isFinite(Number(props.bearing)) ? Number(props.bearing).toFixed(1) : "",
+          props.shape_badge_id || "",
+          props.text_badge_id || "",
+        ].join("|");
+      })
+      .join(";");
+  }
+
+  _setLiveSourceData(sourceId, features) {
+    if (!this.map) return;
+
+    const nextHash = this._featureCollectionHash(features);
+    if (this._liveSlotHashes.get(sourceId) === nextHash) {
+      return;
+    }
+
+    const data = {
+      type: "FeatureCollection",
+      features: Array.isArray(features) ? features : [],
+    };
+
+    const source = this.map.getSource(sourceId);
+    if (source) {
+      source.setData(data);
+    } else {
+      this.map.addSource(sourceId, {
+        type: "geojson",
+        data,
+      });
+    }
+
+    this._liveSlotHashes.set(sourceId, nextHash);
+  }
+
+  _ensureLiveLayers(sourceId) {
+    if (!this.map) return;
+
+    const shapeLayerId = `shape-${sourceId}`;
+    const textLayerId = `text-${sourceId}`;
+
+    if (!this.map.getLayer(shapeLayerId)) {
+      this.map.addLayer({
+        id: shapeLayerId,
+        type: "symbol",
+        source: sourceId,
+        layout: {
+          "icon-image": ["get", "shape_badge_id"],
+          "icon-anchor": "center",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-rotate": ["get", "bearing"],
+          "icon-rotation-alignment": "map",
+          "icon-pitch-alignment": "map",
+        },
+      });
+    }
+
+    if (!this.map.getLayer(textLayerId)) {
+      this.map.addLayer({
+        id: textLayerId,
+        type: "symbol",
+        source: sourceId,
+        layout: {
+          "icon-image": ["get", "text_badge_id"],
+          "icon-anchor": "center",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-rotation-alignment": "viewport",
+          "icon-pitch-alignment": "viewport",
+        },
+      });
+    }
+  }
+
+  _scheduleLiveVehiclesRender() {
+    if (this._liveRenderTimer) return;
+    this._liveRenderTimer = setTimeout(() => {
+      this._liveRenderTimer = null;
+      this._renderLiveVehicles();
+    }, this._liveRenderThrottleMs);
+  }
+
   connectedCallback() {
     super.connectedCallback();
     setTimeout(() => this._forceSectionBreakout(), 500);
@@ -724,18 +826,9 @@ class MetlinkExplorerCard extends LitElement {
 
     if (!this.map.isStyleLoaded()) {
       console.log("[MetlinkExplorer] _renderLiveVehicles deferred: style not loaded");
-      this.map.once('idle', () => this._renderLiveVehicles());
+      this.map.once('idle', () => this._scheduleLiveVehiclesRender());
       return;
     }
-
-    const liveSources = Array.from({ length: 200 }, (_, i) => `live-source-${i}`);
-    liveSources.forEach((sourceId) => {
-      const textLayerId  = `text-${sourceId}`;
-      const shapeLayerId = `shape-${sourceId}`;
-      if (this.map.getLayer(textLayerId))  this.map.removeLayer(textLayerId);
-      if (this.map.getLayer(shapeLayerId)) this.map.removeLayer(shapeLayerId);
-      if (this.map.getSource(sourceId))    this.map.removeSource(sourceId);
-    });
 
     const categories = ["train", "bus", "ferry"];
     const nowEpoch = Date.now() / 1000;
@@ -786,8 +879,6 @@ class MetlinkExplorerCard extends LitElement {
         }
 
         const sourceId = `live-source-${sourceIndex}`;
-        const shapeLayerId = `shape-${sourceId}`;
-        const textLayerId  = `text-${sourceId}`;
 
         const featuresWithBadge = vehicleFeatures.map((feature) => {
           const routeLabel  = feature.properties.route_label || "";
@@ -809,50 +900,20 @@ class MetlinkExplorerCard extends LitElement {
           };
         });
 
-        this.map.addSource(sourceId, {
-          type: "geojson",
-          data: {
-            type: "FeatureCollection",
-            features: featuresWithBadge,
-          },
-        });
-
-        // Shape layer: teardrop icon rotates with vehicle bearing.
-        this.map.addLayer({
-          id: shapeLayerId,
-          type: "symbol",
-          source: sourceId,
-          layout: {
-            "icon-image": ["get", "shape_badge_id"],
-            "icon-anchor": "center",
-            "icon-allow-overlap": true,
-            "icon-ignore-placement": true,
-            "icon-rotate": ["get", "bearing"],
-            "icon-rotation-alignment": "map",
-            "icon-pitch-alignment": "map",
-          },
-        });
-
-        // Text layer: separate non-rotating layer so the label stays upright.
-        this.map.addLayer({
-          id: textLayerId,
-          type: "symbol",
-          source: sourceId,
-          layout: {
-            "icon-image": ["get", "text_badge_id"],
-            "icon-anchor": "center",
-            "icon-allow-overlap": true,
-            "icon-ignore-placement": true,
-            "icon-rotation-alignment": "viewport",
-            "icon-pitch-alignment": "viewport",
-          },
-        });
-
-        console.log(`[MetlinkExplorer] Teardrop symbol layers added for ${sourceId}, features=${featuresWithBadge.length}`);
+        this._setLiveSourceData(sourceId, featuresWithBadge);
+        this._ensureLiveLayers(sourceId);
 
         sourceIndex += 1;
       });
     });
+
+    const highestUsedSlot = sourceIndex;
+    for (let i = highestUsedSlot; i < this._liveSourceCount; i++) {
+      const sourceId = `live-source-${i}`;
+      this._setLiveSourceData(sourceId, []);
+      this._ensureLiveLayers(sourceId);
+    }
+    this._liveSourceCount = Math.max(this._liveSourceCount, highestUsedSlot);
 
     // Hub layers are rendered by _renderRoutes; ensure they stay above vehicle badges.
     this._bringHubLayersToFront();
@@ -1046,7 +1107,7 @@ class MetlinkExplorerCard extends LitElement {
     } catch (err) {
       console.error('[MetlinkExplorer] _renderRoutes error', err);
     }
-    this.map.once('idle', () => this._renderLiveVehicles());
+    this.map.once('idle', () => this._scheduleLiveVehiclesRender());
     console.log('[MetlinkExplorer] _renderRoutes end');
   }
 
@@ -1064,7 +1125,7 @@ class MetlinkExplorerCard extends LitElement {
         this._centerMap();
         this._renderRoutes();
       }
-      if (changedProps.has('hass')) this._renderLiveVehicles();
+      if (changedProps.has('hass')) this._scheduleLiveVehiclesRender();
     }
     this._forceSectionBreakout();
   }
@@ -1150,6 +1211,18 @@ class MetlinkExplorerCard extends LitElement {
     });
     this.map.addLayer({ id: 'simple-tiles', type: 'raster', source: 'raster-tiles' });
     this.map.once('idle', () => this._renderRoutes());
+  }
+
+  disconnectedCallback() {
+    if (this._liveRenderTimer) {
+      clearTimeout(this._liveRenderTimer);
+      this._liveRenderTimer = null;
+    }
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    super.disconnectedCallback();
   }
 
   render() {
