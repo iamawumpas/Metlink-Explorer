@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.10] - 2026-05-11
+
+### Fix - Add missing service metadata for Home Assistant
+
+- Added `services.yaml` for the `metlink_explorer.set_live_tracking` service so Home Assistant can load the integration's service definitions without logging `Failed to load services.yaml for integration: metlink_explorer`.
+- The service now exposes documented fields for `route_id`, `live_tracking`, and optional `transportation_type` in the Home Assistant service UI.
+- Updated frontend build marker to `0.9.10`.
+
 ## [0.9.9] - 2026-05-11
 
 ### Improvement - Route-tangent badge pointer alignment with vehicle bearing fallback

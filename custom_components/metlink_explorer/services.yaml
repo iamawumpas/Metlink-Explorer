@@ -1,0 +1,25 @@
+set_live_tracking:
+  name: Set Live Tracking
+  description: Enable or disable live vehicle tracking for a route and persist the setting in the integration configuration.
+  fields:
+    route_id:
+      name: Route ID
+      description: Route short name or route identifier to update.
+      required: true
+      example: "83"
+      selector:
+        text:
+    live_tracking:
+      name: Live Tracking
+      description: Whether live vehicle tracking should be enabled for the route.
+      required: true
+      example: true
+      selector:
+        boolean:
+    transportation_type:
+      name: Transportation Type
+      description: Optional transport mode filter. Accepts either the route type integer or a transport name.
+      required: false
+      example: "Bus"
+      selector:
+        text:
