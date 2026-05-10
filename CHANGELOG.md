@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.7] - 2026-05-11
+
+### Critical Fix - Prevent direction flip during correction blending
+
+- **Fixed backward tracking from direction inversion**: During correction blending, if the GPS position is behind the predicted position (sDelta < -2m), the direction inference was flipping `travelDirection` to -1, inverting `signedSpeedMps` to negative and causing velocity prediction to move backward. Now `travelDirection` is preserved during an active correction blend and only updates after the blend completes.
+- This prevents the vehicle from reversing direction mid-correction based on temporary position gaps.
+- Updated frontend build marker to `0.10.7`.
+
 ## [0.10.6] - 2026-05-11
 
 ### Critical Fix - Eliminated velocity prediction during correction blending

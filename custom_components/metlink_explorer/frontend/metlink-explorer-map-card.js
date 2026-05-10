@@ -1233,10 +1233,13 @@ class MetlinkExplorerCard extends LitElement {
       const isNearStop = speedMps < 1.0;
       const directionThreshold = isNearStop ? 6 : 2;
       let travelDirection = previous ? previous.travelDirection : 1;
-      if (sDelta > directionThreshold) {
-        travelDirection = 1;
-      } else if (sDelta < (-directionThreshold)) {
-        travelDirection = -1;
+      const isInCorrection = previous && Number.isFinite(previous.correctionFromS);
+      if (!isInCorrection) {
+        if (sDelta > directionThreshold) {
+          travelDirection = 1;
+        } else if (sDelta < (-directionThreshold)) {
+          travelDirection = -1;
+        }
       }
       const signedSpeedMps = speedMps * travelDirection;
 
