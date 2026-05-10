@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.8] - 2026-05-10
+
+### Fix - Async await inside forEach
+
+- Converted `forEach` loops in `_renderRoutes` to `for...of` loops so that `await` works correctly inside the async method.
+- Resolves `SyntaxError: Unexpected reserved word` thrown at runtime.
+
 ## [0.8.7] - 2026-05-10
 
 ### Fix - Train hub badge uses real train image

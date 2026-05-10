@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.7)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.8)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -788,11 +788,11 @@ class MetlinkExplorerCard extends LitElement {
 
       let layerIdx = 0;
       const trainHubLayerIds = [];
-      categories.forEach(cat => {
+      for (const cat of categories) {
         const entries = this.config[`${cat}_entities`] || [];
-        [...entries].reverse().forEach(entry => {
+        for (const entry of [...entries].reverse()) {
           const features = this._parseRouteGeometry(entry.entity);
-          if (!features) return;
+          if (!features) continue;
 
           const sourceId = `route-source-${layerIdx}`;
           this.map.addSource(sourceId, {
@@ -903,8 +903,8 @@ class MetlinkExplorerCard extends LitElement {
           }
 
           layerIdx++;
-        });
-      });
+        }
+      }
 
       // Keep train hub badges at the very top, above bus badges and vehicle icons.
       trainHubLayerIds.forEach((layerId) => {
