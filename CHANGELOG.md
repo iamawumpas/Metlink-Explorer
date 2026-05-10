@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-05-11
+
+### Critical Bug Fix - Editor defaulting live_tracking to false
+
+- Fixed editor defaulting new routes to `live_tracking: false` instead of `true`.
+- New routes added via the editor were explicitly saving `false`, overriding the backend default.
+- This caused live vehicle tracking to never activate for any new routes added after v0.9.1.
+- Live tracking now defaults to **enabled** for all routes, both new and existing.
+
 ## [0.9.3] - 2026-05-11
 
 ### Hotfix - Frontend build version string for cache-busting

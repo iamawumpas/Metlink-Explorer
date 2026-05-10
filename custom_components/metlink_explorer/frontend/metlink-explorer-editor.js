@@ -52,7 +52,7 @@ class MetlinkExplorerEditor extends LitElement {
       color: randomColor, 
       weight: 6, 
       style: 'solid',
-      live_tracking: false,
+      live_tracking: true,
       selected_stops: [],
     }];
     this._updateConfig({ [key]: newEntities });
