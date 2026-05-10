@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-05-11
+
+### Feature - Predictive in-between movement for live vehicle badges
+
+- Added frontend dead-reckoning for live vehicle badges so icons can move smoothly between 30-second GTFS updates.
+- Vehicles now project onto route geometry and interpolate along the route path using distance-travelled prediction.
+- Added correction blending window (5s) when new GPS updates arrive to reduce visible jump-to-truth artifacts.
+- Prediction runs client-side on a 2-second loop and does not increase Metlink API polling load.
+- Prediction pauses naturally for near-zero speed vehicles to avoid ghosting forward while stopped.
+- Updated frontend build marker to `0.10.0`.
+
 ## [0.9.8] - 2026-05-11
 
 ### Fix - GPS-change-driven live vehicle badge rendering
