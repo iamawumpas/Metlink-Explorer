@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.6] - 2026-05-11
+
+### Critical Fix - Eliminated velocity prediction during correction blending
+
+- **Fixed remaining backward tracking after data updates**: During the 5-second correction blend, velocity prediction was still being applied to the base position, which could cause backward motion if the old velocity didn't match the new GPS data position. Now during blending, the position is interpolated directly between the old predicted point and new GPS point without velocity prediction.
+- **Velocity prediction resumes after blend completes**: Once the 5-second blend window finishes, normal velocity-based prediction resumes from the new GPS position, ensuring smooth motion.
+- Updated frontend build marker to `0.10.6`.
+
 ## [0.10.5] - 2026-05-11
 
 ### Critical Fix - Predictive movement speed and backward tracking

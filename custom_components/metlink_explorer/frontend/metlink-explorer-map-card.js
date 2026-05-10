@@ -823,17 +823,18 @@ class MetlinkExplorerCard extends LitElement {
     const total = Number(state.pathModel.totalMeters || 0);
     if (total <= 0) return null;
 
-    const baseS = this._predictSAt(state, nowMs);
-    let finalS = baseS;
+    let finalS;
 
     if (Number.isFinite(state.correctionFromS) && Number.isFinite(state.correctionStartMs)) {
       const elapsed = Math.max(0, nowMs - state.correctionStartMs);
       const alpha = Math.max(0, Math.min(1, elapsed / Math.max(1, this._correctionDurationMs)));
-      finalS = state.correctionFromS + ((baseS - state.correctionFromS) * alpha);
+      finalS = state.correctionFromS + ((state.anchorS - state.correctionFromS) * alpha);
       if (alpha >= 1) {
         state.correctionFromS = null;
         state.correctionStartMs = null;
       }
+    } else {
+      finalS = this._predictSAt(state, nowMs);
     }
 
     const terminalS = state.travelDirection >= 0 ? total : 0;
