@@ -928,7 +928,7 @@ class MetlinkExplorerCard extends LitElement {
       state.pathModel,
       point.s,
       state.travelDirection,
-      state.lastIconBearing ?? state.properties.bearing
+      state.sensorFallbackBearing
     );
     state.lastIconBearing = bearing;
 
@@ -1273,6 +1273,7 @@ class MetlinkExplorerCard extends LitElement {
         lastActualTimestampMs: timestampMs,
         lastRenderedPoint: null,
         lastS: projection.s,
+        sensorFallbackBearing: Number(featureWithBadge.properties.bearing || 0),
         lastIconBearing: Number(featureWithBadge.properties.bearing || 0),
         reachedDestinationAtMs: null,
       };
