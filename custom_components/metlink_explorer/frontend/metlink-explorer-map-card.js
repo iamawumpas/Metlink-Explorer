@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.11)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.12)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -890,7 +890,7 @@ class MetlinkExplorerCard extends LitElement {
                   'icon-anchor': 'center',
                   'icon-allow-overlap': true,
                   'icon-ignore-placement': true,
-                  ...(cat === 'train' ? { 'icon-rotate': 45, 'icon-rotation-alignment': 'viewport' } : {}),
+                  ...(cat === 'train' ? { 'icon-rotate': 0, 'icon-rotation-alignment': 'viewport' } : {}),
                 },
               });
               if (cat === 'train') {
