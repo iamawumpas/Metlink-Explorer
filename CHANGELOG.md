@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-05-11
+
+### Improvement - Inferred speed caps and destination end-of-line behavior
+
+- Added separate inferred-speed caps (used when feed speed is missing):
+  - Bus prediction is capped at `40 km/h`.
+  - Train prediction is capped at `70 km/h`.
+- Vehicles that reach their route terminal now stop at the endpoint instead of overshooting.
+- End-of-line vehicles remain visible at the destination for `60 seconds` and are then removed from the map if no fresh movement data arrives.
+- Updated frontend build marker to `0.10.2`.
+
 ## [0.10.1] - 2026-05-11
 
 ### Improvement - Predictor tuning and route-aligned badge direction

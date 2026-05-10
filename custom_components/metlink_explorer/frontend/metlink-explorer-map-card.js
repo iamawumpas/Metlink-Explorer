@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.1)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.2)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -55,6 +55,15 @@ const MODE_MAX_SPEED_MPS = {
   bus: 28,
   ferry: 20,
 };
+
+const MODE_MAX_INFERRED_SPEED_MPS = {
+  train: 70 / 3.6,
+  bus: 40 / 3.6,
+  ferry: 20 / 3.6,
+};
+
+const DESTINATION_DWELL_MS = 60000;
+const DESTINATION_EPSILON_METERS = 4;
 
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
@@ -780,6 +789,7 @@ class MetlinkExplorerCard extends LitElement {
 
   _normalizeSpeedMps(speedKmh, prevState, lon, lat, timestampMs, mode) {
     const maxSpeed = Number(MODE_MAX_SPEED_MPS[mode]) || 25;
+    const maxInferredSpeed = Number(MODE_MAX_INFERRED_SPEED_MPS[mode]) || maxSpeed;
     const parsedSpeed = Number(speedKmh);
     if (Number.isFinite(parsedSpeed) && parsedSpeed > 0) {
       return Math.max(0, Math.min(maxSpeed, parsedSpeed / 3.6));
@@ -796,7 +806,7 @@ class MetlinkExplorerCard extends LitElement {
 
     const meters = this._segmentLengthMeters([lastLon, lastLat], [lon, lat]);
     if (!Number.isFinite(meters) || meters <= 0) return 0;
-    return Math.max(0, Math.min(maxSpeed, meters / dt));
+    return Math.max(0, Math.min(maxInferredSpeed, meters / dt));
   }
 
   _predictSAt(state, nowMs) {
@@ -826,6 +836,21 @@ class MetlinkExplorerCard extends LitElement {
         state.correctionFromS = null;
         state.correctionStartMs = null;
       }
+    }
+
+    const terminalS = state.travelDirection >= 0 ? total : 0;
+    const isAtTerminal = Math.abs(finalS - terminalS) <= DESTINATION_EPSILON_METERS;
+    if (isAtTerminal) {
+      finalS = terminalS;
+      if (!Number.isFinite(state.reachedDestinationAtMs)) {
+        state.reachedDestinationAtMs = nowMs;
+      }
+      const dwell = nowMs - state.reachedDestinationAtMs;
+      if (dwell > DESTINATION_DWELL_MS) {
+        return null;
+      }
+    } else {
+      state.reachedDestinationAtMs = null;
     }
 
     const point = this._interpolateOnPath(state.pathModel, finalS);
@@ -916,13 +941,24 @@ class MetlinkExplorerCard extends LitElement {
     if (this._activeVehicleSources.size === 0 || this._vehicleMotionState.size === 0) return;
 
     const nowMs = Date.now();
+    const sourcesToDeactivate = new Set();
     for (const [entityId, state] of this._vehicleMotionState.entries()) {
       if (!this._activeVehicleSources.has(state.sourceId)) continue;
       const point = this._predictedPosition(state, nowMs);
-      if (!point) continue;
+      if (!point) {
+        this._setLiveSourceData(state.sourceId, []);
+        this._vehicleMotionState.delete(entityId);
+        sourcesToDeactivate.add(state.sourceId);
+        continue;
+      }
       const feature = this._featureFromMotionState(state, point);
       this._setLiveSourceData(state.sourceId, [feature]);
       this._vehicleMotionState.set(entityId, state);
+    }
+    if (sourcesToDeactivate.size > 0) {
+      const nextActive = new Set(this._activeVehicleSources);
+      sourcesToDeactivate.forEach((sourceId) => nextActive.delete(sourceId));
+      this._activeVehicleSources = nextActive;
     }
   }
 
@@ -1219,6 +1255,7 @@ class MetlinkExplorerCard extends LitElement {
         lastRenderedPoint: null,
         lastS: projection.s,
         lastIconBearing: Number(featureWithBadge.properties.bearing || 0),
+        reachedDestinationAtMs: null,
       };
       this._vehicleMotionState.set(entityId, motionState);
 
