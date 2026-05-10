@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] - 2026-05-11
+
+### Fix - Live tracking skip regression in map card
+
+- Fixed a regression where routes were being skipped for live rendering despite `live_tracking=true` in card config.
+- Card-level `live_tracking` now takes precedence for render decisions, with backend feature state used as fallback.
+- Improved skip logging to show both card and backend live-tracking values for diagnosis.
+- Added `willReadFrequently` canvas context hints for drawing paths that use repeated `getImageData` readbacks.
+
 ## [0.9.5] - 2026-05-11
 
 ### Fix - Backend authoritative live tracking + frontend route matching

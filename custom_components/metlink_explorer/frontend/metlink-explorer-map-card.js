@@ -127,7 +127,7 @@ class MetlinkExplorerCard extends LitElement {
     const canvas = document.createElement("canvas");
     canvas.width = pixelW;
     canvas.height = pixelH;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
     ctx.scale(dpr, dpr);
@@ -165,7 +165,7 @@ class MetlinkExplorerCard extends LitElement {
     const canvas = document.createElement("canvas");
     canvas.width = pixelSize;
     canvas.height = pixelSize;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
     ctx.scale(dpr, dpr);
@@ -192,7 +192,7 @@ class MetlinkExplorerCard extends LitElement {
     const canvas = document.createElement("canvas");
     canvas.width = pixelSize;
     canvas.height = pixelSize;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return;
 
     ctx.scale(dpr, dpr);
@@ -304,7 +304,7 @@ class MetlinkExplorerCard extends LitElement {
     const canvas = document.createElement('canvas');
     canvas.width = pixelSize;
     canvas.height = pixelSize;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
     ctx.scale(dpr, dpr);
@@ -357,7 +357,7 @@ class MetlinkExplorerCard extends LitElement {
     const canvas = document.createElement('canvas');
     canvas.width = pixelSize;
     canvas.height = pixelSize;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
     // Draw the image as-is; rotation is applied via MapLibre icon-rotate on the layer.
@@ -756,12 +756,15 @@ class MetlinkExplorerCard extends LitElement {
       [...routeEntries].reverse().forEach((entry) => {
         const routeFeatures = this._parseRouteGeometry(entry.entity);
         const backendLiveTracking = this._backendLiveTrackingFromFeatures(routeFeatures);
+        const cardLiveTracking = typeof entry.live_tracking === "boolean" ? entry.live_tracking : null;
         const liveTrackingEnabled =
-          typeof backendLiveTracking === "boolean"
-            ? backendLiveTracking
-            : entry.live_tracking !== false;
+          cardLiveTracking !== null
+            ? cardLiveTracking
+            : (typeof backendLiveTracking === "boolean" ? backendLiveTracking : true);
         if (!liveTrackingEnabled) {
-          console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} -> skipping`);
+          console.log(
+            `[MetlinkExplorer] ${mode} entry ${entry.entity}: card_live_tracking=${JSON.stringify(cardLiveTracking)}, backend_live_tracking=${JSON.stringify(backendLiveTracking)} -> skipping`
+          );
           return;
         }
 
