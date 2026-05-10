@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved live badge heading selection to keep route-tangent direction as primary while using the vehicle sensor bearing as fallback guidance when tangent orientation is ambiguous.
 - When tangent direction and its opposite are both possible, the icon now chooses the one with the smaller angular difference to the fallback bearing.
 - This reduces cases where badge pointers appear reversed on route segments after prediction corrections or direction inference uncertainty.
+- Compatibility note: the `v0.10.4` tag was refreshed to include the sensor-bearing fallback correction; pull/fetch tags again if you cached the earlier tag state.
 - Updated frontend build marker to `0.10.4`.
 
 ## [0.10.3] - 2026-05-11
