@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.3)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.4)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -883,7 +883,19 @@ class MetlinkExplorerCard extends LitElement {
     const p1 = this._interpolateOnPath(pathModel, backS);
     const p2 = this._interpolateOnPath(pathModel, frontS);
     if (!p1 || !p2) return Number(fallbackBearing) || 0;
-    return this._bearingDegrees(p1.lon, p1.lat, p2.lon, p2.lat);
+    const tangentBearing = this._bearingDegrees(p1.lon, p1.lat, p2.lon, p2.lat);
+    const oppositeBearing = (tangentBearing + 180) % 360;
+    const fallback = Number(fallbackBearing);
+    if (!Number.isFinite(fallback)) return tangentBearing;
+
+    const angularDiff = (a, b) => {
+      const d = Math.abs(((a - b + 540) % 360) - 180);
+      return Number.isFinite(d) ? d : 180;
+    };
+
+    const tangentDiff = angularDiff(tangentBearing, fallback);
+    const oppositeDiff = angularDiff(oppositeBearing, fallback);
+    return oppositeDiff < tangentDiff ? oppositeBearing : tangentBearing;
   }
 
   _suggestPredictionIntervalMs(activeCount = this._activeVehicleSources.size) {
