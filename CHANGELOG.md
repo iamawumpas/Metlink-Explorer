@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] - 2026-05-11
+
+### Fix - Backend authoritative live tracking + frontend route matching
+
+- Added service `metlink_explorer.set_live_tracking` so editor live-tracking toggles persist to integration route config.
+- Coordinator polling now stays aligned with saved integration route `live_tracking` values.
+- Geometry feature properties now include backend `live_tracking` state so card rendering can use backend-authoritative values.
+- Hardened frontend route matching with normalized route key variants (for example `84` <-> `840`, `83` <-> `830`) to improve live vehicle matching.
+- Updated frontend build marker to `0.9.5`.
+
 ## [0.9.4] - 2026-05-11
 
 ### Critical Bug Fix - Editor defaulting live_tracking to false

@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.9.2)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.9.5)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -503,6 +503,33 @@ class MetlinkExplorerCard extends LitElement {
     return String(key || "").trim().toLowerCase();
   }
 
+  _stripTrailingZerosNumeric(value) {
+    const text = String(value || "").trim();
+    if (!/^\d+$/.test(text)) return text;
+    const stripped = text.replace(/0+$/g, "");
+    return stripped || text;
+  }
+
+  _expandRouteKeyVariants(value) {
+    const variants = new Set();
+    const raw = this._normalizeKey(value);
+    if (!raw) return variants;
+
+    variants.add(raw);
+
+    const compact = raw.replace(/[^a-z0-9]/g, "");
+    if (compact) variants.add(compact);
+
+    const digits = compact.replace(/[^0-9]/g, "");
+    if (digits) {
+      variants.add(digits);
+      variants.add(this._stripTrailingZerosNumeric(digits));
+      variants.add(String(Number(digits)));
+    }
+
+    return new Set([...variants].filter(Boolean));
+  }
+
   _tripRouteKey(tripId) {
     if (!tripId) return "";
     const tripText = String(tripId);
@@ -514,19 +541,27 @@ class MetlinkExplorerCard extends LitElement {
   _routeKeys(routeMeta) {
     const keys = new Set();
     if (!routeMeta) return keys;
-    keys.add(this._normalizeKey(routeMeta.routeId));
-    keys.add(this._normalizeKey(routeMeta.routeLabel));
-    return new Set([...keys].filter(Boolean));
+    this._expandRouteKeyVariants(routeMeta.routeId).forEach((k) => keys.add(k));
+    this._expandRouteKeyVariants(routeMeta.routeLabel).forEach((k) => keys.add(k));
+    return keys;
   }
 
   _vehicleRouteKeys(state) {
     const attrs = state?.attributes || {};
     const keys = new Set();
     const fromTrip = this._tripRouteKey(attrs.trip_id);
-    if (fromTrip) keys.add(this._normalizeKey(fromTrip));
+    this._expandRouteKeyVariants(fromTrip).forEach((k) => keys.add(k));
     const routeId = attrs.route_id ? String(attrs.route_id).trim() : "";
-    if (routeId) keys.add(this._normalizeKey(routeId));
+    this._expandRouteKeyVariants(routeId).forEach((k) => keys.add(k));
     return keys;
+  }
+
+  _backendLiveTrackingFromFeatures(routeFeatures) {
+    if (!Array.isArray(routeFeatures) || routeFeatures.length === 0) return null;
+    const first = routeFeatures[0];
+    const featureValue = first?.properties?.live_tracking;
+    if (typeof featureValue === "boolean") return featureValue;
+    return null;
   }
 
   _matchesRoute(state, routeMeta) {
@@ -719,13 +754,17 @@ class MetlinkExplorerCard extends LitElement {
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
       [...routeEntries].reverse().forEach((entry) => {
-        const liveTrackingEnabled = entry.live_tracking !== false;
+        const routeFeatures = this._parseRouteGeometry(entry.entity);
+        const backendLiveTracking = this._backendLiveTrackingFromFeatures(routeFeatures);
+        const liveTrackingEnabled =
+          typeof backendLiveTracking === "boolean"
+            ? backendLiveTracking
+            : entry.live_tracking !== false;
         if (!liveTrackingEnabled) {
-          console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} ÔÇö skipping`);
+          console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} -> skipping`);
           return;
         }
 
-        const routeFeatures = this._parseRouteGeometry(entry.entity);
         const routeMeta = this._routeMetaFromFeatures(routeFeatures || []) || this._routeMetaFallback(entry);
         console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: routeFeatures=${routeFeatures?.length ?? "null"}, routeMeta=${JSON.stringify(routeMeta)}`);
         if (!routeMeta) return;

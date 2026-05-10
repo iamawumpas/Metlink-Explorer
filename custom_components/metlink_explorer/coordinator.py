@@ -127,11 +127,16 @@ class MetlinkRouteGeometryCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         api_client: MetlinkApiClient,
         mode_key: str,
         route_ids: list[str],
+        route_live_tracking_map: dict[str, bool] | None = None,
     ) -> None:
         """Initialize mode route geometry coordinator."""
         self.api_client = api_client
         self.mode_key = mode_key
         self.route_ids = [str(route_id) for route_id in route_ids if route_id]
+        self.route_live_tracking_map = {
+            str(route_id): bool(enabled)
+            for route_id, enabled in (route_live_tracking_map or {}).items()
+        }
 
         super().__init__(
             hass,
@@ -143,6 +148,23 @@ class MetlinkRouteGeometryCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update mode geometry from static GTFS shapes."""
         try:
-            return await self.api_client.get_mode_routes_geojson(self.route_ids)
+            geojson = await self.api_client.get_mode_routes_geojson(self.route_ids)
+
+            # Inject authoritative backend live_tracking state into feature properties
+            # so frontend rendering can stay in sync with integration route config.
+            features = geojson.get("features", []) if isinstance(geojson, dict) else []
+            if isinstance(features, list):
+                for feature in features:
+                    if not isinstance(feature, dict):
+                        continue
+                    props = feature.get("properties")
+                    if not isinstance(props, dict):
+                        props = {}
+                    route_id = str(props.get("route_id", "")).strip()
+                    if route_id and route_id in self.route_live_tracking_map:
+                        props["live_tracking"] = bool(self.route_live_tracking_map.get(route_id, True))
+                    feature["properties"] = props
+
+            return geojson
         except MetlinkApiError as exc:
             raise UpdateFailed(f"Error communicating with API: {exc}") from exc

@@ -64,6 +64,57 @@ class MetlinkExplorerEditor extends LitElement {
       i === index ? { ...item, [field]: value } : item
     );
     this._updateConfig({ [key]: newEntities });
+
+    // Persist live tracking to integration route config (backend source of truth)
+    if (field === 'live_tracking') {
+      const updated = newEntities[index];
+      this._syncLiveTracking(type, updated, Boolean(value));
+    }
+  }
+
+  _routeMetaFromEntity(entityId) {
+    if (!entityId) return null;
+
+    const state = this.hass?.states?.[entityId];
+    const attrs = state?.attributes || {};
+    let routeId = attrs.route_id ? String(attrs.route_id).trim() : "";
+    let routeLabel = attrs.route_short_name ? String(attrs.route_short_name).trim() : "";
+
+    if (!routeId) {
+      const features = this._parseFeatures(entityId);
+      const first = Array.isArray(features) ? features[0] : null;
+      const props = first?.properties || {};
+      routeId = props.route_id ? String(props.route_id).trim() : "";
+      if (!routeLabel) {
+        routeLabel = props.route_short_name ? String(props.route_short_name).trim() : "";
+      }
+    }
+
+    if (!routeId) {
+      const objectId = String(entityId).split(".")[1] || "";
+      const match = objectId.match(/^(?:train|bus|ferry|cable|school_bus)_(.+?)_(?:route_)?geometry$/i);
+      if (match && match[1]) {
+        routeId = String(match[1]).trim();
+      }
+    }
+
+    if (!routeId) return null;
+    return {
+      routeId,
+      routeLabel: routeLabel || routeId,
+    };
+  }
+
+  _syncLiveTracking(type, entry, liveTrackingEnabled) {
+    if (!this.hass || !entry?.entity) return;
+    const routeMeta = this._routeMetaFromEntity(entry.entity);
+    if (!routeMeta?.routeId) return;
+
+    this.hass.callService("metlink_explorer", "set_live_tracking", {
+      route_id: routeMeta.routeId,
+      live_tracking: Boolean(liveTrackingEnabled),
+      transportation_type: type,
+    });
   }
 
   _moveEntity(type, index, direction) {
