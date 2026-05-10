@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.8] - 2026-05-11
+
+### Fix - GPS-change-driven live vehicle badge rendering
+
+- Replaced blind time-based throttle with GPS snapshot diffing: live badges only re-render when a `device_tracker` entity's position actually changes.
+- Switched from per-route slot sources to per-entity MapLibre sources (`live-vehicle-<entity_id>`), so only the individual vehicle that moved triggers a `source.setData()` call.
+- Added per-vehicle epsilon guard (0.00001° lat/lon, 0.5° bearing) to suppress `setData` for GPS micro-jitter on stationary vehicles.
+- Stale vehicle sources are cleared with an empty FeatureCollection when a vehicle drops off the matched set.
+- Removed `_scheduleLiveVehiclesRender`, `_liveRenderTimer`, and `_liveRenderThrottleMs` entirely.
+- Removed per-tracker rejection log spam; replaced with a single summary log per render cycle.
+- Updated frontend build marker to `0.9.8`.
+
 ## [0.9.7] - 2026-05-11
 
 ### Change - GPS polling decoupled from card live-tracking toggle

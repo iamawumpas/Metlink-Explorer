@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.9.7)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.9.8)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -57,10 +57,11 @@ class MetlinkExplorerCard extends LitElement {
 
   constructor() {
     super();
-    this._liveSourceCount = 0;
+    this._liveGpsSnapshot = "";
     this._liveSlotHashes = new Map();
-    this._liveRenderTimer = null;
-    this._liveRenderThrottleMs = 30000;
+    this._vehicleLastPositions = new Map();
+    this._activeVehicleSources = new Set();
+    this._pendingLiveRender = false;
   }
 
   static async getConfigElement() {
@@ -718,12 +719,19 @@ class MetlinkExplorerCard extends LitElement {
     }
   }
 
-  _scheduleLiveVehiclesRender() {
-    if (this._liveRenderTimer) return;
-    this._liveRenderTimer = setTimeout(() => {
-      this._liveRenderTimer = null;
-      this._renderLiveVehicles();
-    }, this._liveRenderThrottleMs);
+  _computeGpsSnapshot() {
+    const states = this.hass?.states || {};
+    return Object.entries(states)
+      .filter(([id]) => id.startsWith("device_tracker."))
+      .map(([id, state]) => {
+        const a = state?.attributes || {};
+        const lat = Number(a.latitude);
+        const lon = Number(a.longitude);
+        const bearing = Number.isFinite(Number(a.bearing)) ? Number(a.bearing) : 0;
+        return `${id}:${Number.isFinite(lat) ? lat.toFixed(5) : "?"}:${Number.isFinite(lon) ? lon.toFixed(5) : "?"}:${bearing.toFixed(0)}`;
+      })
+      .sort()
+      .join(";");
   }
 
   connectedCallback() {
@@ -825,97 +833,92 @@ class MetlinkExplorerCard extends LitElement {
     if (!this.map) return;
 
     if (!this.map.isStyleLoaded()) {
-      console.log("[MetlinkExplorer] _renderLiveVehicles deferred: style not loaded");
-      this.map.once('idle', () => this._scheduleLiveVehiclesRender());
+      if (!this._pendingLiveRender) {
+        this._pendingLiveRender = true;
+        this.map.once('idle', () => { this._pendingLiveRender = false; this._renderLiveVehicles(); });
+      }
       return;
     }
 
     const categories = ["train", "bus", "ferry"];
-    const nowEpoch = Date.now() / 1000;
-    const maxAge = Number(this.config.live_max_age_seconds || 120);
-    const allTrackers = Object.entries(this.hass?.states || {})
-      .filter(([id]) => id.startsWith("device_tracker."));
-    console.log(`[MetlinkExplorer] _renderLiveVehicles: ${allTrackers.length} device_tracker entities; nowEpoch=${nowEpoch.toFixed(0)}, maxAge=${maxAge}s`);
-
     const iconSize = Number(this.config.icon_size || 33);
     const badgeDiameter = Math.max(24, Math.round(iconSize * 2));
     const fontSize = Math.max(12, Math.round(iconSize * 0.78));
     const borderWidth = Math.max(2, Math.round(iconSize * 0.12));
     const dpr = Math.max(1, window.devicePixelRatio || 1);
-    let sourceIndex = 0;
 
+    // Collect matched vehicles across all route entries; last entry wins per entity.
+    const vehicleMap = new Map(); // entityId -> { feature, mode }
     categories.forEach((mode) => {
       const routeEntries = this.config[`${mode}_entities`] || [];
       [...routeEntries].reverse().forEach((entry) => {
+        if (entry.live_tracking === false) return;
         const routeFeatures = this._parseRouteGeometry(entry.entity);
-        const liveTrackingEnabled = entry.live_tracking !== false;
-        if (!liveTrackingEnabled) {
-          console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} -> skipping`);
-          return;
-        }
-
         const routeMeta = this._routeMetaFromFeatures(routeFeatures || []) || this._routeMetaFallback(entry);
-        console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: routeFeatures=${routeFeatures?.length ?? "null"}, routeMeta=${JSON.stringify(routeMeta)}`);
         if (!routeMeta) return;
-
         const vehicleFeatures = this._liveFeaturesForRoute(entry, mode, routeMeta);
-        console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: vehicleFeatures=${vehicleFeatures.length}`);
-        if (vehicleFeatures.length === 0) {
-          // Log why each tracker was rejected
-          allTrackers.forEach(([entityId, state]) => {
-            const attrs = state?.attributes || {};
-            const restored = attrs.restored === true;
-            const matches = this._matchesRoute(state, routeMeta);
-            const lat = Number(attrs.latitude);
-            const lon = Number(attrs.longitude);
-            const hasCoords = Number.isFinite(lat) && Number.isFinite(lon);
-            const ts = this._parseTrackerTimestamp(attrs.timestamp);
-            const fresh = ts ? (nowEpoch - ts) <= maxAge : false;
-            if (matches) {
-              console.log(`[MetlinkExplorer]   MATCHED ${entityId}: restored=${restored}, hasCoords=${hasCoords}, ts=${ts}, fresh=${fresh}, lat=${lat}, lon=${lon}`);
-            }
-          });
-          return;
-        }
-
-        const sourceId = `live-source-${sourceIndex}`;
-
-        const featuresWithBadge = vehicleFeatures.map((feature) => {
-          const routeLabel  = feature.properties.route_label || "";
-          const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
-          const textColor   = feature.properties.text_color || "#ffffff";
-          const haloColor   = feature.properties.text_halo_color || "rgba(0,0,0,0.45)";
-          const shapeId = this._badgeShapeId(markerColor, badgeDiameter, borderWidth);
-          const textId  = this._badgeTextId(routeLabel, textColor, badgeDiameter, fontSize);
-          this._ensureBadgeShape(shapeId, markerColor, badgeDiameter, borderWidth, dpr);
-          this._ensureBadgeText(textId, routeLabel, textColor, haloColor, badgeDiameter, fontSize, dpr);
-
-          return {
-            ...feature,
-            properties: {
-              ...feature.properties,
-              shape_badge_id: shapeId,
-              text_badge_id:  textId,
-            },
-          };
+        vehicleFeatures.forEach((feature) => {
+          const entityId = feature.properties.entity_id;
+          if (entityId) vehicleMap.set(entityId, { feature, mode });
         });
-
-        this._setLiveSourceData(sourceId, featuresWithBadge);
-        this._ensureLiveLayers(sourceId);
-
-        sourceIndex += 1;
       });
     });
 
-    const highestUsedSlot = sourceIndex;
-    for (let i = highestUsedSlot; i < this._liveSourceCount; i++) {
-      const sourceId = `live-source-${i}`;
-      this._setLiveSourceData(sourceId, []);
-      this._ensureLiveLayers(sourceId);
-    }
-    this._liveSourceCount = Math.max(this._liveSourceCount, highestUsedSlot);
+    const newActiveSources = new Set();
+    let updatedCount = 0;
 
-    // Hub layers are rendered by _renderRoutes; ensure they stay above vehicle badges.
+    vehicleMap.forEach(({ feature, mode }, entityId) => {
+      const coords = feature.geometry?.coordinates || [];
+      const lon = Number(coords[0]);
+      const lat = Number(coords[1]);
+      const bearing = Number.isFinite(Number(feature.properties.bearing)) ? Number(feature.properties.bearing) : 0;
+
+      // Epsilon guard: skip setData when vehicle hasn't moved meaningfully.
+      const last = this._vehicleLastPositions.get(entityId);
+      const safeId = entityId.replace(/\./g, '-');
+      const sourceId = `live-vehicle-${safeId}`;
+      newActiveSources.add(sourceId);
+
+      if (last &&
+          Math.abs(lat - last.lat) < 0.00001 &&
+          Math.abs(lon - last.lon) < 0.00001 &&
+          Math.abs(bearing - last.bearing) < 0.5) {
+        this._ensureLiveLayers(sourceId);
+        return;
+      }
+
+      this._vehicleLastPositions.set(entityId, { lat, lon, bearing });
+
+      const routeLabel  = feature.properties.route_label || "";
+      const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
+      const textColor   = feature.properties.text_color || "#ffffff";
+      const haloColor   = feature.properties.text_halo_color || "rgba(0,0,0,0.45)";
+      const shapeId = this._badgeShapeId(markerColor, badgeDiameter, borderWidth);
+      const textId  = this._badgeTextId(routeLabel, textColor, badgeDiameter, fontSize);
+      this._ensureBadgeShape(shapeId, markerColor, badgeDiameter, borderWidth, dpr);
+      this._ensureBadgeText(textId, routeLabel, textColor, haloColor, badgeDiameter, fontSize, dpr);
+
+      const featureWithBadge = {
+        ...feature,
+        properties: { ...feature.properties, shape_badge_id: shapeId, text_badge_id: textId },
+      };
+
+      this._setLiveSourceData(sourceId, [featureWithBadge]);
+      this._ensureLiveLayers(sourceId);
+      updatedCount++;
+    });
+
+    // Clear sources for vehicles that are no longer active.
+    this._activeVehicleSources.forEach((sourceId) => {
+      if (!newActiveSources.has(sourceId)) {
+        this._setLiveSourceData(sourceId, []);
+      }
+    });
+    this._activeVehicleSources = newActiveSources;
+
+    console.log(`[MetlinkExplorer] live vehicles: ${vehicleMap.size} matched, ${updatedCount} setData calls`);
+
+    // Hub layers must remain above vehicle badges.
     this._bringHubLayersToFront();
   }
 
@@ -1107,17 +1110,11 @@ class MetlinkExplorerCard extends LitElement {
     } catch (err) {
       console.error('[MetlinkExplorer] _renderRoutes error', err);
     }
-    this.map.once('idle', () => this._scheduleLiveVehiclesRender());
+    this.map.once('idle', () => this._renderLiveVehicles());
     console.log('[MetlinkExplorer] _renderRoutes end');
   }
 
   updated(changedProps) {
-    if (changedProps.has('config')) {
-      console.log('[MetlinkExplorer] updated(config)');
-    }
-    if (changedProps.has('hass')) {
-      console.log('[MetlinkExplorer] updated(hass)');
-    }
     if (this.map) {
       if (changedProps.has('config')) {
         const oldConfig = changedProps.get('config');
@@ -1125,7 +1122,13 @@ class MetlinkExplorerCard extends LitElement {
         this._centerMap();
         this._renderRoutes();
       }
-      if (changedProps.has('hass')) this._scheduleLiveVehiclesRender();
+      if (changedProps.has('hass')) {
+        const snapshot = this._computeGpsSnapshot();
+        if (snapshot !== this._liveGpsSnapshot) {
+          this._liveGpsSnapshot = snapshot;
+          this._renderLiveVehicles();
+        }
+      }
     }
     this._forceSectionBreakout();
   }
@@ -1214,10 +1217,6 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._liveRenderTimer) {
-      clearTimeout(this._liveRenderTimer);
-      this._liveRenderTimer = null;
-    }
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
