@@ -112,7 +112,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         route_id = str(route.get(CONF_ROUTE_ID))
         if not route_id:
             continue
-        live_tracking_enabled = route.get("live_tracking", False)
+        # Default live_tracking to True for backward compatibility (existing routes)
+        live_tracking_enabled = route.get("live_tracking", True)
         coordinator = MetlinkDataUpdateCoordinator(
             hass, api_client, route_id, live_tracking_enabled=live_tracking_enabled
         )
