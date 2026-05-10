@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.0)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.1)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -50,6 +50,12 @@ const VEHICLE_COLORS = {
   ferry: "#00acc1",
 };
 
+const MODE_MAX_SPEED_MPS = {
+  train: 40,
+  bus: 28,
+  ferry: 20,
+};
+
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
     return { hass: {}, config: {} };
@@ -65,6 +71,7 @@ class MetlinkExplorerCard extends LitElement {
     this._predictionTimer = null;
     this._predictionIntervalMs = 2000;
     this._correctionDurationMs = 5000;
+    this._lastZoomBucket = null;
   }
 
   static async getConfigElement() {
@@ -693,7 +700,7 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
-  _projectToPath(pathModel, lon, lat) {
+  _projectToPath(pathModel, lon, lat, preferredSegmentIndex = null) {
     if (!pathModel || !Array.isArray(pathModel.points) || pathModel.points.length < 2) return null;
 
     const targetLon = Number(lon);
@@ -731,11 +738,17 @@ class MetlinkExplorerCard extends LitElement {
       const segLenMeters = pathModel.cumulative[i] - pathModel.cumulative[i - 1];
       const s = pathModel.cumulative[i - 1] + (segLenMeters * t);
 
-      if (!best || dist < best.distanceMeters) {
+      const continuityPenalty = Number.isFinite(preferredSegmentIndex)
+        ? Math.abs(i - preferredSegmentIndex) * 6
+        : 0;
+      const score = dist + continuityPenalty;
+
+      if (!best || score < best.score) {
         best = {
           s,
           segmentIndex: i,
           distanceMeters: dist,
+          score,
         };
       }
     }
@@ -765,10 +778,11 @@ class MetlinkExplorerCard extends LitElement {
     return { lon, lat, segmentIndex: idx, s: target };
   }
 
-  _normalizeSpeedMps(speedKmh, prevState, lon, lat, timestampMs) {
+  _normalizeSpeedMps(speedKmh, prevState, lon, lat, timestampMs, mode) {
+    const maxSpeed = Number(MODE_MAX_SPEED_MPS[mode]) || 25;
     const parsedSpeed = Number(speedKmh);
     if (Number.isFinite(parsedSpeed) && parsedSpeed > 0) {
-      return Math.max(0, Math.min(45, parsedSpeed / 3.6));
+      return Math.max(0, Math.min(maxSpeed, parsedSpeed / 3.6));
     }
 
     if (!prevState) return 0;
@@ -782,14 +796,14 @@ class MetlinkExplorerCard extends LitElement {
 
     const meters = this._segmentLengthMeters([lastLon, lastLat], [lon, lat]);
     if (!Number.isFinite(meters) || meters <= 0) return 0;
-    return Math.max(0, Math.min(45, meters / dt));
+    return Math.max(0, Math.min(maxSpeed, meters / dt));
   }
 
   _predictSAt(state, nowMs) {
     const total = Number(state?.pathModel?.totalMeters || 0);
     if (total <= 0) return 0;
     const dt = Math.max(0, (nowMs - state.anchorTimestampMs) / 1000);
-    const baseS = state.anchorS + (state.speedMps * dt);
+    const baseS = state.anchorS + (state.signedSpeedMps * dt);
     return Math.max(0, Math.min(total, baseS));
   }
 
@@ -804,7 +818,7 @@ class MetlinkExplorerCard extends LitElement {
 
     if (Number.isFinite(state.correctionFromS) && Number.isFinite(state.correctionStartMs)) {
       const dt = Math.max(0, (nowMs - state.anchorTimestampMs) / 1000);
-      const corrTrackS = Math.max(0, Math.min(total, state.correctionFromS + (state.speedMps * dt)));
+      const corrTrackS = Math.max(0, Math.min(total, state.correctionFromS + (state.signedSpeedMps * dt)));
       const elapsed = Math.max(0, nowMs - state.correctionStartMs);
       const alpha = Math.max(0, Math.min(1, elapsed / Math.max(1, this._correctionDurationMs)));
       finalS = corrTrackS + ((baseS - corrTrackS) * alpha);
@@ -833,13 +847,56 @@ class MetlinkExplorerCard extends LitElement {
     return (brng + 180) % 360;
   }
 
+  _pathBearingForS(pathModel, s, travelDirection, fallbackBearing) {
+    const direction = travelDirection >= 0 ? 1 : -1;
+    const delta = 8;
+    const total = Number(pathModel?.totalMeters || 0);
+    if (total <= 0) return Number(fallbackBearing) || 0;
+
+    const backS = Math.max(0, Math.min(total, s - (delta * direction)));
+    const frontS = Math.max(0, Math.min(total, s + (delta * direction)));
+    const p1 = this._interpolateOnPath(pathModel, backS);
+    const p2 = this._interpolateOnPath(pathModel, frontS);
+    if (!p1 || !p2) return Number(fallbackBearing) || 0;
+    return this._bearingDegrees(p1.lon, p1.lat, p2.lon, p2.lat);
+  }
+
+  _suggestPredictionIntervalMs(activeCount = this._activeVehicleSources.size) {
+    const zoom = Number(this.map?.getZoom?.() || 12);
+    if (activeCount <= 8 && zoom >= 13) return 1000;
+    if (activeCount <= 25 && zoom >= 11) return 1500;
+    if (activeCount <= 60) return 2000;
+    return 3000;
+  }
+
+  _refreshPredictionTimer(force = false) {
+    const nextMs = this._suggestPredictionIntervalMs();
+    const zoom = Number(this.map?.getZoom?.() || 12);
+    const zoomBucket = Math.floor(zoom);
+    if (!force && this._predictionTimer && nextMs === this._predictionIntervalMs && zoomBucket === this._lastZoomBucket) {
+      return;
+    }
+
+    this._lastZoomBucket = zoomBucket;
+    this._predictionIntervalMs = nextMs;
+    if (this._predictionTimer) {
+      clearInterval(this._predictionTimer);
+      this._predictionTimer = null;
+    }
+    this._predictionTimer = setInterval(() => this._tickPredictionLoop(), this._predictionIntervalMs);
+  }
+
   _featureFromMotionState(state, point) {
-    const prev = state.lastRenderedPoint;
-    const bearing = prev
-      ? this._bearingDegrees(prev.lon, prev.lat, point.lon, point.lat)
-      : Number(state.properties.bearing || 0);
+    const bearing = this._pathBearingForS(
+      state.pathModel,
+      point.s,
+      state.travelDirection,
+      state.lastIconBearing ?? state.properties.bearing
+    );
+    state.lastIconBearing = bearing;
 
     state.lastRenderedPoint = { lon: point.lon, lat: point.lat };
+    state.lastS = point.s;
 
     return {
       type: "Feature",
@@ -972,9 +1029,7 @@ class MetlinkExplorerCard extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    if (!this._predictionTimer) {
-      this._predictionTimer = setInterval(() => this._tickPredictionLoop(), this._predictionIntervalMs);
-    }
+    this._refreshPredictionTimer(true);
     setTimeout(() => this._forceSectionBreakout(), 500);
   }
 
@@ -1118,15 +1173,19 @@ class MetlinkExplorerCard extends LitElement {
       const pathModel = this._buildPathModel(routeFeatures);
       if (!pathModel || pathModel.totalMeters <= 0) return;
 
-      const projection = this._projectToPath(pathModel, lon, lat);
+      const previous = this._vehicleMotionState.get(entityId) || null;
+      const projection = this._projectToPath(pathModel, lon, lat, previous?.preferredSegmentIndex);
       if (!projection) return;
 
-      const previous = this._vehicleMotionState.get(entityId) || null;
       const timestampMs = Number(feature.properties.timestamp) > 0 ? Number(feature.properties.timestamp) * 1000 : nowMs;
-      const speedMps = this._normalizeSpeedMps(feature.properties.speed_kmh, previous, lon, lat, timestampMs);
+      const speedMps = this._normalizeSpeedMps(feature.properties.speed_kmh, previous, lon, lat, timestampMs, mode);
       const predictedFromPrevious = previous ? this._predictSAt(previous, nowMs) : projection.s;
       const correctionGap = Math.abs(projection.s - predictedFromPrevious);
       const shouldSmoothCorrect = previous && correctionGap <= 400;
+      const travelDirection = previous
+        ? ((projection.s - predictedFromPrevious) > 2 ? 1 : ((projection.s - predictedFromPrevious) < -2 ? -1 : (previous.travelDirection || 1)))
+        : 1;
+      const signedSpeedMps = speedMps * travelDirection;
 
       const routeLabel  = feature.properties.route_label || "";
       const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
@@ -1148,6 +1207,9 @@ class MetlinkExplorerCard extends LitElement {
         anchorS: projection.s,
         anchorTimestampMs: nowMs,
         speedMps: speedMps < 0.3 ? 0 : speedMps,
+        signedSpeedMps: speedMps < 0.3 ? 0 : signedSpeedMps,
+        travelDirection,
+        preferredSegmentIndex: projection.segmentIndex,
         correctionFromS: shouldSmoothCorrect ? predictedFromPrevious : null,
         correctionStartMs: shouldSmoothCorrect ? nowMs : null,
         properties: { ...featureWithBadge.properties },
@@ -1155,6 +1217,8 @@ class MetlinkExplorerCard extends LitElement {
         lastActualLat: lat,
         lastActualTimestampMs: timestampMs,
         lastRenderedPoint: null,
+        lastS: projection.s,
+        lastIconBearing: Number(featureWithBadge.properties.bearing || 0),
       };
       this._vehicleMotionState.set(entityId, motionState);
 
@@ -1179,6 +1243,7 @@ class MetlinkExplorerCard extends LitElement {
       }
     }
     this._activeVehicleSources = newActiveSources;
+    this._refreshPredictionTimer();
 
     console.log(`[MetlinkExplorer] live vehicles: ${vehicleMap.size} matched, ${updatedCount} sync updates, prediction every ${this._predictionIntervalMs}ms`);
 
@@ -1439,7 +1504,12 @@ class MetlinkExplorerCard extends LitElement {
       console.log('[MetlinkExplorer] map load event');
       this.map.resize();
       this._centerMap();
+      this._refreshPredictionTimer(true);
       this._renderRoutes();
+    });
+
+    this.map.on('zoomend', () => {
+      this._refreshPredictionTimer();
     });
 
     this.map.on('error', (event) => {

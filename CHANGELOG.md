@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-05-11
+
+### Improvement - Predictor tuning and route-aligned badge direction
+
+- Added continuity-aware snap-to-path projection that biases each vehicle to its previously matched route segment, reducing segment hopping at forks/parallel geometry.
+- Added per-mode speed clamps for dead-reckoning (`train`, `bus`, `ferry`) to reduce overshoot when speed feed values are noisy.
+- Added adaptive prediction interval selection (1s/1.5s/2s/3s) based on active live vehicle count and current map zoom.
+- Badge pointer direction is now derived from route tangent direction (movement along path) instead of raw tracker bearing updates.
+- Updated frontend build marker to `0.10.1`.
+
 ## [0.10.0] - 2026-05-11
 
 ### Feature - Predictive in-between movement for live vehicle badges
