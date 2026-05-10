@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.12)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.13)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -201,7 +201,7 @@ class MetlinkExplorerCard extends LitElement {
     ctx.clearRect(0, 0, diameter, diameter);
 
     if (mode === "bus") {
-      // Bus markers: octagon badge.
+      // Bus hub markers: octagon with white bus-stop icon.
       const sides = 8;
       const octRadius = Math.max(4, radius);
       ctx.beginPath();
@@ -218,6 +218,18 @@ class MetlinkExplorerCard extends LitElement {
       ctx.lineWidth = 2;
       ctx.strokeStyle = "#ffffff";
       ctx.stroke();
+
+      // White bus-stop glyph (MDI bus-stop: post with sign top and pole bottom).
+      const iconSize = octRadius * 1.1;
+      const iconScale = iconSize / 12;
+      ctx.save();
+      ctx.translate(center - 12 * iconScale, center - 12 * iconScale);
+      ctx.scale(iconScale, iconScale);
+      ctx.fillStyle = "#ffffff";
+      // MDI mdi:bus-stop path (viewBox 0 0 24 24)
+      const busStopPath = new Path2D('M6 2v20h2v-8h8l2-4H8V6h12V4H8V2H6m10 12v4h2v2H6v-2h2v-4h8z');
+      ctx.fill(busStopPath);
+      ctx.restore();
     } else if (mode === "train") {
       // Train hubs: square badge with simple train glyph.
       const inset = Math.max(2, Math.round(diameter * 0.1));
@@ -785,7 +797,7 @@ class MetlinkExplorerCard extends LitElement {
       });
 
       let layerIdx = 0;
-      const trainHubLayerIds = [];
+      const topHubLayerIds = [];
       for (const cat of categories) {
         const entries = this.config[`${cat}_entities`] || [];
         for (const entry of [...entries].reverse()) {
@@ -831,7 +843,7 @@ class MetlinkExplorerCard extends LitElement {
 
             if (hubStops.length > 0) {
               const hubDiameter = Math.max(16, Math.round(33 * 0.78));
-              const markerDiameter = cat === 'train' ? Math.max(32, Math.round(hubDiameter * 2)) : hubDiameter;
+              const markerDiameter = (cat === 'train' || cat === 'bus') ? Math.max(32, Math.round(hubDiameter * 2)) : hubDiameter;
               const uniqueStops = new Map();
               hubStops.forEach((stop) => {
                 const key = `${String(stop.stop_id || "")}:${Number(stop.stop_lat)}:${Number(stop.stop_lon)}`;
@@ -893,8 +905,8 @@ class MetlinkExplorerCard extends LitElement {
                   ...(cat === 'train' ? { 'icon-rotate': 0, 'icon-rotation-alignment': 'viewport' } : {}),
                 },
               });
-              if (cat === 'train') {
-                trainHubLayerIds.push(hubLayerId);
+              if (cat === 'train' || cat === 'bus') {
+                topHubLayerIds.push(hubLayerId);
               }
             } else {
               console.log(`[MetlinkExplorer] No hub stops found for ${entry.entity} (${cat})`);
@@ -905,8 +917,8 @@ class MetlinkExplorerCard extends LitElement {
         }
       }
 
-      // Keep train hub badges at the very top, above bus badges and vehicle icons.
-      trainHubLayerIds.forEach((layerId) => {
+      // Keep train and bus hub badges at the very top, above vehicle icons.
+      topHubLayerIds.forEach((layerId) => {
         if (this.map.getLayer(layerId)) {
           try {
             this.map.moveLayer(layerId);

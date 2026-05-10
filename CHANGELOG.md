@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.13] - 2026-05-10
+
+### Feature - Bus hub stop badges
+
+- Bus hub stops now render on the map when "Show Hub Stops" is enabled for a bus route (checkbox already present in editor).
+- Bus hub badges are black octagons with a white bus-stop icon (MDI `mdi:bus-stop`).
+- Bus hub badges are the same size as train hub badges.
+- Bus hub layers are moved to the top of the map layer stack alongside train hub layers.
+
 ## [0.8.12] - 2026-05-10
 
 ### Fix - Train hub badge orientation
