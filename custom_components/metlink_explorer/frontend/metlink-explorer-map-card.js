@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.13)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.9.0)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -79,6 +79,7 @@ class MetlinkExplorerCard extends LitElement {
       train_entities: [],
       bus_entities: [],
       ferry_entities: [],
+      cable_entities: [],
       live_max_age_seconds: 120,
       icon_size: 33,
       ...config,
@@ -201,7 +202,7 @@ class MetlinkExplorerCard extends LitElement {
     ctx.clearRect(0, 0, diameter, diameter);
 
     if (mode === "bus") {
-      // Bus hub markers: octagon with white bus-stop icon.
+      // Bus stop markers: octagon fallback if bus-stop.png cannot load.
       const sides = 8;
       const octRadius = Math.max(4, radius);
       ctx.beginPath();
@@ -218,18 +219,6 @@ class MetlinkExplorerCard extends LitElement {
       ctx.lineWidth = 2;
       ctx.strokeStyle = "#ffffff";
       ctx.stroke();
-
-      // White bus-stop glyph (MDI bus-stop: post with sign top and pole bottom).
-      const iconSize = octRadius * 1.1;
-      const iconScale = iconSize / 12;
-      ctx.save();
-      ctx.translate(center - 12 * iconScale, center - 12 * iconScale);
-      ctx.scale(iconScale, iconScale);
-      ctx.fillStyle = "#ffffff";
-      // MDI mdi:bus-stop path (viewBox 0 0 24 24)
-      const busStopPath = new Path2D('M6 2v20h2v-8h8l2-4H8V6h12V4H8V2H6m10 12v4h2v2H6v-2h2v-4h8z');
-      ctx.fill(busStopPath);
-      ctx.restore();
     } else if (mode === "train") {
       // Train hubs: square badge with simple train glyph.
       const inset = Math.max(2, Math.round(diameter * 0.1));
@@ -248,8 +237,43 @@ class MetlinkExplorerCard extends LitElement {
       ctx.arc(center - (diameter * 0.11), glyphY + (diameter * 0.1), diameter * 0.05, 0, Math.PI * 2);
       ctx.arc(center + (diameter * 0.11), glyphY + (diameter * 0.1), diameter * 0.05, 0, Math.PI * 2);
       ctx.fill();
+    } else if (mode === "ferry") {
+      // Ferry stops: equilateral triangle.
+      const triRadius = Math.max(4, radius);
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const angle = (-Math.PI / 2) + (i * (Math.PI * 2 / 3));
+        const x = center + Math.cos(angle) * triRadius;
+        const y = center + Math.sin(angle) * triRadius;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "#000000";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+    } else if (mode === "cable") {
+      // Cable car stops: hexagon.
+      const sides = 6;
+      const hexRadius = Math.max(4, radius);
+      ctx.beginPath();
+      for (let i = 0; i < sides; i++) {
+        const angle = (Math.PI / 6) + (i * (Math.PI * 2 / sides));
+        const x = center + Math.cos(angle) * hexRadius;
+        const y = center + Math.sin(angle) * hexRadius;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "#000000";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
     } else {
-      // Default/ferry: square hub badge.
+      // Default: square stop badge.
       const inset = Math.max(2, Math.round(diameter * 0.1));
       const size = diameter - (inset * 2);
       ctx.fillStyle = "#000000";
@@ -260,6 +284,59 @@ class MetlinkExplorerCard extends LitElement {
     }
 
     const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
+    this.map.addImage(imageId, imageData, { pixelRatio: dpr });
+  }
+
+  async _ensureBusHubImage(imageId, diameter, dpr) {
+    if (!this.map || this.map.hasImage(imageId)) return;
+
+    const pixelSize = Math.max(1, Math.round(diameter * dpr));
+    let rawImg;
+    try {
+      const result = await this.map.loadImage('/metlink_explorer_frontend/bus-stop.png');
+      rawImg = result.data;
+    } catch (e) {
+      console.warn('[MetlinkExplorer] Failed to load bus-stop.png, falling back to canvas badge', e);
+      this._ensureHubMarkerImage(imageId, diameter, 'bus', dpr);
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = pixelSize;
+    canvas.height = pixelSize;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.scale(dpr, dpr);
+    const center = diameter / 2;
+    const radius = Math.max(4, center - 2);
+
+    // Black octagon background.
+    const sides = 8;
+    const octRadius = Math.max(4, radius);
+    ctx.beginPath();
+    for (let i = 0; i < sides; i++) {
+      const angle = (Math.PI / sides) + (i * (Math.PI * 2 / sides));
+      const x = center + Math.cos(angle) * octRadius;
+      const y = center + Math.sin(angle) * octRadius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+
+    // Bus icon overlay.
+    const iconSize = diameter * 0.56;
+    const iconX = center - (iconSize / 2);
+    const iconY = center - (iconSize / 2);
+    ctx.drawImage(rawImg, iconX, iconY, iconSize, iconSize);
+
+    const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
+    if (this.map.hasImage(imageId)) return;
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
   }
 
@@ -411,7 +488,7 @@ class MetlinkExplorerCard extends LitElement {
     const entityId = String(entry?.entity || "");
     const parts = entityId.split(".");
     const objectId = parts.length > 1 ? parts[1] : entityId;
-    const match = objectId.match(/^(?:train|bus|ferry)_(.+?)_(?:route_)?geometry$/i);
+    const match = objectId.match(/^(?:train|bus|ferry|cable|school_bus)_(.+?)_(?:route_)?geometry$/i);
     if (!match) return null;
 
     const token = String(match[1] || "").trim();
@@ -756,14 +833,15 @@ class MetlinkExplorerCard extends LitElement {
     console.log('[MetlinkExplorer] _renderRoutes start');
 
     try {
-      const categories = ['ferry', 'bus', 'train'];
+      const categories = ['ferry', 'bus', 'cable', 'train'];
       const hubCoordModes = new Map();
 
-      // First pass: collect shared hub coordinates across all enabled route entries.
+      // First pass: collect shared selected-stop coordinates across all route entries.
       categories.forEach((cat) => {
         const entries = this.config[`${cat}_entities`] || [];
         [...entries].reverse().forEach((entry) => {
-          if (entry.show_hubs !== true) return;
+          const selectedStopIds = new Set((entry.selected_stops || []).map((id) => String(id)));
+          if (selectedStopIds.size === 0) return;
           const features = this._parseRouteGeometry(entry.entity);
           if (!features) return;
 
@@ -772,10 +850,10 @@ class MetlinkExplorerCard extends LitElement {
             for (const directionStops of Object.values(timelineStops)) {
               if (!Array.isArray(directionStops)) continue;
               for (const stop of directionStops) {
-                const isHub = stop?.is_hub === true || String(stop?.is_hub).toLowerCase() === 'true';
+                const stopId = String(stop?.stop_id || '');
                 const lon = Number(stop?.stop_lon);
                 const lat = Number(stop?.stop_lat);
-                if (!isHub || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+                if (!selectedStopIds.has(stopId) || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
 
                 const key = this._hubCoordKey(lon, lat);
                 if (!key) continue;
@@ -825,27 +903,28 @@ class MetlinkExplorerCard extends LitElement {
             }
           });
 
-          if (entry.show_hubs === true) {
-            const hubStops = [];
+          const selectedStopIds = new Set((entry.selected_stops || []).map((id) => String(id)));
+          if (selectedStopIds.size > 0) {
+            const selectedStops = [];
             for (const feature of features) {
               const props = feature?.properties || {};
               const timelineStops = props.timeline_stops || {};
               for (const directionStops of Object.values(timelineStops)) {
                 if (!Array.isArray(directionStops)) continue;
                 for (const stop of directionStops) {
-                  const isHub = stop?.is_hub === true || String(stop?.is_hub).toLowerCase() === 'true';
-                  if (isHub && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
-                    hubStops.push(stop);
+                  const stopId = String(stop?.stop_id || '');
+                  if (selectedStopIds.has(stopId) && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
+                    selectedStops.push(stop);
                   }
                 }
               }
             }
 
-            if (hubStops.length > 0) {
+            if (selectedStops.length > 0) {
               const hubDiameter = Math.max(16, Math.round(33 * 0.78));
               const markerDiameter = (cat === 'train' || cat === 'bus') ? Math.max(32, Math.round(hubDiameter * 2)) : hubDiameter;
               const uniqueStops = new Map();
-              hubStops.forEach((stop) => {
+              selectedStops.forEach((stop) => {
                 const key = `${String(stop.stop_id || "")}:${Number(stop.stop_lat)}:${Number(stop.stop_lon)}`;
                 if (!uniqueStops.has(key)) uniqueStops.set(key, stop);
               });
@@ -887,6 +966,8 @@ class MetlinkExplorerCard extends LitElement {
               const hubImageId = `hub-marker-${cat}-${markerDiameter}`;
               if (cat === 'train') {
                 await this._ensureTrainHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
+              } else if (cat === 'bus') {
+                await this._ensureBusHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
               } else {
                 this._ensureHubMarkerImage(hubImageId, markerDiameter, cat, Math.max(1, window.devicePixelRatio || 1));
               }
@@ -909,7 +990,7 @@ class MetlinkExplorerCard extends LitElement {
                 topHubLayerIds.push(hubLayerId);
               }
             } else {
-              console.log(`[MetlinkExplorer] No hub stops found for ${entry.entity} (${cat})`);
+              console.log(`[MetlinkExplorer] No selected stops found for ${entry.entity} (${cat})`);
             }
           }
 

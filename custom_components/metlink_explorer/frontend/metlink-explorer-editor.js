@@ -29,8 +29,8 @@ class MetlinkExplorerEditor extends LitElement {
       train_entities: [],
       bus_entities: [],
       ferry_entities: [],
+      cable_entities: [],
       icon_size: 33,
-      show_hubs: false,
       ...config
     };
   }
@@ -53,7 +53,7 @@ class MetlinkExplorerEditor extends LitElement {
       weight: 6, 
       style: 'solid',
       live_tracking: false,
-      show_hubs: false,
+      selected_stops: [],
     }];
     this._updateConfig({ [key]: newEntities });
   }
@@ -78,6 +78,107 @@ class MetlinkExplorerEditor extends LitElement {
   _removeEntity(type, index) {
     const key = `${type}_entities`;
     const newEntities = this._config[key].filter((_, i) => i !== index);
+    this._updateConfig({ [key]: newEntities });
+  }
+
+  _entityMatchesType(type, eid, stateObj) {
+    if (!eid.startsWith("sensor.")) return false;
+    const entityIdLower = String(eid || "").toLowerCase();
+    const friendlyNameLower = String(stateObj?.attributes?.friendly_name || "").toLowerCase();
+    const haystack = `${entityIdLower} ${friendlyNameLower}`;
+    if (!haystack.includes("geometry")) return false;
+
+    if (type === "train") return haystack.includes("train");
+    if (type === "bus") return haystack.includes("bus") || haystack.includes("school");
+    if (type === "ferry") return haystack.includes("ferry");
+    if (type === "cable") return haystack.includes("cable");
+    return false;
+  }
+
+  _parseFeatures(entityId) {
+    if (!entityId || !this.hass?.states?.[entityId]) return [];
+    let geojson = this.hass.states[entityId].attributes?.geojson;
+    if (!geojson) return [];
+    if (typeof geojson === "string") {
+      try {
+        geojson = JSON.parse(geojson);
+      } catch (_) {
+        return [];
+      }
+    }
+    if (!geojson || !Array.isArray(geojson.features)) return [];
+    return geojson.features;
+  }
+
+  _timelineStopsFromFeature(feature) {
+    const timelineStops = feature?.properties?.timeline_stops || {};
+    const directionKeys = Object.keys(timelineStops).sort((a, b) => Number(a) - Number(b));
+    const ordered = [];
+    for (const key of directionKeys) {
+      const stops = timelineStops[key];
+      if (!Array.isArray(stops)) continue;
+      for (const stop of stops) ordered.push(stop);
+    }
+    return ordered;
+  }
+
+  _normalizeStops(type, rawStops) {
+    const unique = new Map();
+    for (const stop of rawStops || []) {
+      const stopId = String(stop?.stop_id || "").trim();
+      const stopName = String(stop?.stop_name || "").trim();
+      if (!stopId || !stopName) continue;
+      const key = stopId;
+      if (!unique.has(key)) {
+        unique.set(key, {
+          stop_id: stopId,
+          stop_name: stopName,
+          label: `Stop ${stopId} :: ${stopName}.`,
+        });
+      }
+    }
+    const stops = [...unique.values()];
+
+    if (type === "train") {
+      const wellingtonIdx = stops.findIndex((s) => s.stop_name.toLowerCase().includes("wellington station"));
+      if (wellingtonIdx > 0) {
+        return [...stops.slice(wellingtonIdx), ...stops.slice(0, wellingtonIdx)];
+      }
+    }
+
+    return stops;
+  }
+
+  _stopsForEntry(type, entry) {
+    const features = this._parseFeatures(entry?.entity);
+    const rawStops = [];
+    for (const feature of features) {
+      rawStops.push(...this._timelineStopsFromFeature(feature));
+    }
+    return this._normalizeStops(type, rawStops);
+  }
+
+  _addSelectedStop(type, index, stopId) {
+    const key = `${type}_entities`;
+    const normalized = String(stopId || "").trim();
+    if (!normalized) return;
+    const newEntities = (this._config[key] || []).map((item, i) => {
+      if (i !== index) return item;
+      const current = Array.isArray(item.selected_stops) ? item.selected_stops.map(String) : [];
+      if (current.includes(normalized)) return item;
+      return { ...item, selected_stops: [...current, normalized] };
+    });
+    this._updateConfig({ [key]: newEntities });
+  }
+
+  _removeSelectedStop(type, index, stopId) {
+    const key = `${type}_entities`;
+    const normalized = String(stopId || "").trim();
+    const newEntities = (this._config[key] || []).map((item, i) => {
+      if (i !== index) return item;
+      const current = Array.isArray(item.selected_stops) ? item.selected_stops.map(String) : [];
+      return { ...item, selected_stops: current.filter((id) => id !== normalized) };
+    });
     this._updateConfig({ [key]: newEntities });
   }
 
@@ -130,8 +231,9 @@ class MetlinkExplorerEditor extends LitElement {
            ></ha-selector>
         </div>
         ${this._renderSection('train', 'Train Routes', ['train', 'geometry'])}
-        ${this._renderSection('bus', 'Bus Routes', ['bus', 'geometry'])}
+        ${this._renderSection('bus', 'Bus Routes', ['bus', 'school', 'geometry'])}
         ${this._renderSection('ferry', 'Ferry Routes', ['ferry', 'geometry'])}
+        ${this._renderSection('cable', 'Cable Car Routes', ['cable', 'geometry'])}
       </div>
     `;
   }
@@ -141,7 +243,8 @@ class MetlinkExplorerEditor extends LitElement {
     const allSelected = [
         ...(this._config.train_entities || []),
         ...(this._config.bus_entities || []),
-        ...(this._config.ferry_entities || [])
+        ...(this._config.ferry_entities || []),
+        ...(this._config.cable_entities || [])
     ].map(e => e.entity).filter(e => e !== '');
 
     return html`
@@ -151,12 +254,24 @@ class MetlinkExplorerEditor extends LitElement {
           ${entities.map((entry, idx) => {
             const filteredEntities = Object.keys(this.hass.states).filter(eid => {
                 const stateObj = this.hass.states[eid];
-                const entityIdLower = eid.toLowerCase();
-                const friendlyNameLower = (stateObj.attributes.friendly_name || "").toLowerCase();
-                const matchesFilter = filters.every(f => entityIdLower.includes(f.toLowerCase()) || friendlyNameLower.includes(f.toLowerCase()));
+                const matchesFilter = this._entityMatchesType(type, eid, stateObj) || filters.every(f => {
+                  const token = f.toLowerCase();
+                  return eid.toLowerCase().includes(token) || String(stateObj.attributes.friendly_name || "").toLowerCase().includes(token);
+                });
                 const isNotSelected = !allSelected.includes(eid) || eid === entry.entity;
                 return eid.startsWith("sensor.") && matchesFilter && isNotSelected;
             });
+
+            const allStops = this._stopsForEntry(type, entry);
+            const selectedStops = Array.isArray(entry.selected_stops) ? entry.selected_stops.map(String) : [];
+            const selectedSet = new Set(selectedStops);
+            const availableStops = allStops.filter((s) => !selectedSet.has(String(s.stop_id)));
+            const selectedStopObjects = selectedStops
+              .map((id) => allStops.find((s) => String(s.stop_id) === String(id)) || {
+                stop_id: String(id),
+                stop_name: String(id),
+                label: `Stop ${id} :: ${id}.`,
+              });
 
             return html`
               <div class="entity-row">
@@ -195,9 +310,29 @@ class MetlinkExplorerEditor extends LitElement {
                     <label>Live Tracking</label>
                     <input type="checkbox" .checked=${entry.live_tracking === true} @change=${(e) => this._handleEntryChange(type, idx, 'live_tracking', e.target.checked)}>
                   </div>
-                  <div class="style-item">
-                    <label>Show Hub Stops</label>
-                    <input type="checkbox" .checked=${entry.show_hubs === true} @change=${(e) => this._handleEntryChange(type, idx, 'show_hubs', e.target.checked)}>
+                </div>
+                <div class="stop-config">
+                  <label class="stop-label">Selected Stops</label>
+                  <div class="stop-picker-row">
+                    <select @change=${(e) => {
+                      const stopId = e.target.value;
+                      if (!stopId) return;
+                      this._addSelectedStop(type, idx, stopId);
+                      e.target.value = "";
+                    }}>
+                      <option value="">Add stop...</option>
+                      ${availableStops.map((stop) => html`<option value=${stop.stop_id}>${stop.label}</option>`) }
+                    </select>
+                  </div>
+                  <div class="selected-stop-list">
+                    ${selectedStopObjects.length === 0
+                      ? html`<div class="empty-stop-text">No stops selected.</div>`
+                      : selectedStopObjects.map((stop) => html`
+                          <div class="selected-stop-item">
+                            <span>${stop.label}</span>
+                            <ha-icon icon="mdi:delete" @click=${() => this._removeSelectedStop(type, idx, stop.stop_id)}></ha-icon>
+                          </div>
+                        `)}
                   </div>
                 </div>
               </div>
@@ -230,6 +365,14 @@ class MetlinkExplorerEditor extends LitElement {
       .manual-label { display: block; font-size: 14px; margin-bottom: 8px; }
       .full-width { margin-top: 16px; }
       input[type="color"] { width: 100%; height: 30px; border: none; background: none; cursor: pointer; }
+      .stop-config { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--divider-color); }
+      .stop-label { display: block; margin-bottom: 8px; font-size: 12px; color: var(--secondary-text-color); }
+      .stop-picker-row select { width: 100%; padding: 6px; border-radius: 6px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
+      .selected-stop-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+      .selected-stop-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; background: var(--secondary-background-color); border: 1px solid var(--divider-color); border-radius: 6px; padding: 6px 8px; }
+      .selected-stop-item ha-icon { cursor: pointer; opacity: 0.75; }
+      .selected-stop-item ha-icon:hover { opacity: 1; color: var(--error-color); }
+      .empty-stop-text { font-size: 12px; color: var(--secondary-text-color); opacity: 0.85; }
     `;
   }
 }

@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-05-10
+
+### Feature - Manual stop selection by route
+
+- Replaced automatic hub rendering with per-route manual selected-stop rendering in the map card editor.
+- Added selected-stop management UI for Train, Bus (including School Bus routes), Ferry, and Cable Car route rows.
+- Stop picker now removes already selected stops from the available dropdown list and supports per-stop removal.
+- Stop labels use the format: Stop <stop_id> :: <stop_name>.
+- Train stop ordering now merges and deduplicates timeline directions and rotates to start from Wellington Station when present.
+- Bus stop badges now use /metlink_explorer_frontend/bus-stop.png over a black octagon.
+- Ferry stop badges are now equilateral triangles and Cable Car stop badges are hexagons.
+
 ## [0.8.13] - 2026-05-10
 
 ### Feature - Bus hub stop badges
