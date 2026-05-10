@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.2)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.3)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -51,14 +51,14 @@ const VEHICLE_COLORS = {
 };
 
 const MODE_MAX_SPEED_MPS = {
-  train: 40,
-  bus: 28,
+  train: 40 / 3.6,
+  bus: 25 / 3.6,
   ferry: 20,
 };
 
 const MODE_MAX_INFERRED_SPEED_MPS = {
-  train: 70 / 3.6,
-  bus: 40 / 3.6,
+  train: 40 / 3.6,
+  bus: 25 / 3.6,
   ferry: 20 / 3.6,
 };
 
@@ -1218,8 +1218,15 @@ class MetlinkExplorerCard extends LitElement {
       const predictedFromPrevious = previous ? this._predictSAt(previous, nowMs) : projection.s;
       const correctionGap = Math.abs(projection.s - predictedFromPrevious);
       const shouldSmoothCorrect = previous && correctionGap <= 400;
+      const sDelta = projection.s - predictedFromPrevious;
+      const isNearStop = speedMps < 1.0;
+      const directionThreshold = isNearStop ? 6 : 2;
       const travelDirection = previous
-        ? ((projection.s - predictedFromPrevious) > 2 ? 1 : ((projection.s - predictedFromPrevious) < -2 ? -1 : (previous.travelDirection || 1)))
+        ? (sDelta > directionThreshold
+          ? 1
+          : (sDelta < (-directionThreshold)
+            ? -1
+            : (previous.travelDirection || 1)))
         : 1;
       const signedSpeedMps = speedMps * travelDirection;
 

@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2026-05-11
+
+### Improvement - Lower prediction speed caps and stop-side direction stability
+
+- Reduced bus and train prediction caps to better match real movement and avoid overshoot:
+  - Bus prediction cap is now `25 km/h`.
+  - Train prediction cap is now `40 km/h`.
+- Added stronger direction-flip hysteresis around low-speed stop behavior so brief GPS correction bursts at stops do not reverse route direction unexpectedly.
+- Updated frontend build marker to `0.10.3`.
+
 ## [0.10.2] - 2026-05-11
 
 ### Improvement - Inferred speed caps and destination end-of-line behavior
