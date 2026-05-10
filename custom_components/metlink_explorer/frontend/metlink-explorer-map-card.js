@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.9.5)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.9.7)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -755,16 +755,9 @@ class MetlinkExplorerCard extends LitElement {
       const routeEntries = this.config[`${mode}_entities`] || [];
       [...routeEntries].reverse().forEach((entry) => {
         const routeFeatures = this._parseRouteGeometry(entry.entity);
-        const backendLiveTracking = this._backendLiveTrackingFromFeatures(routeFeatures);
-        const cardLiveTracking = typeof entry.live_tracking === "boolean" ? entry.live_tracking : null;
-        const liveTrackingEnabled =
-          cardLiveTracking !== null
-            ? cardLiveTracking
-            : (typeof backendLiveTracking === "boolean" ? backendLiveTracking : true);
+        const liveTrackingEnabled = entry.live_tracking !== false;
         if (!liveTrackingEnabled) {
-          console.log(
-            `[MetlinkExplorer] ${mode} entry ${entry.entity}: card_live_tracking=${JSON.stringify(cardLiveTracking)}, backend_live_tracking=${JSON.stringify(backendLiveTracking)} -> skipping`
-          );
+          console.log(`[MetlinkExplorer] ${mode} entry ${entry.entity}: live_tracking=${JSON.stringify(entry.live_tracking)} -> skipping`);
           return;
         }
 

@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.7] - 2026-05-11
+
+### Change - GPS polling decoupled from card live-tracking toggle
+
+- Reverted backend polling behavior to always fetch vehicle positions and trip updates.
+- Card `live_tracking` now controls rendering visibility only.
+- This restores the pre-conditional-poll expectation that GPS tracks are collected regardless of card toggle state.
+- Updated frontend build marker to `0.9.7`.
+
 ## [0.9.6] - 2026-05-11
 
 ### Fix - Live tracking skip regression in map card

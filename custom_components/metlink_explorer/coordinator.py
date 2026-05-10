@@ -46,14 +46,11 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             trips = await self.api_client.get_trips_for_route(self.route_id)
             
-            # Only fetch vehicle positions and trip updates if live tracking is enabled
-            vehicle_positions = []
-            vehicle_positions_fetched_at = None
-            trip_updates = []
-            if self.live_tracking_enabled:
-                vehicle_positions = await self.api_client.get_vehicle_positions()
-                vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
-                trip_updates = await self.api_client.get_trip_updates()
+            # Always poll live feeds. Route live-tracking toggles should only control
+            # frontend rendering visibility, not backend data collection.
+            vehicle_positions = await self.api_client.get_vehicle_positions()
+            vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
+            trip_updates = await self.api_client.get_trip_updates()
             today_str = datetime.now().strftime("%Y%m%d")
             tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
