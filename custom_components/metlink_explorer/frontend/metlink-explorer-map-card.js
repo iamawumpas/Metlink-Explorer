@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.8)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.9)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -271,9 +271,9 @@ class MetlinkExplorerCard extends LitElement {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Rotate 90 degrees clockwise.
+    // Rotate 90 degrees counter-clockwise.
     ctx.translate(pixelSize / 2, pixelSize / 2);
-    ctx.rotate(Math.PI / 2);
+    ctx.rotate(-Math.PI / 2);
     ctx.drawImage(rawImg, -pixelSize / 2, -pixelSize / 2, pixelSize, pixelSize);
 
     // Strip white/near-white background pixels.

@@ -5,6 +5,12 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.9] - 2026-05-10
+
+### Fix - Train badge rotation direction
+
+- Corrected train hub badge rotation to counter-clockwise 90 degrees.
+
 ## [0.8.8] - 2026-05-10
 
 ### Fix - Async await inside forEach
