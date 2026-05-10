@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3] - 2026-05-10
+
+### Fix - Route rendering regression and startup blocking IO
+
+- Fixed a hub marker helper signature mismatch that could break route rendering when `Show Hub Stops` was enabled.
+- Route re-render cleanup now removes stale hub layers and sources before rebuilding.
+- Moved manifest version file read to an executor job during `async_setup` to avoid Home Assistant event-loop blocking warnings.
+
 ## [0.8.2] - 2026-05-10
 
 ### Fix - Hub stops now render from route geometry

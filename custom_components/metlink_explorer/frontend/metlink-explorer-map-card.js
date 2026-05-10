@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.2)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.3)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -184,7 +184,7 @@ class MetlinkExplorerCard extends LitElement {
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
   }
 
-  _ensureHubMarkerImage(imageId, diameter, dpr) {
+  _ensureHubMarkerImage(imageId, diameter, mode, dpr) {
     if (!this.map || this.map.hasImage(imageId)) return;
 
     const pixelSize = Math.max(1, Math.round(diameter * dpr));
@@ -199,6 +199,9 @@ class MetlinkExplorerCard extends LitElement {
     const center = diameter / 2;
     const radius = Math.max(4, center - 2);
     ctx.clearRect(0, 0, diameter, diameter);
+
+    // Keep the default hub marker simple and visible while the mode-specific
+    // artwork is iterated on.
     ctx.beginPath();
     ctx.arc(center, center, radius, 0, Math.PI * 2);
     ctx.fillStyle = "#000000";
@@ -628,7 +631,9 @@ class MetlinkExplorerCard extends LitElement {
       // Clear existing
       const currentSources = Array.from({length: 100}, (_, i) => `route-source-${i}`);
       currentSources.forEach(s => {
+        if (this.map.getLayer(`hub-layer-${s}`)) this.map.removeLayer(`hub-layer-${s}`);
         if (this.map.getLayer(`layer-${s}`)) this.map.removeLayer(`layer-${s}`);
+        if (this.map.getSource(`hub-source-${s}`)) this.map.removeSource(`hub-source-${s}`);
         if (this.map.getSource(s)) this.map.removeSource(s);
       });
 

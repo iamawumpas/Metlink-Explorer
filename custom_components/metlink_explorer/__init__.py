@@ -38,18 +38,25 @@ FRONTEND_DIR = Path(__file__).parent / "frontend"
 MANIFEST_PATH = Path(__file__).parent / "manifest.json"
 
 
-def _frontend_asset_version() -> str:
-    """Return frontend cache-busting version from manifest."""
-    try:
-        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-        return str(manifest.get("version", "dev"))
-    except Exception:  # pragma: no cover - best effort fallback
-        return "dev"
+async def _async_frontend_asset_version(hass: HomeAssistant) -> str:
+    """Return frontend cache-busting version from manifest.
+
+    File IO runs in the executor to avoid blocking the HA event loop.
+    """
+
+    def _read_manifest_version() -> str:
+        try:
+            manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+            return str(manifest.get("version", "dev"))
+        except Exception:  # pragma: no cover - best effort fallback
+            return "dev"
+
+    return await hass.async_add_executor_job(_read_manifest_version)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Register frontend static path and card resource."""
-    asset_version = _frontend_asset_version()
+    asset_version = await _async_frontend_asset_version(hass)
     await hass.http.async_register_static_paths(
         [StaticPathConfig(FRONTEND_URL_BASE, str(FRONTEND_DIR), cache_headers=False)]
     )
