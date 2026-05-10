@@ -45,6 +45,7 @@ def entry_routes_from_data(data: Mapping[str, Any]) -> list[dict[str, str]]:
                     CONF_ROUTE_SHORT_NAME: route.get(CONF_ROUTE_SHORT_NAME),
                     CONF_ROUTE_LONG_NAME: route.get(CONF_ROUTE_LONG_NAME),
                     CONF_ROUTE_DESC: route.get(CONF_ROUTE_DESC, ""),
+                    "live_tracking": route.get("live_tracking", False),
                 }
             )
         if normalized:
@@ -58,6 +59,7 @@ def entry_routes_from_data(data: Mapping[str, Any]) -> list[dict[str, str]]:
                 CONF_ROUTE_SHORT_NAME: data.get(CONF_ROUTE_SHORT_NAME),
                 CONF_ROUTE_LONG_NAME: data.get(CONF_ROUTE_LONG_NAME),
                 CONF_ROUTE_DESC: data.get(CONF_ROUTE_DESC, ""),
+                "live_tracking": data.get("live_tracking", False),
             }
         ]
 

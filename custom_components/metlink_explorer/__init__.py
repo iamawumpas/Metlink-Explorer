@@ -112,7 +112,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         route_id = str(route.get(CONF_ROUTE_ID))
         if not route_id:
             continue
-        coordinator = MetlinkDataUpdateCoordinator(hass, api_client, route_id)
+        live_tracking_enabled = route.get("live_tracking", False)
+        coordinator = MetlinkDataUpdateCoordinator(
+            hass, api_client, route_id, live_tracking_enabled=live_tracking_enabled
+        )
         await coordinator.async_config_entry_first_refresh()
         coordinators[route_id] = coordinator
 

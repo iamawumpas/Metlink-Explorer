@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-05-10
+
+### Optimization - API efficiency and live tracking configuration
+
+- Reduced vehicle position polling interval from 60s to 30s, aligning with Metlink backend update frequency.
+- Vehicle positions and trip updates are now only fetched when a route has **live_tracking enabled**.
+- Per-route live_tracking toggle in the card editor controls whether vehicle GPS data is polled for that route.
+- Added 304 (Not Modified) support in API client for future cache-aware updates.
+- Respects Metlink API guidelines: 10 req/s rate limit; backend updates vehicles ~30s.
+
 ## [0.9.0] - 2026-05-10
 
 ### Feature - Manual stop selection by route

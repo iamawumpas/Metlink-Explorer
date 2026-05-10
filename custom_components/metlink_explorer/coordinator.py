@@ -22,10 +22,12 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         api_client: MetlinkApiClient,
         route_id: str,
+        live_tracking_enabled: bool = False,
     ) -> None:
         """Initialize route coordinator."""
         self.api_client = api_client
         self.route_id = str(route_id)
+        self.live_tracking_enabled = live_tracking_enabled
         self._live_cache_primed = False
 
         super().__init__(
@@ -43,9 +45,15 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._live_cache_primed = True
 
             trips = await self.api_client.get_trips_for_route(self.route_id)
-            vehicle_positions = await self.api_client.get_vehicle_positions()
-            vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
-            trip_updates = await self.api_client.get_trip_updates()
+            
+            # Only fetch vehicle positions and trip updates if live tracking is enabled
+            vehicle_positions = []
+            vehicle_positions_fetched_at = None
+            trip_updates = []
+            if self.live_tracking_enabled:
+                vehicle_positions = await self.api_client.get_vehicle_positions()
+                vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
+                trip_updates = await self.api_client.get_trip_updates()
             today_str = datetime.now().strftime("%Y%m%d")
             tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 

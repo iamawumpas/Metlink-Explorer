@@ -41,7 +41,7 @@ CONF_ACTIVE_DIRECTION = "active_direction"
 CONF_LEGACY_DIRECTION_ENTITIES = "legacy_direction_entities"
 
 # Default Values
-DEFAULT_SCAN_INTERVAL = 60  # Increased to 60 seconds due to more API calls
+DEFAULT_SCAN_INTERVAL = 30  # Aligned with Metlink backend update frequency and new RTI system
 REQUEST_TIMEOUT = 15  # Increased timeout for complex requests
 DEFAULT_ACTIVE_DIRECTION = 0
 DEFAULT_GTFS_CACHE_TTL_SECONDS = 300

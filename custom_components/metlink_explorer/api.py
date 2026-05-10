@@ -5,6 +5,7 @@ import asyncio
 import math
 import logging
 from datetime import datetime, timedelta
+from email.utils import formatdate
 from typing import Any
 from urllib.parse import quote
 
@@ -99,6 +100,8 @@ class MetlinkApiClient:
         try:
             async with async_timeout.timeout(REQUEST_TIMEOUT):
                 async with self._session.get(url, headers=headers) as response:
+                    if response.status == 304:
+                        return {}
                     response.raise_for_status()
                     return await response.json()
         except asyncio.TimeoutError as exc:
