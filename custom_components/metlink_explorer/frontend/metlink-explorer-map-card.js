@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.3)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.4)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -200,21 +200,58 @@ class MetlinkExplorerCard extends LitElement {
     const radius = Math.max(4, center - 2);
     ctx.clearRect(0, 0, diameter, diameter);
 
-    // Keep the default hub marker simple and visible while the mode-specific
-    // artwork is iterated on.
-    ctx.beginPath();
-    ctx.arc(center, center, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "#000000";
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "#ffffff";
-    ctx.stroke();
+    if (mode === "bus") {
+      // Bus markers: octagon badge.
+      const sides = 8;
+      const octRadius = Math.max(4, radius);
+      ctx.beginPath();
+      for (let i = 0; i < sides; i++) {
+        const angle = (Math.PI / sides) + (i * (Math.PI * 2 / sides));
+        const x = center + Math.cos(angle) * octRadius;
+        const y = center + Math.sin(angle) * octRadius;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "#000000";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+    } else if (mode === "train") {
+      // Train hubs: square badge with simple train glyph.
+      const inset = Math.max(2, Math.round(diameter * 0.1));
+      const size = diameter - (inset * 2);
+      ctx.fillStyle = "#f2d318";
+      ctx.fillRect(inset, inset, size, size);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#111111";
+      ctx.strokeRect(inset, inset, size, size);
+
+      const glyphY = center + (diameter * 0.05);
+      ctx.fillStyle = "#111111";
+      ctx.fillRect(center - (diameter * 0.2), glyphY - (diameter * 0.12), diameter * 0.4, diameter * 0.18);
+      ctx.fillRect(center - (diameter * 0.14), glyphY - (diameter * 0.2), diameter * 0.18, diameter * 0.08);
+      ctx.beginPath();
+      ctx.arc(center - (diameter * 0.11), glyphY + (diameter * 0.1), diameter * 0.05, 0, Math.PI * 2);
+      ctx.arc(center + (diameter * 0.11), glyphY + (diameter * 0.1), diameter * 0.05, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Default/ferry: square hub badge.
+      const inset = Math.max(2, Math.round(diameter * 0.1));
+      const size = diameter - (inset * 2);
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(inset, inset, size, size);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.strokeRect(inset, inset, size, size);
+    }
 
     const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
   }
 
-  _computeHubCollisionOffsets(hubs, diameterPixels) {
+  _computeHubCollisionOffsets(hubs, separationMeters = 24) {
     const grouped = new Map();
     const precision = 1e-5;
 
@@ -231,16 +268,22 @@ class MetlinkExplorerCard extends LitElement {
     const offsets = {};
     for (const group of grouped.values()) {
       if (group.length === 1) {
-        offsets[group[0].stop_id] = { offsetX: 0, offsetY: 0 };
+        offsets[group[0].stop_id] = { dLon: 0, dLat: 0 };
         continue;
       }
 
-      const radius = Math.max(12, Math.round(diameterPixels * 1.2));
+      const latRef = Number(group[0].stop_lat);
+      const latRad = (Number.isFinite(latRef) ? latRef : 0) * (Math.PI / 180);
+      const metersPerDegLat = 111320;
+      const metersPerDegLon = Math.max(1, 111320 * Math.cos(latRad));
+      const radiusMeters = Math.max(12, Number(separationMeters));
       for (let i = 0; i < group.length; i++) {
         const angle = (i / group.length) * Math.PI * 2;
+        const dLon = (Math.cos(angle) * radiusMeters) / metersPerDegLon;
+        const dLat = (Math.sin(angle) * radiusMeters) / metersPerDegLat;
         offsets[group[i].stop_id] = {
-          offsetX: Math.round(Math.cos(angle) * radius),
-          offsetY: Math.round(Math.sin(angle) * radius),
+          dLon,
+          dLat,
         };
       }
     }
@@ -669,21 +712,13 @@ class MetlinkExplorerCard extends LitElement {
             const hubStops = [];
             for (const feature of features) {
               const props = feature?.properties || {};
-              const directHubStops = Array.isArray(props.hub_stops) ? props.hub_stops : [];
-              for (const stop of directHubStops) {
-                if (stop && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
-                  hubStops.push(stop);
-                }
-              }
-
-              if (hubStops.length === 0) {
-                const timelineStops = props.timeline_stops || {};
-                for (const directionStops of Object.values(timelineStops)) {
-                  if (!Array.isArray(directionStops)) continue;
-                  for (const stop of directionStops) {
-                    if (stop?.is_hub === true && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
-                      hubStops.push(stop);
-                    }
+              const timelineStops = props.timeline_stops || {};
+              for (const directionStops of Object.values(timelineStops)) {
+                if (!Array.isArray(directionStops)) continue;
+                for (const stop of directionStops) {
+                  const isHub = stop?.is_hub === true || String(stop?.is_hub).toLowerCase() === 'true';
+                  if (isHub && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
+                    hubStops.push(stop);
                   }
                 }
               }
@@ -691,17 +726,23 @@ class MetlinkExplorerCard extends LitElement {
 
             if (hubStops.length > 0) {
               const hubDiameter = Math.max(16, Math.round(33 * 0.78));
-              const offsets = this._computeHubCollisionOffsets(hubStops, hubDiameter);
-              const hubFeatures = hubStops.map((stop) => {
+              const uniqueStops = new Map();
+              hubStops.forEach((stop) => {
+                const key = `${String(stop.stop_id || "")}:${Number(stop.stop_lat)}:${Number(stop.stop_lon)}`;
+                if (!uniqueStops.has(key)) uniqueStops.set(key, stop);
+              });
+              const dedupedStops = [...uniqueStops.values()];
+              const offsets = this._computeHubCollisionOffsets(dedupedStops, 24);
+              const hubFeatures = dedupedStops.map((stop) => {
                 const stopId = String(stop.stop_id || '');
-                const offset = offsets[stopId] || { offsetX: 0, offsetY: 0 };
-                const projected = this.map.project([Number(stop.stop_lon), Number(stop.stop_lat)]);
-                const adjusted = this.map.unproject([projected.x + offset.offsetX, projected.y + offset.offsetY]);
+                const offset = offsets[stopId] || { dLon: 0, dLat: 0 };
+                const baseLon = Number(stop.stop_lon);
+                const baseLat = Number(stop.stop_lat);
                 return {
                   type: 'Feature',
                   geometry: {
                     type: 'Point',
-                    coordinates: [adjusted.lng, adjusted.lat],
+                    coordinates: [baseLon + offset.dLon, baseLat + offset.dLat],
                   },
                   properties: {
                     stop_id: stopId,

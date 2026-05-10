@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-05-10
+
+### Fix - Hub inference source alignment
+
+- Hub markers are now inferred directly from Geometry sensor `timeline_stops` where `is_hub` is true.
+- Removed frontend reliance on alternative hub inference paths to match the Geometry payload contract.
+
 ## [0.8.3] - 2026-05-10
 
 ### Fix - Route rendering regression and startup blocking IO
