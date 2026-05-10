@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-05-11
+
+### Hotfix - Frontend build version string for cache-busting
+
+- Updated frontend map card build version string from 0.9.0 to 0.9.2 to properly reflect the running code.
+- Console now correctly shows `[MetlinkExplorer] map card script loaded (build 0.9.2)`.
+- Improves cache-busting verification when debugging browser caching issues.
+
 ## [0.9.2] - 2026-05-11
 
 ### Hotfix - Live tracking default for backward compatibility
