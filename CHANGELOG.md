@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.9] - 2026-05-11
+
+### Improvement - Route-tangent badge pointer alignment with vehicle bearing fallback
+
+- **Smart badge heading selection**: Live vehicle badge pointers now align with the route geometry tangent at the vehicle's projected position, providing natural visual alignment with the path.
+- **Vehicle bearing fallback**: When tangent direction is ambiguous (both forward and backward directions are equally plausible), the icon uses the vehicle's GTFS-RT bearing attribute to disambiguate and select the correct direction.
+- **Graceful degradation**: Falls back to raw vehicle bearing when route geometry is unavailable, ensuring badges always have meaningful direction indicators.
+- **Unambiguous direction preference**: When the route geometry provides clear directional guidance, the tangent direction is always preferred over the potentially noisy vehicle bearing.
+- **Improved visual accuracy**: Badge pointers now consistently point along the direction of travel relative to the route path, reducing confusion about vehicle movement direction.
+- Updated frontend build marker to `0.9.9`.
+
 ## [0.9.8] - 2026-05-11
 
 ### Fix - GPS-change-driven live vehicle badge rendering

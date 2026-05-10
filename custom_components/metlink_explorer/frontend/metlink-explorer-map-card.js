@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.9.8)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.9.9)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -468,6 +468,146 @@ class MetlinkExplorerCard extends LitElement {
     return numeric;
   }
 
+  // Calculate bearing (degrees) between two [lon, lat] points
+  _bearing(lon1, lat1, lon2, lat2) {
+    const dLon = (Number(lon2) - Number(lon1)) * Math.PI / 180;
+    const lat1Rad = Number(lat1) * Math.PI / 180;
+    const lat2Rad = Number(lat2) * Math.PI / 180;
+    const y = Math.sin(dLon) * Math.cos(lat2Rad);
+    const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+    const bearingRad = Math.atan2(y, x);
+    const bearingDeg = (bearingRad * 180 / Math.PI + 360) % 360;
+    return bearingDeg;
+  }
+
+  // Calculate distance in meters between two [lon, lat] points
+  _distanceMeters(lon1, lat1, lon2, lat2) {
+    const R = 6371000; // Earth radius in meters
+    const lat1Rad = Number(lat1) * Math.PI / 180;
+    const lat2Rad = Number(lat2) * Math.PI / 180;
+    const dLat = (Number(lat2) - Number(lat1)) * Math.PI / 180;
+    const dLon = (Number(lon2) - Number(lon1)) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1Rad) * Math.cos(lat2Rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  // Project a point onto a line segment; returns { lon, lat, tParam: 0-1 along segment }
+  _projectPointOntoSegment(lon, lat, segStart, segEnd) {
+    const [x0, y0] = [Number(lon), Number(lat)];
+    const [x1, y1] = [Number(segStart[0]), Number(segStart[1])];
+    const [x2, y2] = [Number(segEnd[0]), Number(segEnd[1])];
+
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 1e-10) return { lon: x1, lat: y1, tParam: 0 };
+
+    let t = ((x0 - x1) * dx + (y0 - y1) * dy) / len2;
+    t = Math.max(0, Math.min(1, t)); // Clamp to segment
+
+    return {
+      lon: x1 + t * dx,
+      lat: y1 + t * dy,
+      tParam: t,
+    };
+  }
+
+  // Find closest point on entire route path and compute tangent bearing
+  _pathBearingForCoords(lon, lat, routeCoordinates) {
+    if (!Array.isArray(routeCoordinates) || routeCoordinates.length < 2) return null;
+
+    let minDist = Infinity;
+    let bestSegIdx = -1;
+    let bestProj = null;
+
+    // Find closest segment
+    for (let i = 0; i < routeCoordinates.length - 1; i++) {
+      const proj = this._projectPointOntoSegment(lon, lat, routeCoordinates[i], routeCoordinates[i + 1]);
+      const dist = this._distanceMeters(lon, lat, proj.lon, proj.lat);
+      if (dist < minDist) {
+        minDist = dist;
+        bestSegIdx = i;
+        bestProj = proj;
+      }
+    }
+
+    if (bestSegIdx < 0 || !bestProj) return null;
+
+    // Calculate bearing along the segment
+    const segStart = routeCoordinates[bestSegIdx];
+    const segEnd = routeCoordinates[bestSegIdx + 1];
+    const tangentBearing = this._bearing(segStart[0], segStart[1], segEnd[0], segEnd[1]);
+
+    return {
+      bearing: tangentBearing,
+      reverseBearing: (tangentBearing + 180) % 360,
+      minDistance: minDist,
+    };
+  }
+
+  // Compute best bearing: route tangent primary, vehicle bearing as fallback
+  _computeVehicleBearing(state, routeFeatures) {
+    const lon = Number(state.attributes.longitude);
+    const lat = Number(state.attributes.latitude);
+    const rawBearing = state.attributes.bearing;
+    const vehicleBearing = (rawBearing !== null && rawBearing !== undefined && Number.isFinite(Number(rawBearing)))
+      ? Number(rawBearing) : null;
+
+    // Try to get tangent bearing from route geometry
+    if (routeFeatures && Array.isArray(routeFeatures) && routeFeatures.length > 0) {
+      for (const feature of routeFeatures) {
+        const geom = feature.geometry;
+        if (!geom) continue;
+
+        let coords = null;
+        if (geom.type === 'LineString') {
+          coords = geom.coordinates;
+        } else if (geom.type === 'MultiLineString') {
+          // Use the first segment for now
+          coords = geom.coordinates[0];
+        }
+
+        if (coords && Array.isArray(coords) && coords.length >= 2) {
+          const pathBearing = this._pathBearingForCoords(lon, lat, coords);
+          if (pathBearing) {
+            // If vehicle bearing is available and differs significantly from both tangent directions,
+            // check which tangent direction is closer to the vehicle bearing
+            if (vehicleBearing !== null) {
+              const angleToDirect = Math.abs(pathBearing.bearing - vehicleBearing);
+              const angleToReverse = Math.abs(pathBearing.reverseBearing - vehicleBearing);
+              const angleDiffThresh = 90; // If both directions are plausible (>90°), use vehicle bearing
+
+              // Normalize angle differences to 0-180 range
+              const normAngleToDirect = Math.min(angleToDirect, 360 - angleToDirect);
+              const normAngleToReverse = Math.min(angleToReverse, 360 - angleToReverse);
+
+              // If the two directions are ambiguous (close in angular distance), use vehicle bearing to disambiguate
+              if (Math.abs(normAngleToDirect - normAngleToReverse) < angleDiffThresh) {
+                // Ambiguous: pick direction closer to vehicle bearing
+                const chosenBearing = normAngleToDirect <= normAngleToReverse
+                  ? pathBearing.bearing
+                  : pathBearing.reverseBearing;
+                // Add 180 for pin rotation (pin points down at 0°)
+                return (chosenBearing + 180) % 360;
+              }
+            }
+
+            // Unambiguous: use the tangent direction
+            return (pathBearing.bearing + 180) % 360;
+          }
+        }
+      }
+    }
+
+    // Fallback to vehicle bearing if route geometry unavailable or doesn't help
+    if (vehicleBearing !== null) {
+      return (vehicleBearing + 180) % 360;
+    }
+
+    return 0; // Default north
+  }
+
   _routeMetaFromFeatures(features) {
     if (!Array.isArray(features) || features.length === 0) return null;
     const first = features[0];
@@ -584,7 +724,7 @@ class MetlinkExplorerCard extends LitElement {
     return false;
   }
 
-  _liveFeaturesForRoute(routeEntry, mode, routeMeta) {
+  _liveFeaturesForRoute(routeEntry, mode, routeMeta, routeFeatures) {
     if (!this.hass || !routeMeta) return [];
     const maxAge = Number(this.config.live_max_age_seconds || 120);
     const nowEpoch = Date.now() / 1000;
@@ -608,18 +748,12 @@ class MetlinkExplorerCard extends LitElement {
         return (nowEpoch - ts) <= maxAge;
       })
       .map(([entityId, state]) => {
-        const lat = Number(state.attributes.latitude);
-        const lon = Number(state.attributes.longitude);
-        const rawBearing = state.attributes.bearing;
-        const bearing = (rawBearing !== null && rawBearing !== undefined && Number.isFinite(Number(rawBearing)))
-          ? Number(rawBearing) : 0;
-        // The pin artwork points down at 0deg, so rotate by +180deg to align tip with travel bearing.
-        const iconBearing = (bearing + 180) % 360;
+        const iconBearing = this._computeVehicleBearing(state, routeFeatures);
         return {
           type: "Feature",
           geometry: {
             type: "Point",
-            coordinates: [lon, lat],
+            coordinates: [Number(state.attributes.longitude), Number(state.attributes.latitude)],
           },
           properties: {
             entity_id: entityId,
@@ -856,7 +990,7 @@ class MetlinkExplorerCard extends LitElement {
         const routeFeatures = this._parseRouteGeometry(entry.entity);
         const routeMeta = this._routeMetaFromFeatures(routeFeatures || []) || this._routeMetaFallback(entry);
         if (!routeMeta) return;
-        const vehicleFeatures = this._liveFeaturesForRoute(entry, mode, routeMeta);
+        const vehicleFeatures = this._liveFeaturesForRoute(entry, mode, routeMeta, routeFeatures);
         vehicleFeatures.forEach((feature) => {
           const entityId = feature.properties.entity_id;
           if (entityId) vehicleMap.set(entityId, { feature, mode });
