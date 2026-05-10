@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.8.10)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.8.11)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -271,10 +271,8 @@ class MetlinkExplorerCard extends LitElement {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Rotate 45 degrees clockwise.
-    ctx.translate(pixelSize / 2, pixelSize / 2);
-    ctx.rotate(Math.PI / 4);
-    ctx.drawImage(rawImg, -pixelSize / 2, -pixelSize / 2, pixelSize, pixelSize);
+    // Draw the image as-is; rotation is applied via MapLibre icon-rotate on the layer.
+    ctx.drawImage(rawImg, 0, 0, pixelSize, pixelSize);
 
     // Strip white/near-white background pixels.
     const imgData = ctx.getImageData(0, 0, pixelSize, pixelSize);
@@ -892,6 +890,7 @@ class MetlinkExplorerCard extends LitElement {
                   'icon-anchor': 'center',
                   'icon-allow-overlap': true,
                   'icon-ignore-placement': true,
+                  ...(cat === 'train' ? { 'icon-rotate': 45, 'icon-rotation-alignment': 'viewport' } : {}),
                 },
               });
               if (cat === 'train') {
