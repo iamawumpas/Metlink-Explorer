@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.0)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.1)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1017,7 +1017,7 @@ class MetlinkExplorerCard extends LitElement {
 
         rows.push({
           routeShortName: String(row?.route_short_name || row?.service_label || row?.route_id || "?"),
-          destination: String(row?.destination || "Unknown destination"),
+          directionLabel: String(row?.direction_label || row?.destination || "Unknown direction"),
           departureDate: depDate,
           departureText: this._formatDepartureLine(depDate, deltaMs),
           sortTime: depDate.getTime(),
@@ -1109,7 +1109,7 @@ class MetlinkExplorerCard extends LitElement {
           ${!bubble.loading ? bubble.departures.map((dep) => html`
             <div class="departure-item">
               <div class="departure-route">${dep.routeShortName}</div>
-              <div class="departure-destination">${dep.destination}</div>
+              <div class="departure-destination">${dep.directionLabel}</div>
               <div class="departure-time">${dep.departureText}</div>
             </div>
           `) : null}

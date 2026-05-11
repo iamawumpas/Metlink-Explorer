@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-05-11
+
+### Fix - Departure bubble route direction label
+
+- Updated departure bubble rows to display the route-friendly direction label (for example, `Eastbourne - Petone - Wellington Station - Courtney Place`) instead of the next-stop destination.
+- Bubble rows now prefer board payload `direction_label`, with fallback to `destination` only when needed.
+- Updated frontend build marker to `0.10.1`.
+
 ## [0.10.0] - 2026-05-11
 
 ### Feature - Phase 4 departure bubble interaction foundation
