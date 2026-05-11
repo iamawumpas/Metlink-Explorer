@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.6] - 2026-05-12
+
+### Hotfix - Prevent browser freeze from repeated layout resize updates
+
+- Fixed a render-loop/freeze condition caused by repeated map resize calls during component updates.
+- Made layout mode application idempotent so map resize only runs when the computed host height actually changes.
+- Preserved card/editor layout switching behavior while removing runaway update pressure.
+- Updated frontend build marker to `0.11.6`.
+
 ## [0.11.5] - 2026-05-12
 
 ### Fix - Restore stop bubble interactions after layer overlay refactor

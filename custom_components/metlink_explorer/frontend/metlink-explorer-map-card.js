@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.11.5)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.11.6)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -82,6 +82,7 @@ class MetlinkExplorerCard extends LitElement {
     this._layerPanelOpen    = false;
     this._layerResetTimer   = null;
     this._isEditorPreview   = false;
+    this._appliedHostHeight = "";
   }
 
   static async getConfigElement() {
@@ -2032,6 +2033,8 @@ class MetlinkExplorerCard extends LitElement {
   _applyLayoutMode() {
     this._isEditorPreview = this._detectEditorPreviewMode();
     const hostHeight = this._isEditorPreview ? '420px' : 'calc(100vh - 64px)';
+    if (this._appliedHostHeight === hostHeight) return;
+    this._appliedHostHeight = hostHeight;
     this.style.setProperty('--metlink-card-height', hostHeight);
     if (this.map) {
       try { this.map.resize(); } catch (_) {}
