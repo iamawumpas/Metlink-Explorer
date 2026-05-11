@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.4] - 2026-05-12
+
+### Fix - Keep layer controls fixed to card boundary while panning map
+
+- Moved map UI controls into a dedicated card overlay container anchored to the card bounds.
+- Layer hamburger menu is now fixed to the card top-left margin and no longer drifts with map pan/scroll interactions.
+- Updated map canvas to fill the card using absolute inset layout while controls remain in a separate overlay layer.
+- Updated frontend build marker to `0.11.4`.
+
 ## [0.11.3] - 2026-05-12
 
 ### Fix - Keep layer menu confined to card during dashboard editing
