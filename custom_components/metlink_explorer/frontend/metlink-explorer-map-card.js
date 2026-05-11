@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.9.10)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.9.11)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -546,6 +546,11 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
+  _angularDifference(a, b) {
+    const diff = Math.abs(Number(a) - Number(b)) % 360;
+    return diff > 180 ? 360 - diff : diff;
+  }
+
   // Compute best bearing: route tangent primary, vehicle bearing as fallback
   _computeVehicleBearing(state, routeFeatures) {
     const lon = Number(state.attributes.longitude);
@@ -571,29 +576,17 @@ class MetlinkExplorerCard extends LitElement {
         if (coords && Array.isArray(coords) && coords.length >= 2) {
           const pathBearing = this._pathBearingForCoords(lon, lat, coords);
           if (pathBearing) {
-            // If vehicle bearing is available and differs significantly from both tangent directions,
-            // check which tangent direction is closer to the vehicle bearing
             if (vehicleBearing !== null) {
-              const angleToDirect = Math.abs(pathBearing.bearing - vehicleBearing);
-              const angleToReverse = Math.abs(pathBearing.reverseBearing - vehicleBearing);
-              const angleDiffThresh = 90; // If both directions are plausible (>90°), use vehicle bearing
-
-              // Normalize angle differences to 0-180 range
-              const normAngleToDirect = Math.min(angleToDirect, 360 - angleToDirect);
-              const normAngleToReverse = Math.min(angleToReverse, 360 - angleToReverse);
-
-              // If the two directions are ambiguous (close in angular distance), use vehicle bearing to disambiguate
-              if (Math.abs(normAngleToDirect - normAngleToReverse) < angleDiffThresh) {
-                // Ambiguous: pick direction closer to vehicle bearing
-                const chosenBearing = normAngleToDirect <= normAngleToReverse
-                  ? pathBearing.bearing
-                  : pathBearing.reverseBearing;
-                // Add 180 for pin rotation (pin points down at 0°)
-                return (chosenBearing + 180) % 360;
-              }
+              const directDiff = this._angularDifference(pathBearing.bearing, vehicleBearing);
+              const reverseDiff = this._angularDifference(pathBearing.reverseBearing, vehicleBearing);
+              const chosenBearing = directDiff <= reverseDiff
+                ? pathBearing.bearing
+                : pathBearing.reverseBearing;
+              // Add 180 for pin rotation (pin points down at 0°)
+              return (chosenBearing + 180) % 360;
             }
 
-            // Unambiguous: use the tangent direction
+            // Without a vehicle bearing, keep the route tangent as the best available heading.
             return (pathBearing.bearing + 180) % 360;
           }
         }

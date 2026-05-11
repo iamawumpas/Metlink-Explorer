@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.11] - 2026-05-11
+
+### Fix - Correct live badge pointer direction of travel
+
+- Fixed route-tangent badge heading selection so the marker now chooses whichever route tangent direction is closest to the vehicle's reported bearing.
+- This corrects cases where the badge pointer aligned to the route geometry but pointed opposite to the actual direction of travel on bidirectional segments.
+- When vehicle bearing is unavailable, the icon still falls back to the route tangent as the best available heading.
+- Updated frontend build marker to `0.9.11`.
+
 ## [0.9.10] - 2026-05-11
 
 ### Fix - Add missing service metadata for Home Assistant
