@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.11] - 2026-05-11
+
+### Improvement - Use dedicated ferry and train stop marker assets
+
+- Added a dedicated `ferry-stop.png` frontend marker asset for ferry stop hubs, using the same image-loading path as bus stops.
+- Updated train stop hub markers to load the renamed `train-stop.png` asset instead of the old `train.png` filename.
+- Kept the existing canvas marker fallbacks so stop markers still render if either asset is unavailable.
+- Updated frontend build marker to `0.10.11`.
+
 ## [0.10.10] - 2026-05-11
 
 ### Fix - Ferry stop marker size matches bus stops

@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.10)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.11)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -377,16 +377,68 @@ class MetlinkExplorerCard extends LitElement {
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
   }
 
+  async _ensureFerryHubImage(imageId, diameter, dpr) {
+    if (!this.map || this.map.hasImage(imageId)) return;
+
+    const pixelSize = Math.max(1, Math.round(diameter * dpr));
+    let rawImg;
+    try {
+      const result = await this.map.loadImage('/metlink_explorer_frontend/ferry-stop.png');
+      rawImg = result.data;
+    } catch (e) {
+      console.warn('[MetlinkExplorer] Failed to load ferry-stop.png, falling back to canvas badge', e);
+      this._ensureHubMarkerImage(imageId, diameter, 'ferry', dpr);
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = pixelSize;
+    canvas.height = pixelSize;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    ctx.scale(dpr, dpr);
+    const center = diameter / 2;
+    const radius = Math.max(4, center - 2);
+
+    // Black triangle background.
+    const triRadius = Math.max(4, radius);
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const angle = (-Math.PI / 2) + (i * (Math.PI * 2 / 3));
+      const x = center + Math.cos(angle) * triRadius;
+      const y = center + Math.sin(angle) * triRadius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+
+    // Ferry icon overlay.
+    const iconSize = diameter * 0.56;
+    const iconX = center - (iconSize / 2);
+    const iconY = center - (iconSize / 2);
+    ctx.drawImage(rawImg, iconX, iconY, iconSize, iconSize);
+
+    const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
+    if (this.map.hasImage(imageId)) return;
+    this.map.addImage(imageId, imageData, { pixelRatio: dpr });
+  }
+
   async _ensureTrainHubImage(imageId, diameter, dpr) {
     if (!this.map || this.map.hasImage(imageId)) return;
 
     const pixelSize = Math.max(1, Math.round(diameter * dpr));
     let rawImg;
     try {
-      const result = await this.map.loadImage('/metlink_explorer_frontend/train.png');
+      const result = await this.map.loadImage('/metlink_explorer_frontend/train-stop.png');
       rawImg = result.data;
     } catch (e) {
-      console.warn('[MetlinkExplorer] Failed to load train.png, falling back to canvas badge', e);
+      console.warn('[MetlinkExplorer] Failed to load train-stop.png, falling back to canvas badge', e);
       this._ensureHubMarkerImage(imageId, diameter, 'train', dpr);
       return;
     }
@@ -1636,6 +1688,8 @@ class MetlinkExplorerCard extends LitElement {
                 await this._ensureTrainHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
               } else if (cat === 'bus') {
                 await this._ensureBusHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
+              } else if (cat === 'ferry') {
+                await this._ensureFerryHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
               } else {
                 this._ensureHubMarkerImage(hubImageId, markerDiameter, cat, Math.max(1, window.devicePixelRatio || 1));
               }
