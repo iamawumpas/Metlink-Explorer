@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.14] - 2026-05-12
+
+### Improvement - Ferry stop marker shape changed to square
+
+- Changed the ferry stop hub marker from an equilateral triangle to a square shape.
+- Retained the cyan (`#12cfe3`) background fill and white border.
+- Updated the ferry icon overlay clip region to match the new square boundary.
+- Added layer visibility state tracking infrastructure in the map card (groundwork for upcoming per-mode layer toggle controls).
+- Updated frontend build marker to `0.10.14`.
+
 ## [0.10.13] - 2026-05-12
 
 ### Improvement - Restore ferry icon to original size with refined crop

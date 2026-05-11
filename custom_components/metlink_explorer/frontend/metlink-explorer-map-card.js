@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.13)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.14)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -69,6 +69,18 @@ class MetlinkExplorerCard extends LitElement {
     this._bubbleOpenSequence = 0;
     this._boundMapClick = (event) => this._onMapClick(event);
     this._boundMapMove = () => this._updateDepartureBubbleAnchor();
+    // Layer visibility toggles: type -> mode -> boolean
+    this._layerVisibility = {
+      routes: { train: true, bus: true, ferry: true, cable: true },
+      live:   { train: true, bus: true, ferry: true, cable: true },
+      stops:  { train: true, bus: true, ferry: true, cable: true },
+    };
+    // Maps from mode -> Set of MapLibre layer IDs for that mode+type combo
+    this._routeLayersByMode = new Map();
+    this._stopLayersByMode  = new Map();
+    this._liveLayersByMode  = new Map();
+    this._layerPanelOpen    = false;
+    this._layerResetTimer   = null;
   }
 
   static async getConfigElement() {
@@ -401,22 +413,16 @@ class MetlinkExplorerCard extends LitElement {
     const center = diameter / 2;
     const radius = Math.max(4, center - 2);
 
-    // Cyan triangle background.
-    const triRadius = Math.max(4, radius);
-    ctx.beginPath();
-    for (let i = 0; i < 3; i++) {
-      const angle = (-Math.PI / 2) + (i * (Math.PI * 2 / 3));
-      const x = center + Math.cos(angle) * triRadius;
-      const y = center + Math.sin(angle) * triRadius;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
+    // Cyan square background.
+    const squareHalf = Math.max(4, radius);
+    const sqX = center - squareHalf;
+    const sqY = center - squareHalf;
+    const sqSize = squareHalf * 2;
     ctx.fillStyle = '#12cfe3';
-    ctx.fill();
+    ctx.fillRect(sqX, sqY, sqSize, sqSize);
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#ffffff';
-    ctx.stroke();
+    ctx.strokeRect(sqX, sqY, sqSize, sqSize);
 
     // Strip the solid cyan background, crop to the visible ferry silhouette,
     // then zoom the icon by 25% while keeping it clipped inside the triangle.
@@ -470,14 +476,8 @@ class MetlinkExplorerCard extends LitElement {
 
     ctx.save();
     ctx.beginPath();
-    const clipRadius = Math.max(4, triRadius - 3);
-    for (let i = 0; i < 3; i++) {
-      const angle = (-Math.PI / 2) + (i * (Math.PI * 2 / 3));
-      const x = center + Math.cos(angle) * clipRadius;
-      const y = center + Math.sin(angle) * clipRadius;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
+    const clipInset = 3;
+    ctx.rect(center - squareHalf + clipInset, center - squareHalf + clipInset, sqSize - clipInset * 2, sqSize - clipInset * 2);
     ctx.closePath();
     ctx.clip();
     ctx.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, iconX, iconY, iconSize, iconSize);
@@ -1638,6 +1638,9 @@ class MetlinkExplorerCard extends LitElement {
         if (this.map.getSource(s)) this.map.removeSource(s);
       });
       this._hubLayerIds.clear();
+      // Rebuild mode→layer maps for routes and stops
+      this._routeLayersByMode = new Map();
+      this._stopLayersByMode  = new Map();
 
       let layerIdx = 0;
       const topHubLayerIds = [];
@@ -1667,6 +1670,13 @@ class MetlinkExplorerCard extends LitElement {
               ...(dashArray.length > 0 ? { 'line-dasharray': dashArray } : {})
             }
           });
+          // Track route layer by mode for visibility toggling
+          if (!this._routeLayersByMode.has(cat)) this._routeLayersByMode.set(cat, new Set());
+          this._routeLayersByMode.get(cat).add(`layer-${sourceId}`);
+          // Apply current visibility state immediately
+          if (!this._layerVisibility.routes[cat]) {
+            this.map.setLayoutProperty(`layer-${sourceId}`, 'visibility', 'none');
+          }
 
           const selectedStopIds = new Set((entry.selected_stops || []).map((id) => String(id)));
           if (selectedStopIds.size > 0) {
@@ -1768,6 +1778,12 @@ class MetlinkExplorerCard extends LitElement {
                 },
               });
               this._hubLayerIds.add(hubLayerId);
+              // Track stop layer by mode for visibility toggling
+              if (!this._stopLayersByMode.has(cat)) this._stopLayersByMode.set(cat, new Set());
+              this._stopLayersByMode.get(cat).add(hubLayerId);
+              if (!this._layerVisibility.stops[cat]) {
+                this.map.setLayoutProperty(hubLayerId, 'visibility', 'none');
+              }
               if (cat === 'train' || cat === 'bus') {
                 topHubLayerIds.push(hubLayerId);
               }
