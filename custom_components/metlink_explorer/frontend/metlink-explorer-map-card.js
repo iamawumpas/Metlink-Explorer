@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.11.0)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.11.1)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -2054,6 +2054,7 @@ class MetlinkExplorerCard extends LitElement {
         </button>
         ${open ? html`
           <div class="layer-panel">
+            <div class="lp-title">Display Layers</div>
             <div class="lp-section-label">Routes</div>
             <div class="lp-row">
               ${activeModes.map((m) => btn('routes', m, modeLabels[m]))}
@@ -2291,18 +2292,27 @@ class MetlinkExplorerCard extends LitElement {
         background: rgba(0, 0, 0, 0.82);
         border: 1px solid rgba(255, 255, 255, 0.18);
         border-radius: 10px;
-        padding: 10px 12px 12px;
-        min-width: 180px;
+        padding: 10px 10px 12px;
+        width: max-content;
+        min-width: 0;
         backdrop-filter: blur(6px);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
       }
+      .lp-title {
+        color: rgba(255, 255, 255, 0.98);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        margin: 0 0 8px;
+      }
       .lp-section-label {
-        color: rgba(255, 255, 255, 0.5);
-        font-size: 10px;
-        font-weight: 700;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 12px;
+        font-weight: 800;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        margin: 8px 0 4px;
+        margin: 9px 0 5px;
       }
       .lp-section-label:first-child {
         margin-top: 0;

@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-05-12
+
+### Improvement - Layer panel readability and labeling polish
+
+- Increased layer panel section heading prominence (larger, bolder, brighter text) for quicker scanning.
+- Removed excess right-side panel spacing so the control box hugs button content more tightly.
+- Renamed the panel heading to `Display Layers` for clearer intent.
+- Updated frontend build marker to `0.11.1`.
+
 ## [0.11.0] - 2026-05-12
 
 ### Feature - Per-mode layer visibility toggle panel
