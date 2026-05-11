@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.9)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.10)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1576,7 +1576,7 @@ class MetlinkExplorerCard extends LitElement {
 
             if (selectedStops.length > 0) {
               const hubDiameter = Math.max(16, Math.round(33 * 0.78));
-              const markerDiameter = (cat === 'train' || cat === 'bus') ? Math.max(32, Math.round(hubDiameter * 2)) : hubDiameter;
+              const markerDiameter = (cat === 'train' || cat === 'bus' || cat === 'ferry') ? Math.max(32, Math.round(hubDiameter * 2)) : hubDiameter;
               const uniqueStops = new Map();
               selectedStops.forEach((stop) => {
                 const rawStopId = String(stop.stop_id || "").trim();
