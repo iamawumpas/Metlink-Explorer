@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-05-12
+
+### Feature - Per-mode layer visibility toggle panel
+
+- Added a hamburger menu button in the top-left corner of the map card that opens a layer control panel.
+- Panel contains three sections — **Routes**, **Stops**, and **Live Tracking** — each showing one toggle button per configured vehicle mode (Train, Bus, Ferry, Cable Car).
+- Clicking a button toggles that layer group on or off instantly; active layers show as white filled pills, hidden layers appear dimmed.
+- Only modes that have entities configured in the card YAML appear in the panel, so unused rows are never shown.
+- Toggle state auto-reverts to the card YAML defaults after 10 minutes of no user interaction.
+- All three layer types (route lines, stop markers, live vehicle badges) are tracked by mode in separate internal registries so toggles can target individual MapLibre layers precisely.
+- Updated frontend build marker to `0.11.0`.
+
 ## [0.10.14] - 2026-05-12
 
 ### Improvement - Ferry stop marker shape changed to square

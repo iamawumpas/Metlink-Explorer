@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.14)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.11.0)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -600,6 +600,64 @@ class MetlinkExplorerCard extends LitElement {
     }
   }
 
+  // ── Layer visibility toggle controls ───────────────────────────────────────
+
+  /**
+   * Toggle a layer-type+mode visibility. Schedules a 10-minute auto-revert
+   * back to YAML-configured defaults after any user interaction.
+   * @param {'routes'|'live'|'stops'} type
+   * @param {'train'|'bus'|'ferry'|'cable'} mode
+   */
+  _toggleLayerVisibility(type, mode) {
+    if (!this._layerVisibility[type]) return;
+    this._layerVisibility[type][mode] = !this._layerVisibility[type][mode];
+    this._applyLayerVisibility(type, mode);
+    this._scheduleLayerRevert();
+    this.requestUpdate();
+  }
+
+  _applyLayerVisibility(type, mode) {
+    if (!this.map) return;
+    const vis = this._layerVisibility[type][mode] !== false ? 'visible' : 'none';
+    let layerMap;
+    if (type === 'routes') layerMap = this._routeLayersByMode;
+    else if (type === 'stops') layerMap = this._stopLayersByMode;
+    else if (type === 'live')  layerMap = this._liveLayersByMode;
+    if (!layerMap) return;
+    const ids = layerMap.get(mode) || new Set();
+    ids.forEach((id) => {
+      if (this.map.getLayer(id)) {
+        try { this.map.setLayoutProperty(id, 'visibility', vis); } catch (_) {}
+      }
+    });
+  }
+
+  /**
+   * Reset visibility state from YAML config defaults (all true unless the
+   * config explicitly disables them — currently all default to visible).
+   */
+  _revertLayerVisibilityToDefaults() {
+    const modes = ['train', 'bus', 'ferry', 'cable'];
+    const types = ['routes', 'live', 'stops'];
+    types.forEach((type) => {
+      modes.forEach((mode) => {
+        this._layerVisibility[type][mode] = true;
+        this._applyLayerVisibility(type, mode);
+      });
+    });
+    this.requestUpdate();
+  }
+
+  _scheduleLayerRevert() {
+    if (this._layerResetTimer) clearTimeout(this._layerResetTimer);
+    this._layerResetTimer = setTimeout(() => {
+      this._layerResetTimer = null;
+      this._revertLayerVisibilityToDefaults();
+    }, 10 * 60 * 1000); // 10 minutes
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+
   _parseTrackerTimestamp(value) {
     if (value === null || value === undefined) return null;
     const numeric = Number(value);
@@ -945,7 +1003,7 @@ class MetlinkExplorerCard extends LitElement {
     this._liveSlotHashes.set(sourceId, nextHash);
   }
 
-  _ensureLiveLayers(sourceId) {
+  _ensureLiveLayers(sourceId, mode) {
     if (!this.map) return;
 
     const shapeLayerId = `shape-${sourceId}`;
@@ -982,6 +1040,17 @@ class MetlinkExplorerCard extends LitElement {
           "icon-pitch-alignment": "viewport",
         },
       });
+    }
+
+    // Track live layers by mode for visibility toggling
+    if (mode) {
+      if (!this._liveLayersByMode.has(mode)) this._liveLayersByMode.set(mode, new Set());
+      this._liveLayersByMode.get(mode).add(shapeLayerId);
+      this._liveLayersByMode.get(mode).add(textLayerId);
+      // Apply current visibility state
+      const vis = this._layerVisibility.live[mode] !== false ? 'visible' : 'none';
+      if (this.map.getLayer(shapeLayerId)) this.map.setLayoutProperty(shapeLayerId, 'visibility', vis);
+      if (this.map.getLayer(textLayerId))  this.map.setLayoutProperty(textLayerId,  'visibility', vis);
     }
   }
 
@@ -1548,7 +1617,7 @@ class MetlinkExplorerCard extends LitElement {
           Math.abs(lat - last.lat) < 0.00001 &&
           Math.abs(lon - last.lon) < 0.00001 &&
           Math.abs(bearing - last.bearing) < 0.5) {
-        this._ensureLiveLayers(sourceId);
+        this._ensureLiveLayers(sourceId, mode);
         return;
       }
 
@@ -1569,7 +1638,7 @@ class MetlinkExplorerCard extends LitElement {
       };
 
       this._setLiveSourceData(sourceId, [featureWithBadge]);
-      this._ensureLiveLayers(sourceId);
+      this._ensureLiveLayers(sourceId, mode);
       updatedCount++;
     });
 
@@ -1944,8 +2013,62 @@ class MetlinkExplorerCard extends LitElement {
     return html`
       <ha-card>
         <div id="map"></div>
+        ${this._renderLayerPanel()}
         ${this._renderDepartureBubble()}
       </ha-card>
+    `;
+  }
+
+  _renderLayerPanel() {
+    // Determine which modes actually have configured entities so we only show
+    // rows that are relevant to this card instance.
+    const modeLabels = { train: 'Train', bus: 'Bus', ferry: 'Ferry', cable: 'Cable Car' };
+    const activeModes = ['train', 'bus', 'ferry', 'cable'].filter(
+      (m) => (this.config[`${m}_entities`] || []).length > 0
+    );
+    if (activeModes.length === 0) return html``;
+
+    const open = this._layerPanelOpen;
+    const vis = this._layerVisibility;
+
+    const btn = (type, mode, label) => {
+      const on = vis[type][mode] !== false;
+      return html`<button
+        class="lp-btn ${on ? 'on' : 'off'}"
+        @click=${() => this._toggleLayerVisibility(type, mode)}
+        title="${on ? 'Hide' : 'Show'} ${modeLabels[mode]} ${type}"
+      >${label}</button>`;
+    };
+
+    return html`
+      <div class="layer-panel-wrap">
+        <button
+          class="lp-hamburger"
+          @click=${() => { this._layerPanelOpen = !this._layerPanelOpen; this.requestUpdate(); }}
+          title="Layer controls"
+          aria-label="Layer controls"
+        >
+          <span class="lp-ham-line"></span>
+          <span class="lp-ham-line"></span>
+          <span class="lp-ham-line"></span>
+        </button>
+        ${open ? html`
+          <div class="layer-panel">
+            <div class="lp-section-label">Routes</div>
+            <div class="lp-row">
+              ${activeModes.map((m) => btn('routes', m, modeLabels[m]))}
+            </div>
+            <div class="lp-section-label">Stops</div>
+            <div class="lp-row">
+              ${activeModes.map((m) => btn('stops', m, modeLabels[m]))}
+            </div>
+            <div class="lp-section-label">Live Tracking</div>
+            <div class="lp-row">
+              ${activeModes.filter((m) => m !== 'cable').map((m) => btn('live', m, modeLabels[m]))}
+            </div>
+          </div>
+        ` : html``}
+      </div>
     `;
   }
 
@@ -2125,6 +2248,93 @@ class MetlinkExplorerCard extends LitElement {
         .departure-list {
           max-height: 50vh;
         }
+      }
+
+      /* ── Layer panel ─────────────────────────────────────────────────── */
+      .layer-panel-wrap {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 900;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        pointer-events: auto;
+      }
+      .lp-hamburger {
+        width: 36px;
+        height: 36px;
+        background: rgba(0, 0, 0, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        cursor: pointer;
+        padding: 0;
+        backdrop-filter: blur(4px);
+      }
+      .lp-hamburger:hover {
+        background: rgba(30, 30, 30, 0.88);
+      }
+      .lp-ham-line {
+        display: block;
+        width: 16px;
+        height: 2px;
+        background: #ffffff;
+        border-radius: 2px;
+      }
+      .layer-panel {
+        background: rgba(0, 0, 0, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 10px;
+        padding: 10px 12px 12px;
+        min-width: 180px;
+        backdrop-filter: blur(6px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      }
+      .lp-section-label {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin: 8px 0 4px;
+      }
+      .lp-section-label:first-child {
+        margin-top: 0;
+      }
+      .lp-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .lp-btn {
+        appearance: none;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 5px 10px;
+        cursor: pointer;
+        transition: background 120ms, color 120ms, opacity 120ms;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+      }
+      .lp-btn.on {
+        background: rgba(255, 255, 255, 0.92);
+        color: #111111;
+        border-color: #ffffff;
+      }
+      .lp-btn.off {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.55);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+      .lp-btn:hover {
+        opacity: 0.82;
       }
     `;
   }
