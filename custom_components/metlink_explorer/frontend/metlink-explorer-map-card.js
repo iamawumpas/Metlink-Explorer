@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.6)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.8)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1071,6 +1071,30 @@ class MetlinkExplorerCard extends LitElement {
     this._resetBubbleAutoCloseTimer();
   }
 
+  _isTrainDepartureRow(row, payloadTransportationType = "") {
+    const rowType = String(row?.route_type || "").trim().toLowerCase();
+    const payloadType = String(payloadTransportationType || "").trim().toLowerCase();
+    return rowType === "train" || payloadType === "train";
+  }
+
+  _normalizeTrainStationStopId(stopId) {
+    const raw = String(stopId || "").trim().toUpperCase();
+    if (!raw) return "";
+    return raw.replace(/\s*\d+$/, "");
+  }
+
+  _stopIdMatchesBubbleStop(row, bubbleStopId, payloadTransportationType = "") {
+    const rowStopId = String(row?.stop_id || "").trim();
+    const targetStopId = String(bubbleStopId || "").trim();
+    if (!rowStopId || !targetStopId) return false;
+    if (rowStopId === targetStopId) return true;
+    if (!this._isTrainDepartureRow(row, payloadTransportationType)) return false;
+
+    const rowStationId = this._normalizeTrainStationStopId(rowStopId);
+    const targetStationId = this._normalizeTrainStationStopId(targetStopId);
+    return Boolean(rowStationId && targetStationId && rowStationId === targetStationId);
+  }
+
   async _departuresForStop(stopId) {
     const now = Date.now();
     const maxFutureMs = 24 * 3600 * 1000;
@@ -1087,10 +1111,11 @@ class MetlinkExplorerCard extends LitElement {
     const seenKeys = new Set();
     payloads.forEach((payload) => {
       const departures = payload?.departures;
+      const payloadTransportationType = String(payload?.transportation_type || "").trim().toLowerCase();
       if (!Array.isArray(departures)) return;
 
       departures.forEach((row) => {
-        if (String(row?.stop_id || "") !== String(stopId)) return;
+        if (!this._stopIdMatchesBubbleStop(row, stopId, payloadTransportationType)) return;
         const depDate = this._parseDepartureDateTime(row?.service_date, row?.scheduled_departure_time || row?.departure_time);
         if (!depDate) return;
         const deltaMs = depDate.getTime() - now;
@@ -1105,7 +1130,10 @@ class MetlinkExplorerCard extends LitElement {
         const directionKey = directionId || directionLabel;
         const routeCanonical = routeShortName.trim().toUpperCase();
         const directionCanonical = directionLabel.trim().toUpperCase();
-        const dedupeKey = `row:${String(stopId)}:${routeCanonical}:${directionCanonical}:${depDate.getTime()}`;
+        const stopCanonical = this._isTrainDepartureRow(row, payloadTransportationType)
+          ? (this._normalizeTrainStationStopId(row?.stop_id) || String(row?.stop_id || "").trim().toUpperCase())
+          : String(row?.stop_id || "").trim().toUpperCase();
+        const dedupeKey = `row:${stopCanonical}:${routeCanonical}:${directionCanonical}:${depDate.getTime()}`;
         if (seenKeys.has(dedupeKey)) return;
         seenKeys.add(dedupeKey);
 
@@ -1549,13 +1577,27 @@ class MetlinkExplorerCard extends LitElement {
               const markerDiameter = (cat === 'train' || cat === 'bus') ? Math.max(32, Math.round(hubDiameter * 2)) : hubDiameter;
               const uniqueStops = new Map();
               selectedStops.forEach((stop) => {
-                const key = `${String(stop.stop_id || "")}:${Number(stop.stop_lat)}:${Number(stop.stop_lon)}`;
-                if (!uniqueStops.has(key)) uniqueStops.set(key, stop);
+                const rawStopId = String(stop.stop_id || "").trim();
+                const normalizedTrainStopId = this._normalizeTrainStationStopId(rawStopId);
+                const key = cat === 'train'
+                  ? `train:${normalizedTrainStopId || rawStopId.toUpperCase()}`
+                  : `${rawStopId}:${Number(stop.stop_lat)}:${Number(stop.stop_lon)}`;
+                if (!uniqueStops.has(key)) {
+                  uniqueStops.set(
+                    key,
+                    cat === 'train'
+                      ? { ...stop, stop_id: normalizedTrainStopId || rawStopId }
+                      : stop
+                  );
+                }
               });
               const dedupedStops = [...uniqueStops.values()];
               const offsets = this._computeHubCollisionOffsets(dedupedStops, 24);
               const hubFeatures = dedupedStops.map((stop) => {
-                const stopId = String(stop.stop_id || '');
+                const rawStopId = String(stop.stop_id || '').trim();
+                const stopId = cat === 'train'
+                  ? (this._normalizeTrainStationStopId(rawStopId) || rawStopId)
+                  : rawStopId;
                 const offset = offsets[stopId] || { dLon: 0, dLat: 0 };
                 const baseLon = Number(stop.stop_lon);
                 const baseLat = Number(stop.stop_lat);
