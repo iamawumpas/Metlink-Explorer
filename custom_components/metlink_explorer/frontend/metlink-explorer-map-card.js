@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.11.4)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.11.5)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -2087,10 +2087,8 @@ class MetlinkExplorerCard extends LitElement {
     return html`
       <ha-card>
         <div id="map"></div>
-        <div class="card-overlay">
-          ${this._renderLayerPanel()}
-          ${this._renderDepartureBubble()}
-        </div>
+        ${this._renderLayerPanel()}
+        ${this._renderDepartureBubble()}
       </ha-card>
     `;
   }
@@ -2154,12 +2152,6 @@ class MetlinkExplorerCard extends LitElement {
       :host { display: block; width: 100% !important; height: var(--metlink-card-height, calc(100vh - 64px)); grid-column: 1 / -1 !important; }
       ha-card { height: 100%; width: 100%; position: relative; overflow: hidden; background: #1c1c1c; border: none; }
       #map { position: absolute; inset: 0; height: 100%; width: 100%; }
-      .card-overlay {
-        position: absolute;
-        inset: 0;
-        z-index: 800;
-        pointer-events: none;
-      }
       .departure-bubble {
         position: absolute;
         z-index: 1000;

@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.5] - 2026-05-12
+
+### Fix - Restore stop bubble interactions after layer overlay refactor
+
+- Removed the full-card overlay wrapper that interfered with stop click flow.
+- Kept controls card-anchored while restoring reliable stop marker click handling for departure bubble cards.
+- Preserved absolute map fill layout so menu anchoring remains fixed to card boundaries.
+- Updated frontend build marker to `0.11.5`.
+
 ## [0.11.4] - 2026-05-12
 
 ### Fix - Keep layer controls fixed to card boundary while panning map
