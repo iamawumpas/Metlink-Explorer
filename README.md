@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-  <strong>Version:</strong> 0.10.5
+  <strong>Version:</strong> 0.10.6
     </td>
   </tr>
 </table>

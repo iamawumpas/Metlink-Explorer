@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.5)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.6)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -79,7 +79,7 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   static getStubConfig() {
-    return { center_map: "zone.home", zoom: 12, map_style: "voyager", icon_size: 33 };
+    return { center_map: "zone.home", zoom: 12, map_style: "voyager", icon_size: 33, map_projection: "normal" };
   }
 
   setConfig(config) {
@@ -98,8 +98,29 @@ class MetlinkExplorerCard extends LitElement {
       cable_entities: [],
       live_max_age_seconds: 120,
       icon_size: 33,
+      map_projection: "normal",
       ...config,
     };
+  }
+
+  _isIsometricProjection() {
+    return String(this.config?.map_projection || "normal") === "isometric";
+  }
+
+  _applyMapProjection(animate = true) {
+    if (!this.map) return;
+    const isometric = this._isIsometricProjection();
+    const targetPitch = isometric ? 55 : 0;
+    const targetBearing = isometric ? -20 : 0;
+    if (animate) {
+      this.map.easeTo({
+        pitch: targetPitch,
+        bearing: targetBearing,
+        duration: 450,
+      });
+      return;
+    }
+    this.map.jumpTo({ pitch: targetPitch, bearing: targetBearing });
   }
 
   _hexToRgb(hex) {
@@ -1037,6 +1058,10 @@ class MetlinkExplorerCard extends LitElement {
   _setBubbleDirectionFilter(filter) {
     if (!this._departureBubble) return;
     const next = String(filter || "all");
+    const inboundKey = this._departureBubble?.directionMeta?.inboundKey;
+    const outboundKey = this._departureBubble?.directionMeta?.outboundKey;
+    if (next === "inbound" && !inboundKey) return;
+    if (next === "outbound" && !outboundKey) return;
     if (this._departureBubble.directionFilter === next) return;
     this._departureBubble = {
       ...this._departureBubble,
@@ -1175,6 +1200,8 @@ class MetlinkExplorerCard extends LitElement {
     const bubble = this._departureBubble;
     if (!bubble) return null;
     const visibleDepartures = this._filteredBubbleDepartures(bubble);
+    const canFilterInbound = Boolean(bubble?.directionMeta?.inboundKey);
+    const canFilterOutbound = Boolean(bubble?.directionMeta?.outboundKey);
 
     const cardWidth = 360;
     const offset = 30;
@@ -1196,22 +1223,22 @@ class MetlinkExplorerCard extends LitElement {
           <div class="departure-heading">${bubble.stop?.id || ""} ${bubble.stop?.name || "Stop"}</div>
         </div>
         <div class="departure-body-shell">
-          ${bubble.directionMeta?.hasBoth ? html`
-            <div class="departure-filters" role="tablist" aria-label="Direction filter">
-              <button
-                class=${`departure-filter-btn ${bubble.directionFilter === "all" ? "active" : ""}`}
-                @click=${() => this._setBubbleDirectionFilter("all")}
-              >All</button>
-              <button
-                class=${`departure-filter-btn ${bubble.directionFilter === "inbound" ? "active" : ""}`}
-                @click=${() => this._setBubbleDirectionFilter("inbound")}
-              >Inbound</button>
-              <button
-                class=${`departure-filter-btn ${bubble.directionFilter === "outbound" ? "active" : ""}`}
-                @click=${() => this._setBubbleDirectionFilter("outbound")}
-              >Outbound</button>
-            </div>
-          ` : null}
+          <div class="departure-filters" role="tablist" aria-label="Direction filter">
+            <button
+              class=${`departure-filter-btn ${bubble.directionFilter === "all" ? "active" : ""}`}
+              @click=${() => this._setBubbleDirectionFilter("all")}
+            >All</button>
+            <button
+              class=${`departure-filter-btn ${bubble.directionFilter === "inbound" ? "active" : ""}`}
+              ?disabled=${!canFilterInbound}
+              @click=${() => this._setBubbleDirectionFilter("inbound")}
+            >Inbound</button>
+            <button
+              class=${`departure-filter-btn ${bubble.directionFilter === "outbound" ? "active" : ""}`}
+              ?disabled=${!canFilterOutbound}
+              @click=${() => this._setBubbleDirectionFilter("outbound")}
+            >Outbound</button>
+          </div>
           <div class="departure-list">
             ${bubble.loading ? html`<div class="departure-empty">Loading departures...</div>` : null}
             ${!bubble.loading && visibleDepartures.length === 0 ? html`<div class="departure-empty">No departures for this direction in the next 24h.</div>` : null}
@@ -1618,6 +1645,7 @@ class MetlinkExplorerCard extends LitElement {
       if (changedProps.has('config')) {
         const oldConfig = changedProps.get('config');
         if (oldConfig?.map_style !== this.config.map_style) this._updateMapStyle();
+        if (oldConfig?.map_projection !== this.config.map_projection) this._applyMapProjection(true);
         this._centerMap();
         this._renderRoutes();
       }
@@ -1667,12 +1695,15 @@ class MetlinkExplorerCard extends LitElement {
       },
       center: [174.88, -41.20],
       zoom: this.config.zoom || 12,
+      pitch: this._isIsometricProjection() ? 55 : 0,
+      bearing: this._isIsometricProjection() ? -20 : 0,
       attributionControl: false
     });
 
     this.map.on('load', () => {
       console.log('[MetlinkExplorer] map load event');
       this.map.resize();
+      this._applyMapProjection(false);
       this._centerMap();
       this._renderRoutes();
     });
@@ -1801,6 +1832,10 @@ class MetlinkExplorerCard extends LitElement {
         background: #ffffff;
         color: #111;
         border-color: #ffffff;
+      }
+      .departure-filter-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
       }
       .departure-bubble.open .departure-body-shell {
         animation: bubble-body-drop 240ms ease 220ms forwards;

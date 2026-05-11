@@ -31,6 +31,7 @@ class MetlinkExplorerEditor extends LitElement {
       ferry_entities: [],
       cable_entities: [],
       icon_size: 33,
+      map_projection: "normal",
       ...config
     };
   }
@@ -281,6 +282,21 @@ class MetlinkExplorerEditor extends LitElement {
              @value-changed=${(e) => this._updateConfig({icon_size: Number(e.detail.value)})}
            ></ha-selector>
         </div>
+        <div class="full-width map-projection-row">
+          <label class="manual-label">Map Projection</label>
+          <div class="projection-toggle" role="group" aria-label="Map Projection">
+            <span class="projection-label">Normal View</span>
+            <label class="projection-switch" title="Map Projection">
+              <input
+                type="checkbox"
+                .checked=${String(this._config.map_projection || "normal") === "isometric"}
+                @change=${(e) => this._updateConfig({ map_projection: e.target.checked ? "isometric" : "normal" })}
+              >
+              <span class="projection-slider"></span>
+            </label>
+            <span class="projection-label">Isometric View</span>
+          </div>
+        </div>
         ${this._renderSection('train', 'Train Routes', ['train', 'geometry'])}
         ${this._renderSection('bus', 'Bus Routes', ['bus', 'school', 'geometry'])}
         ${this._renderSection('ferry', 'Ferry Routes', ['ferry', 'geometry'])}
@@ -424,6 +440,37 @@ class MetlinkExplorerEditor extends LitElement {
       .selected-stop-item ha-icon { cursor: pointer; opacity: 0.75; }
       .selected-stop-item ha-icon:hover { opacity: 1; color: var(--error-color); }
       .empty-stop-text { font-size: 12px; color: var(--secondary-text-color); opacity: 0.85; }
+      .map-projection-row { margin-top: 18px; }
+      .projection-toggle { display: inline-flex; align-items: center; gap: 10px; }
+      .projection-label { font-size: 12px; color: var(--secondary-text-color); user-select: none; }
+      .projection-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+      .projection-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+      .projection-slider {
+        position: absolute;
+        inset: 0;
+        cursor: pointer;
+        background: rgba(127, 127, 127, 0.35);
+        border: 1px solid var(--divider-color);
+        transition: background-color 160ms ease;
+        border-radius: 999px;
+      }
+      .projection-slider:before {
+        content: "";
+        position: absolute;
+        width: 22px;
+        height: 22px;
+        left: 2px;
+        top: 2px;
+        background: #fff;
+        border-radius: 50%;
+        transition: transform 160ms ease;
+      }
+      .projection-switch input:checked + .projection-slider {
+        background: var(--primary-color);
+      }
+      .projection-switch input:checked + .projection-slider:before {
+        transform: translateX(22px);
+      }
     `;
   }
 }

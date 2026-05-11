@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.6] - 2026-05-11
+
+### Feature - Map projection switch with isometric mode
+
+- Added a new `Map Projection` switch in the editor map section:
+  - Left: `Normal View`
+  - Right: `Isometric View`
+- Added `map_projection` card configuration support and runtime camera updates in the map card.
+- Isometric mode now applies a pitched/bearing camera (`pitch: 55`, `bearing: -20`) while normal mode uses flat view.
+- Updated frontend build marker to `0.10.6`.
+
 ## [0.10.5] - 2026-05-11
 
 ### Improvement - Direction filter controls and longer bubble dwell time
