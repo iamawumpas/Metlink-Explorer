@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.3)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.4)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1019,10 +1019,9 @@ class MetlinkExplorerCard extends LitElement {
 
         const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
         const directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
-        const tripId = String(row?.trip_id || "");
-        const dedupeKey = tripId
-          ? `trip:${tripId}:${String(stopId)}:${depDate.getTime()}`
-          : `time:${String(stopId)}:${routeShortName}:${directionLabel}:${depDate.getTime()}`;
+        const routeCanonical = routeShortName.trim().toUpperCase();
+        const directionCanonical = directionLabel.trim().toUpperCase();
+        const dedupeKey = `row:${String(stopId)}:${routeCanonical}:${directionCanonical}:${depDate.getTime()}`;
         if (seenKeys.has(dedupeKey)) return;
         seenKeys.add(dedupeKey);
 
