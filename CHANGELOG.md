@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2026-05-12
+
+### Hotfix - Resolve ferry live rendering script syntax error
+
+- Fixed a frontend JavaScript syntax/runtime error (`Unexpected reserved word`) in live vehicle rendering introduced in `0.12.0`.
+- Replaced an `await` call inside a non-async `forEach` callback with an async-safe `for...of` loop.
+- Restored map card initialization and ferry live badge rendering without browser console exceptions.
+- Updated frontend build marker to `0.12.1`.
+
 ## [0.12.0] - 2026-05-12
 
 ### Feature - AIS-powered ferry live tracking and ferry live icon behavior

@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.0)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.1)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1755,7 +1755,7 @@ class MetlinkExplorerCard extends LitElement {
     const newActiveSources = new Set();
     let updatedCount = 0;
 
-    vehicleMap.forEach(({ feature, mode }, entityId) => {
+    for (const [entityId, { feature, mode }] of vehicleMap.entries()) {
       const coords = feature.geometry?.coordinates || [];
       const lon = Number(coords[0]);
       const lat = Number(coords[1]);
@@ -1800,7 +1800,7 @@ class MetlinkExplorerCard extends LitElement {
       this._setLiveSourceData(sourceId, [featureWithBadge]);
       this._ensureLiveLayers(sourceId, mode);
       updatedCount++;
-    });
+    }
 
     // Clear sources for vehicles that are no longer active.
     this._activeVehicleSources.forEach((sourceId) => {
