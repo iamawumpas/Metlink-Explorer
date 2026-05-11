@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.2)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.3)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -66,6 +66,7 @@ class MetlinkExplorerCard extends LitElement {
     this._boardPayloadCache = new Map();
     this._departureBubble = null;
     this._bubbleAutoCloseTimer = null;
+    this._bubbleOpenSequence = 0;
     this._boundMapClick = (event) => this._onMapClick(event);
     this._boundMapMove = () => this._updateDepartureBubbleAnchor();
   }
@@ -1004,6 +1005,7 @@ class MetlinkExplorerCard extends LitElement {
     );
 
     const rows = [];
+    const seenKeys = new Set();
     payloads.forEach((payload) => {
       const departures = payload?.departures;
       if (!Array.isArray(departures)) return;
@@ -1015,9 +1017,18 @@ class MetlinkExplorerCard extends LitElement {
         const deltaMs = depDate.getTime() - now;
         if (deltaMs < maxPastMs || deltaMs > maxFutureMs) return;
 
+        const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
+        const directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
+        const tripId = String(row?.trip_id || "");
+        const dedupeKey = tripId
+          ? `trip:${tripId}:${String(stopId)}:${depDate.getTime()}`
+          : `time:${String(stopId)}:${routeShortName}:${directionLabel}:${depDate.getTime()}`;
+        if (seenKeys.has(dedupeKey)) return;
+        seenKeys.add(dedupeKey);
+
         rows.push({
-          routeShortName: String(row?.route_short_name || row?.service_label || row?.route_id || "?"),
-          directionLabel: String(row?.direction_label || row?.destination || "Unknown direction"),
+          routeShortName,
+          directionLabel,
           departureDate: depDate,
           departureText: this._formatDepartureLine(depDate, deltaMs),
           sortTime: depDate.getTime(),
@@ -1030,6 +1041,8 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   async _openDepartureBubble(stopFeature) {
+    const openSequence = ++this._bubbleOpenSequence;
+
     const coords = stopFeature?.geometry?.coordinates || [];
     const lon = Number(coords[0]);
     const lat = Number(coords[1]);
@@ -1037,6 +1050,14 @@ class MetlinkExplorerCard extends LitElement {
 
     const stopId = String(stopFeature?.properties?.stop_id || "");
     const stopName = String(stopFeature?.properties?.stop_name || `Stop ${stopId}`);
+
+    // Always close any existing bubble first so the next one can replay its entry animation.
+    if (this._departureBubble) {
+      this._closeDepartureBubble();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      if (openSequence !== this._bubbleOpenSequence) return;
+    }
+
     const projected = this.map.project([lon, lat]);
     const side = this._stopBubbleSide(projected.x);
 
@@ -1056,6 +1077,7 @@ class MetlinkExplorerCard extends LitElement {
     this._resetBubbleAutoCloseTimer();
 
     const departures = await this._departuresForStop(stopId);
+    if (openSequence !== this._bubbleOpenSequence) return;
     if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
     this._departureBubble = {
       ...this._departureBubble,

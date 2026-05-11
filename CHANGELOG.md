@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2026-05-11
+
+### Fix - Departure bubble dedupe and open-sequencing reliability
+
+- Added departure-row deduplication in the bubble merge path so duplicate schedules from overlapping board payloads are shown once.
+- Enforced close-first/open-next behavior for stop bubbles with sequence guards to prevent stale async updates and animation race conditions.
+- Added a short handoff delay when switching stops so the popout animation reliably replays instead of snapping open when cards overlap.
+- Updated frontend build marker to `0.10.3`.
+
 ## [0.10.2] - 2026-05-11
 
 ### Fix - Departure bubble staged slide animation and marker clearance
