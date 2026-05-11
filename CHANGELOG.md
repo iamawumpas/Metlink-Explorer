@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.9] - 2026-05-11
+
+### Improvement - Inline direction chip beside route ID in departure bubble
+
+- Updated departure bubble row layout to render the direction chip (`Inbound`/`Outbound`) inline with the route ID to reduce vertical space usage.
+- Kept existing mode-agnostic direction-tag logic so the same inline behavior applies to train, bus, ferry, and cable car rows.
+- Updated frontend build marker to `0.10.9`.
+
 ## [0.10.8] - 2026-05-11
 
 ### Fix - Merge train platform stop IDs into one station marker and bubble

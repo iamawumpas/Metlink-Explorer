@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.8)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.9)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1272,10 +1272,12 @@ class MetlinkExplorerCard extends LitElement {
             ${!bubble.loading && visibleDepartures.length === 0 ? html`<div class="departure-empty">No departures for this direction in the next 24h.</div>` : null}
             ${!bubble.loading ? visibleDepartures.map((dep) => html`
               <div class="departure-item">
-                <div class="departure-route">${dep.routeShortName}</div>
-                ${this._departureDirectionTag(dep, bubble)
-                  ? html`<div class="departure-direction-chip">${this._departureDirectionTag(dep, bubble)}</div>`
-                  : null}
+                <div class="departure-route-line">
+                  <div class="departure-route">${dep.routeShortName}</div>
+                  ${this._departureDirectionTag(dep, bubble)
+                    ? html`<div class="departure-direction-chip">${this._departureDirectionTag(dep, bubble)}</div>`
+                    : null}
+                </div>
                 <div class="departure-destination">${dep.directionLabel}</div>
                 <div class="departure-time">${dep.departureText}</div>
               </div>
@@ -1947,6 +1949,12 @@ class MetlinkExplorerCard extends LitElement {
       .departure-item:first-child {
         border-top: 1px solid rgba(255, 255, 255, 0.2);
       }
+      .departure-route-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
       .departure-route {
         font-size: 22px;
         font-weight: 700;
@@ -1959,7 +1967,6 @@ class MetlinkExplorerCard extends LitElement {
         line-height: 1.2;
       }
       .departure-direction-chip {
-        margin-top: 5px;
         display: inline-block;
         padding: 2px 8px;
         border-radius: 999px;
