@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import logging
 from datetime import datetime, timedelta
@@ -14,6 +15,12 @@ import async_timeout
 
 from .const import (
     API_ENDPOINTS,
+    AIS_FERRY_SEED_NAMES,
+    AISSTREAM_DEFAULT_BBOX,
+    AISSTREAM_POSITION_CACHE_SECONDS,
+    AISSTREAM_SAMPLE_SECONDS,
+    AISSTREAM_WS_URL,
+    AIS_VESSEL_REFRESH_SECONDS,
     BASE_URL,
     DEFAULT_GTFS_CACHE_TTL_SECONDS,
     REQUEST_TIMEOUT,
@@ -39,12 +46,14 @@ class MetlinkApiClient:
         api_key: str,
         session: aiohttp.ClientSession,
         transportation_type: int | None = None,
+        ais_api_key: str | None = None,
     ) -> None:
         """Initialize the API client."""
         self._api_key = api_key
         self._session = session
         self._base_url = BASE_URL
         self._transportation_type = int(transportation_type) if transportation_type is not None else None
+        self._ais_api_key = str(ais_api_key or "").strip()
         # Simple caches to reduce repeated static lookups
         self._route_short_name_cache = {}
         # TTL caches for static endpoints
@@ -70,6 +79,10 @@ class MetlinkApiClient:
         self._vehicle_positions_cache: tuple[datetime, Any] | None = None
         self._trip_updates_cache: tuple[datetime, Any] | None = None
         self._live_cache_ttl_seconds = 30
+        self._ais_positions_cache: tuple[datetime, list[dict[str, Any]]] | None = None
+        self._ais_position_cache_seconds = AISSTREAM_POSITION_CACHE_SECONDS
+        self._ais_vessel_registry: dict[str, str] = {}
+        self._ais_vessel_registry_ts: datetime | None = None
         # Stop predictions circuit breaker: track consecutive failures per stop.
         # After _STOP_PRED_FAIL_THRESHOLD failures the stop is skipped for
         # _STOP_PRED_BACKOFF_SECONDS before being retried.
@@ -948,10 +961,195 @@ class MetlinkApiClient:
             _LOGGER.error("Failed to fetch vehicle positions: %s", exc)
             raise
 
+    async def get_ferry_ais_positions(self, route_id: str) -> list[dict[str, Any]]:
+        """Get ferry vehicle positions from AISStream and normalize to GTFS-RT-like structure."""
+        if not self._ais_api_key:
+            _LOGGER.debug("AIS API key not configured; ferry AIS live positions disabled")
+            return []
+
+        now = datetime.now()
+        if (
+            self._ais_positions_cache is not None
+            and (now - self._ais_positions_cache[0]).total_seconds() < self._ais_position_cache_seconds
+        ):
+            return self._ais_positions_cache[1]
+
+        refresh_registry = (
+            self._ais_vessel_registry_ts is None
+            or (now - self._ais_vessel_registry_ts).total_seconds() > AIS_VESSEL_REFRESH_SECONDS
+        )
+
+        raw_positions = await self._fetch_aisstream_position_reports(refresh_registry=refresh_registry)
+        normalized = self._normalize_ais_positions(raw_positions, route_id)
+        self._ais_positions_cache = (now, normalized)
+        return normalized
+
+    async def _fetch_aisstream_position_reports(self, refresh_registry: bool = False) -> list[dict[str, Any]]:
+        """Collect a short sample of AISStream position reports from Wellington Harbour bbox."""
+        reports: list[dict[str, Any]] = []
+
+        subscription = {
+            "APIKey": self._ais_api_key,
+            "BoundingBoxes": AISSTREAM_DEFAULT_BBOX,
+            "FilterMessageTypes": ["PositionReport", "StandardClassBPositionReport", "ExtendedClassBPositionReport"],
+        }
+
+        # Once a day, allow broad discovery; otherwise prefer known MMSI fleet set.
+        if self._ais_vessel_registry and not refresh_registry:
+            subscription["FiltersShipMMSI"] = list(self._ais_vessel_registry.keys())[:50]
+
+        try:
+            async with self._session.ws_connect(AISSTREAM_WS_URL, heartbeat=10) as ws:
+                await ws.send_str(json.dumps(subscription))
+                end_at = asyncio.get_running_loop().time() + AISSTREAM_SAMPLE_SECONDS
+
+                while asyncio.get_running_loop().time() < end_at:
+                    try:
+                        msg = await ws.receive(timeout=0.8)
+                    except asyncio.TimeoutError:
+                        continue
+
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        payload = json.loads(msg.data)
+                        if not isinstance(payload, dict):
+                            continue
+
+                        msg_type = str(payload.get("MessageType", "")).strip()
+                        if msg_type not in {
+                            "PositionReport",
+                            "StandardClassBPositionReport",
+                            "ExtendedClassBPositionReport",
+                        }:
+                            continue
+
+                        metadata = payload.get("MetaData") or payload.get("Metadata") or {}
+                        mmsi = str(metadata.get("MMSI") or "").strip()
+                        ship_name = str(metadata.get("ShipName") or "").strip()
+
+                        body = (payload.get("Message") or {}).get(msg_type) or {}
+                        lat = body.get("Latitude", metadata.get("latitude", metadata.get("Latitude")))
+                        lon = body.get("Longitude", metadata.get("longitude", metadata.get("Longitude")))
+                        cog = body.get("Cog")
+                        hdg = body.get("TrueHeading")
+                        sog = body.get("Sog")
+                        ts = metadata.get("time_utc")
+
+                        if lat is None or lon is None:
+                            continue
+
+                        report = {
+                            "mmsi": mmsi,
+                            "ship_name": ship_name,
+                            "latitude": lat,
+                            "longitude": lon,
+                            "bearing": hdg if hdg not in (None, 511) else cog,
+                            "speed": sog,
+                            "timestamp": ts,
+                        }
+                        reports.append(report)
+
+                    elif msg.type in {aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.ERROR}:
+                        break
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("AISStream fetch failed: %s", exc)
+            return []
+
+        # Dynamic vessel refresh: keep known ferry vessel MMSI/name mapping current.
+        if reports:
+            if refresh_registry:
+                self._ais_vessel_registry = {}
+            seeds = {name.upper() for name in AIS_FERRY_SEED_NAMES}
+
+            if refresh_registry:
+                counts: dict[str, int] = {}
+                names: dict[str, str] = {}
+                for row in reports:
+                    mmsi = str(row.get("mmsi") or "").strip()
+                    if not mmsi:
+                        continue
+                    counts[mmsi] = counts.get(mmsi, 0) + 1
+                    ship_name = str(row.get("ship_name") or "").strip().upper()
+                    if ship_name:
+                        names[mmsi] = ship_name
+
+                # Prefer known East-by-West seed names first, then highest activity.
+                selected: list[str] = [
+                    mmsi for mmsi, name in names.items() if name in seeds
+                ]
+                selected_sorted = sorted(counts.keys(), key=lambda key: counts.get(key, 0), reverse=True)
+                for mmsi in selected_sorted:
+                    if mmsi not in selected:
+                        selected.append(mmsi)
+                    if len(selected) >= 3:
+                        break
+
+                for mmsi in selected[:3]:
+                    self._ais_vessel_registry[mmsi] = names.get(mmsi, mmsi)
+            else:
+                for row in reports:
+                    mmsi = str(row.get("mmsi") or "").strip()
+                    ship_name = str(row.get("ship_name") or "").strip().upper()
+                    if mmsi in self._ais_vessel_registry and ship_name:
+                        self._ais_vessel_registry[mmsi] = ship_name
+            self._ais_vessel_registry_ts = datetime.now()
+
+        return reports
+
+    def _normalize_ais_positions(self, reports: list[dict[str, Any]], route_id: str) -> list[dict[str, Any]]:
+        """Normalize AIS reports into GTFS-RT-like vehicle payload for existing tracker pipeline."""
+        if not isinstance(reports, list):
+            return []
+
+        normalized: list[dict[str, Any]] = []
+        filtered_reports = reports
+        if self._ais_vessel_registry:
+            allowed = set(self._ais_vessel_registry.keys())
+            filtered_reports = [row for row in reports if str(row.get("mmsi") or "") in allowed]
+
+        seen: set[str] = set()
+        for row in filtered_reports:
+            mmsi = str(row.get("mmsi") or "").strip()
+            if not mmsi or mmsi in seen:
+                continue
+            seen.add(mmsi)
+
+            try:
+                lat = float(row.get("latitude"))
+                lon = float(row.get("longitude"))
+            except (TypeError, ValueError):
+                continue
+
+            label = str(row.get("ship_name") or self._ais_vessel_registry.get(mmsi) or mmsi).strip()
+            normalized.append(
+                {
+                    "id": f"ais_{mmsi}",
+                    "vehicle": {
+                        "trip": {
+                            "route_id": str(route_id),
+                            "trip_id": f"{route_id}_ais_{mmsi}",
+                        },
+                        "vehicle": {
+                            "id": f"ais_{mmsi}",
+                            "label": label,
+                        },
+                        "position": {
+                            "latitude": lat,
+                            "longitude": lon,
+                            "bearing": row.get("bearing"),
+                            "speed": row.get("speed"),
+                        },
+                        "timestamp": datetime.now().timestamp(),
+                    },
+                }
+            )
+
+        return normalized
+
     def reset_live_caches(self) -> None:
         """Clear live GTFS-RT caches so next request forces a fresh download."""
         self._vehicle_positions_cache = None
         self._trip_updates_cache = None
+        self._ais_positions_cache = None
 
     def vehicle_positions_fetched_at(self) -> datetime | None:
         """Return timestamp of latest vehicle positions fetch/cache fill."""

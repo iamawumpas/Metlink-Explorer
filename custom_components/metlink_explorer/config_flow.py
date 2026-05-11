@@ -14,6 +14,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .api import MetlinkApiClient, MetlinkApiError
 from .const import (
+    CONF_AIS_API_KEY,
     DOMAIN,
     CONF_ACTIVE_DIRECTION,
     CONF_API_KEY,
@@ -39,6 +40,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._api_key: str | None = None
+        self._ais_api_key: str | None = None
         self._api_client: MetlinkApiClient | None = None
         self._transportation_type: int | None = None
         self._available_routes: list[dict[str, Any]] = []
@@ -55,13 +57,15 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Use API key from existing entry
             existing_entry = existing_entries[0]
             self._api_key = existing_entry.data.get(CONF_API_KEY)
+            self._ais_api_key = existing_entry.data.get(CONF_AIS_API_KEY)
             if self._api_key:
                 session = async_get_clientsession(self.hass)
-                self._api_client = MetlinkApiClient(self._api_key, session)
+                self._api_client = MetlinkApiClient(self._api_key, session, ais_api_key=self._ais_api_key)
                 return await self.async_step_transportation_type()
 
         if user_input is not None:
             api_key = user_input[CONF_API_KEY]
+            ais_api_key = str(user_input.get(CONF_AIS_API_KEY, "")).strip() or None
             
             # Validate API key
             session = async_get_clientsession(self.hass)
@@ -70,6 +74,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 if await api_client.validate_api_key():
                     self._api_key = api_key
+                    self._ais_api_key = ais_api_key
                     self._api_client = api_client
                     return await self.async_step_transportation_type()
                 else:
@@ -81,6 +86,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema({
                 vol.Required(CONF_API_KEY): cv.string,
+                vol.Optional(CONF_AIS_API_KEY): cv.string,
             }),
             errors=errors,
         )
@@ -276,6 +282,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     title=f"{transportation_name}",
                     data={
                         CONF_API_KEY: self._api_key,
+                        CONF_AIS_API_KEY: self._ais_api_key,
                         CONF_TRANSPORTATION_TYPE: self._transportation_type,
                         CONF_ROUTE_ID: route_id,
                         CONF_ROUTE_SHORT_NAME: route_short_name,

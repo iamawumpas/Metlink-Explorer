@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-05-12
+
+### Feature - AIS-powered ferry live tracking and ferry live icon behavior
+
+- Added AIS API key support in config flow and integration setup so ferry live tracking can run from AISStream.
+- Implemented ferry-specific coordinator/API flow so ferry live positions come from AIS only (no Metlink live precedence/fallback).
+- Added AIS sampling/cache pipeline with daily vessel registry refresh to keep East by West fleet vessel names and MMSI mappings current.
+- Updated ferry live badges to render as circular markers without the map-pin pointer.
+- Ferry live icon direction now follows heading variant rules: EAST uses default ferry icon orientation and WEST uses a horizontally flipped icon.
+- Kept route-level editor live tracking toggle and hamburger live-layer mode toggle behavior fully applied to ferry live layers.
+- Updated frontend build marker to `0.12.0`.
+
 ## [0.11.6] - 2026-05-12
 
 ### Hotfix - Prevent browser freeze from repeated layout resize updates

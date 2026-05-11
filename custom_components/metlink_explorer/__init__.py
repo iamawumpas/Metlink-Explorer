@@ -16,6 +16,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import MetlinkApiClient
 from .coordinator import MetlinkDataUpdateCoordinator, MetlinkRouteGeometryCoordinator
 from .const import (
+    CONF_AIS_API_KEY,
     CONF_API_KEY,
     CONF_ROUTE_DESC,
     CONF_ROUTE_ID,
@@ -210,6 +211,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data[CONF_API_KEY],
         session,
         transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
+        ais_api_key=entry.data.get(CONF_AIS_API_KEY),
     )
 
     coordinators: dict[str, MetlinkDataUpdateCoordinator] = {}
@@ -220,7 +222,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Default live_tracking to True for backward compatibility (existing routes)
         live_tracking_enabled = route.get("live_tracking", True)
         coordinator = MetlinkDataUpdateCoordinator(
-            hass, api_client, route_id, live_tracking_enabled=live_tracking_enabled
+            hass,
+            api_client,
+            route_id,
+            live_tracking_enabled=live_tracking_enabled,
+            transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
         )
         await coordinator.async_config_entry_first_refresh()
         coordinators[route_id] = coordinator

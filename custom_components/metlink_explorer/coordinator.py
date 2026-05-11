@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MetlinkApiClient, MetlinkApiError
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, TRAIN_GTFS_CACHE_TTL_SECONDS
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, FERRY_ROUTE_TYPE, TRAIN_GTFS_CACHE_TTL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,11 +23,13 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         api_client: MetlinkApiClient,
         route_id: str,
         live_tracking_enabled: bool = False,
+        transportation_type: int | None = None,
     ) -> None:
         """Initialize route coordinator."""
         self.api_client = api_client
         self.route_id = str(route_id)
         self.live_tracking_enabled = live_tracking_enabled
+        self.transportation_type = int(transportation_type) if transportation_type is not None else None
         self._live_cache_primed = False
 
         super().__init__(
@@ -48,7 +50,11 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             
             # Always poll live feeds. Route live-tracking toggles should only control
             # frontend rendering visibility, not backend data collection.
-            vehicle_positions = await self.api_client.get_vehicle_positions()
+            if self.transportation_type == FERRY_ROUTE_TYPE:
+                # Ferry live tracking is sourced from AIS, not Metlink GTFS-RT.
+                vehicle_positions = await self.api_client.get_ferry_ais_positions(self.route_id)
+            else:
+                vehicle_positions = await self.api_client.get_vehicle_positions()
             vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
             trip_updates = await self.api_client.get_trip_updates()
             today_str = datetime.now().strftime("%Y%m%d")

@@ -39,6 +39,7 @@ CONF_ROUTE_DESC = "route_desc"
 CONF_ROUTES = "routes"
 CONF_ACTIVE_DIRECTION = "active_direction"
 CONF_LEGACY_DIRECTION_ENTITIES = "legacy_direction_entities"
+CONF_AIS_API_KEY = "ais_api_key"
 
 # Default Values
 DEFAULT_SCAN_INTERVAL = 30  # Aligned with Metlink backend update frequency and new RTI system
@@ -47,3 +48,16 @@ DEFAULT_ACTIVE_DIRECTION = 0
 DEFAULT_GTFS_CACHE_TTL_SECONDS = 300
 TRAIN_GTFS_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 TRAIN_GEOMETRY_SENSOR_KEY = "train_route_geometry"
+
+# AIS ferry live tracking
+FERRY_ROUTE_TYPE = 4
+AISSTREAM_WS_URL = "wss://stream.aisstream.io/v0/stream"
+AISSTREAM_DEFAULT_BBOX = [[[-41.38, 174.73], [-41.21, 174.92]]]
+AISSTREAM_SAMPLE_SECONDS = 2.5
+AISSTREAM_POSITION_CACHE_SECONDS = 20
+AIS_VESSEL_REFRESH_SECONDS = 24 * 60 * 60
+AIS_FERRY_SEED_NAMES = [
+    "IKA RERE",
+    "COBALT",
+    "CITY CAT",
+]

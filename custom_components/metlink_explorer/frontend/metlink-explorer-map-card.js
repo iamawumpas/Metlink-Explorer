@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.11.6)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.0)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -209,6 +209,18 @@ class MetlinkExplorerCard extends LitElement {
     return `metlink-shape-${safeBg}-${diameter}-${borderWidth}`;
   }
 
+  _ferryLiveShapeId(diameter, borderWidth, directionVariant) {
+    const dir = String(directionVariant || "east").toLowerCase();
+    return `metlink-ferry-live-${dir}-${diameter}-${borderWidth}`;
+  }
+
+  _ferryDirectionVariant(bearing) {
+    const deg = Number.isFinite(Number(bearing)) ? Number(bearing) : 90;
+    const rad = (deg * Math.PI) / 180;
+    // EAST uses default icon, WEST uses flipped icon.
+    return Math.sin(rad) >= 0 ? "east" : "west";
+  }
+
   _badgeTextId(routeLabel, textColor, diameter, fontSize) {
     const safeLabel = String(routeLabel || "").replace(/[^a-zA-Z0-9_-]/g, "_");
     const safeFg = String(textColor || "").replace("#", "");
@@ -281,6 +293,97 @@ class MetlinkExplorerCard extends LitElement {
     ctx.fillText(routeLabel, center, center + 0.5);
 
     const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
+    this.map.addImage(imageId, imageData, { pixelRatio: dpr });
+  }
+
+  async _ensureFerryLiveBadge(imageId, diameter, borderWidth, dpr, flipHorizontal = false) {
+    if (!this.map || this.map.hasImage(imageId)) return;
+
+    const pixelSize = Math.max(1, Math.round(diameter * dpr));
+    let rawImg;
+    try {
+      const result = await this.map.loadImage('/metlink_explorer_frontend/ferry-stop.png');
+      rawImg = result.data;
+    } catch (e) {
+      console.warn('[MetlinkExplorer] Failed to load ferry-stop.png for live badge, fallback to default shape', e);
+      this._ensureBadgeShape(imageId, '#ffffff', diameter, borderWidth, dpr);
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = pixelSize;
+    canvas.height = pixelSize;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    const center = diameter / 2;
+    const radius = Math.max(6, center - borderWidth - 0.5);
+
+    // Circular badge with no pointer.
+    ctx.beginPath();
+    ctx.arc(center, center, radius, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.lineWidth = borderWidth;
+    ctx.strokeStyle = '#111111';
+    ctx.stroke();
+
+    // Build a transparent ferry icon source by stripping cyan background.
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = rawImg.width;
+    sourceCanvas.height = rawImg.height;
+    const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+    if (!sourceCtx) return;
+    sourceCtx.drawImage(rawImg, 0, 0);
+
+    const sourceData = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const sourcePixels = sourceData.data;
+    let minX = sourceCanvas.width;
+    let minY = sourceCanvas.height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let i = 0; i < sourcePixels.length; i += 4) {
+      const r = sourcePixels[i];
+      const g = sourcePixels[i + 1];
+      const b = sourcePixels[i + 2];
+      // Remove cyan background.
+      if (b > 180 && g > 120 && r < 80) {
+        sourcePixels[i + 3] = 0;
+      }
+      if (sourcePixels[i + 3] === 0) continue;
+      const pixelIndex = i / 4;
+      const x = pixelIndex % sourceCanvas.width;
+      const y = Math.floor(pixelIndex / sourceCanvas.width);
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    sourceCtx.putImageData(sourceData, 0, 0);
+
+    const hasBounds = maxX >= minX && maxY >= minY;
+    const cropX = hasBounds ? minX : 0;
+    const cropY = hasBounds ? minY : 0;
+    const cropWidth = hasBounds ? (maxX - minX + 1) : sourceCanvas.width;
+    const cropHeight = hasBounds ? (maxY - minY + 1) : sourceCanvas.height;
+
+    const iconSize = diameter * 0.64;
+    const iconHalf = iconSize / 2;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(center, center, Math.max(4, radius - borderWidth), 0, Math.PI * 2);
+    ctx.clip();
+    ctx.translate(center, center);
+    if (flipHorizontal) ctx.scale(-1, 1);
+    ctx.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, -iconHalf, -iconHalf, iconSize, iconSize);
+    ctx.restore();
+
+    const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
+    if (this.map.hasImage(imageId)) return;
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
   }
 
@@ -1614,7 +1717,7 @@ class MetlinkExplorerCard extends LitElement {
       }));
   }
 
-  _renderLiveVehicles() {
+  async _renderLiveVehicles() {
     if (!this.map) return;
 
     if (!this.map.isStyleLoaded()) {
@@ -1678,9 +1781,15 @@ class MetlinkExplorerCard extends LitElement {
       const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
       const textColor   = feature.properties.text_color || "#ffffff";
       const haloColor   = feature.properties.text_halo_color || "rgba(0,0,0,0.45)";
-      const shapeId = this._badgeShapeId(markerColor, badgeDiameter, borderWidth);
+      let shapeId = this._badgeShapeId(markerColor, badgeDiameter, borderWidth);
       const textId  = this._badgeTextId(routeLabel, textColor, badgeDiameter, fontSize);
-      this._ensureBadgeShape(shapeId, markerColor, badgeDiameter, borderWidth, dpr);
+      if (mode === 'ferry') {
+        const directionVariant = this._ferryDirectionVariant(bearing);
+        shapeId = this._ferryLiveShapeId(badgeDiameter, borderWidth, directionVariant);
+        await this._ensureFerryLiveBadge(shapeId, badgeDiameter, borderWidth, dpr, directionVariant === 'west');
+      } else {
+        this._ensureBadgeShape(shapeId, markerColor, badgeDiameter, borderWidth, dpr);
+      }
       this._ensureBadgeText(textId, routeLabel, textColor, haloColor, badgeDiameter, fontSize, dpr);
 
       const featureWithBadge = {
