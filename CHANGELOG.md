@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.12] - 2026-05-12
+
+### Improvement - Refine ferry stop icon composition inside the triangle
+
+- Cropped the `ferry-stop.png` overlay to the visible ferry silhouette and stripped its solid background before drawing it.
+- Increased the rendered ferry icon size by 25% so the vessel itself is more prominent inside the stop marker.
+- Updated the ferry stop triangle background to cyan while keeping the white border and triangle clip.
+- Updated frontend build marker to `0.10.12`.
+
 ## [0.10.11] - 2026-05-11
 
 ### Improvement - Use dedicated ferry and train stop marker assets

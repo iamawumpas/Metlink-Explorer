@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.11)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.12)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -401,7 +401,7 @@ class MetlinkExplorerCard extends LitElement {
     const center = diameter / 2;
     const radius = Math.max(4, center - 2);
 
-    // Black triangle background.
+    // Cyan triangle background.
     const triRadius = Math.max(4, radius);
     ctx.beginPath();
     for (let i = 0; i < 3; i++) {
@@ -412,17 +412,76 @@ class MetlinkExplorerCard extends LitElement {
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
-    ctx.fillStyle = '#000000';
+    ctx.fillStyle = '#12cfe3';
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#ffffff';
     ctx.stroke();
 
-    // Ferry icon overlay.
-    const iconSize = diameter * 0.56;
+    // Strip the solid cyan background, crop to the visible ferry silhouette,
+    // then zoom the icon by 25% while keeping it clipped inside the triangle.
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = rawImg.width;
+    sourceCanvas.height = rawImg.height;
+    const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+    if (!sourceCtx) return;
+    sourceCtx.drawImage(rawImg, 0, 0);
+
+    const sourceData = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const sourcePixels = sourceData.data;
+    let minX = sourceCanvas.width;
+    let minY = sourceCanvas.height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let i = 0; i < sourcePixels.length; i += 4) {
+      const r = sourcePixels[i];
+      const g = sourcePixels[i + 1];
+      const b = sourcePixels[i + 2];
+
+      // Convert the flat cyan background to transparency.
+      if (b > 180 && g > 120 && r < 80) {
+        sourcePixels[i + 3] = 0;
+      }
+
+      if (sourcePixels[i + 3] === 0) continue;
+      const pixelIndex = i / 4;
+      const x = pixelIndex % sourceCanvas.width;
+      const y = Math.floor(pixelIndex / sourceCanvas.width);
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    }
+    sourceCtx.putImageData(sourceData, 0, 0);
+
+    const hasBounds = maxX >= minX && maxY >= minY;
+    const cropX = hasBounds ? Math.max(0, minX - Math.round(sourceCanvas.width * 0.02)) : 0;
+    const cropY = hasBounds ? Math.max(0, minY - Math.round(sourceCanvas.height * 0.02)) : 0;
+    const cropWidth = hasBounds
+      ? Math.min(sourceCanvas.width - cropX, (maxX - minX + 1) + Math.round(sourceCanvas.width * 0.04))
+      : sourceCanvas.width;
+    const cropHeight = hasBounds
+      ? Math.min(sourceCanvas.height - cropY, (maxY - minY + 1) + Math.round(sourceCanvas.height * 0.04))
+      : sourceCanvas.height;
+
+    const iconSize = diameter * 0.70;
     const iconX = center - (iconSize / 2);
-    const iconY = center - (iconSize / 2);
-    ctx.drawImage(rawImg, iconX, iconY, iconSize, iconSize);
+    const iconY = center - (iconSize / 2) - (diameter * 0.01);
+
+    ctx.save();
+    ctx.beginPath();
+    const clipRadius = Math.max(4, triRadius - 3);
+    for (let i = 0; i < 3; i++) {
+      const angle = (-Math.PI / 2) + (i * (Math.PI * 2 / 3));
+      const x = center + Math.cos(angle) * clipRadius;
+      const y = center + Math.sin(angle) * clipRadius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, iconX, iconY, iconSize, iconSize);
+    ctx.restore();
 
     const imageData = ctx.getImageData(0, 0, pixelSize, pixelSize);
     if (this.map.hasImage(imageId)) return;
