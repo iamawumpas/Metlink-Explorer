@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.11.1)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.11.2)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -91,7 +91,46 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   static getStubConfig() {
-    return { center_map: "zone.home", zoom: 12, map_style: "voyager", icon_size: 33, map_projection: "normal" };
+    return { center_map: "zone.home", zoom: 12, map_style: "voyager", icon_size: 25, map_projection: "normal" };
+  }
+
+  _clampIconSize(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 25;
+    return Math.max(19, Math.min(31, n));
+  }
+
+  _cloneLayerVisibilityState(state) {
+    return {
+      routes: { ...(state?.routes || {}) },
+      live: { ...(state?.live || {}) },
+      stops: { ...(state?.stops || {}) },
+    };
+  }
+
+  _layerVisibilityFromConfig(cfg) {
+    const defaults = {
+      routes: { train: true, bus: true, ferry: true, cable: true },
+      live:   { train: true, bus: true, ferry: true, cable: true },
+      stops:  { train: true, bus: true, ferry: true, cable: true },
+    };
+    const modes = ['train', 'bus', 'ferry', 'cable'];
+    modes.forEach((mode) => {
+      const entries = cfg?.[`${mode}_entities`] || [];
+      if (entries.length === 0) return;
+      // Live defaults follow YAML route settings: if every route for a mode has
+      // live_tracking explicitly false, default the mode toggle to off.
+      defaults.live[mode] = entries.some((entry) => entry?.live_tracking !== false);
+    });
+    return defaults;
+  }
+
+  _applyAllLayerVisibility() {
+    const modes = ['train', 'bus', 'ferry', 'cable'];
+    const types = ['routes', 'live', 'stops'];
+    types.forEach((type) => {
+      modes.forEach((mode) => this._applyLayerVisibility(type, mode));
+    });
   }
 
   setConfig(config) {
@@ -109,10 +148,19 @@ class MetlinkExplorerCard extends LitElement {
       ferry_entities: [],
       cable_entities: [],
       live_max_age_seconds: 120,
-      icon_size: 33,
+      icon_size: 25,
       map_projection: "normal",
       ...config,
     };
+    this.config.icon_size = this._clampIconSize(this.config.icon_size);
+
+    this._layerDefaultVisibility = this._layerVisibilityFromConfig(this.config);
+    this._layerVisibility = this._cloneLayerVisibilityState(this._layerDefaultVisibility);
+    if (this._layerResetTimer) {
+      clearTimeout(this._layerResetTimer);
+      this._layerResetTimer = null;
+    }
+    this._applyAllLayerVisibility();
   }
 
   _isIsometricProjection() {
@@ -639,9 +687,10 @@ class MetlinkExplorerCard extends LitElement {
   _revertLayerVisibilityToDefaults() {
     const modes = ['train', 'bus', 'ferry', 'cable'];
     const types = ['routes', 'live', 'stops'];
+    const defaults = this._layerDefaultVisibility || this._layerVisibilityFromConfig(this.config);
     types.forEach((type) => {
       modes.forEach((mode) => {
-        this._layerVisibility[type][mode] = true;
+        this._layerVisibility[type][mode] = defaults[type]?.[mode] !== false;
         this._applyLayerVisibility(type, mode);
       });
     });
@@ -1575,7 +1624,7 @@ class MetlinkExplorerCard extends LitElement {
     }
 
     const categories = ["train", "bus", "ferry"];
-    const iconSize = Number(this.config.icon_size || 33);
+    const iconSize = this._clampIconSize(this.config.icon_size || 25);
     const badgeDiameter = Math.max(24, Math.round(iconSize * 2));
     const fontSize = Math.max(12, Math.round(iconSize * 0.78));
     const borderWidth = Math.max(2, Math.round(iconSize * 0.12));
@@ -1765,8 +1814,8 @@ class MetlinkExplorerCard extends LitElement {
             }
 
             if (selectedStops.length > 0) {
-              const hubDiameter = Math.max(16, Math.round(33 * 0.78));
-              const markerDiameter = (cat === 'train' || cat === 'bus' || cat === 'ferry') ? Math.max(32, Math.round(hubDiameter * 2)) : hubDiameter;
+              const iconSize = this._clampIconSize(this.config.icon_size || 25);
+              const markerDiameter = Math.max(24, Math.round(iconSize * 2));
               const uniqueStops = new Map();
               selectedStops.forEach((stop) => {
                 const rawStopId = String(stop.stop_id || "").trim();
@@ -1888,6 +1937,10 @@ class MetlinkExplorerCard extends LitElement {
         const oldConfig = changedProps.get('config');
         if (oldConfig?.map_style !== this.config.map_style) this._updateMapStyle();
         if (oldConfig?.map_projection !== this.config.map_projection) this._applyMapProjection(true);
+        if (oldConfig?.icon_size !== this.config.icon_size) {
+          // Force full live badge refresh on size change, even for stationary vehicles.
+          this._vehicleLastPositions.clear();
+        }
         this._centerMap();
         this._renderRoutes();
       }

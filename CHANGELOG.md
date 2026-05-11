@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.2] - 2026-05-12
+
+### Fix - Icon size scaling consistency and YAML-aligned layer defaults
+
+- Layer panel toggle defaults now align with YAML route settings for live tracking, so modes with live tracking disabled start in the off state.
+- Stop badge sizing now scales from the `icon_size` slider for all stop marker modes (train, bus, ferry, and cable car).
+- Live tracking badge resizing now updates immediately on icon size changes, including stationary vehicles.
+- Constrained `icon_size` range around the 25 baseline to +/-25 percent (`19..31`) and aligned default slider midpoint to `25`.
+- Updated frontend build marker to `0.11.2`.
+
 ## [0.11.1] - 2026-05-12
 
 ### Improvement - Layer panel readability and labeling polish

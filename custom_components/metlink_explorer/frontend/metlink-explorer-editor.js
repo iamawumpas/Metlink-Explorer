@@ -30,7 +30,7 @@ class MetlinkExplorerEditor extends LitElement {
       bus_entities: [],
       ferry_entities: [],
       cable_entities: [],
-      icon_size: 33,
+      icon_size: 25,
       map_projection: "normal",
       ...config
     };
@@ -277,8 +277,8 @@ class MetlinkExplorerEditor extends LitElement {
             <label class="manual-label">Icon Size</label>
             <ha-selector
              .hass=${this.hass}
-             .selector=${{ number: { min: 8, max: 80, step: 1, mode: "slider" } }}
-             .value=${this._config.icon_size ?? 33}
+             .selector=${{ number: { min: 19, max: 31, step: 1, mode: "slider" } }}
+             .value=${this._config.icon_size ?? 25}
              @value-changed=${(e) => this._updateConfig({icon_size: Number(e.detail.value)})}
            ></ha-selector>
         </div>
