@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.12)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.13)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -464,7 +464,7 @@ class MetlinkExplorerCard extends LitElement {
       ? Math.min(sourceCanvas.height - cropY, (maxY - minY + 1) + Math.round(sourceCanvas.height * 0.04))
       : sourceCanvas.height;
 
-    const iconSize = diameter * 0.70;
+    const iconSize = diameter * 0.56;
     const iconX = center - (iconSize / 2);
     const iconY = center - (iconSize / 2) - (diameter * 0.01);
 
