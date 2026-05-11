@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.1)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.2)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1087,13 +1087,13 @@ class MetlinkExplorerCard extends LitElement {
     if (!bubble) return null;
 
     const cardWidth = 360;
-    const offset = 18;
+    const offset = 30;
     const anchorX = Number(bubble.anchorX || 0);
     const anchorY = Number(bubble.anchorY || 0);
     const left = bubble.side === "right"
       ? (anchorX + offset)
       : (anchorX - cardWidth - offset);
-    const top = anchorY - 24;
+    const top = anchorY - 22;
 
     return html`
       <div
@@ -1102,17 +1102,21 @@ class MetlinkExplorerCard extends LitElement {
         @click=${(e) => { e.stopPropagation(); this._resetBubbleAutoCloseTimer(); }}
         @mousemove=${() => this._resetBubbleAutoCloseTimer()}
       >
-        <div class="departure-heading">${bubble.stop?.id || ""} ${bubble.stop?.name || "Stop"}</div>
-        <div class="departure-list">
-          ${bubble.loading ? html`<div class="departure-empty">Loading departures...</div>` : null}
-          ${!bubble.loading && bubble.departures.length === 0 ? html`<div class="departure-empty">No upcoming departures in the next 24h.</div>` : null}
-          ${!bubble.loading ? bubble.departures.map((dep) => html`
-            <div class="departure-item">
-              <div class="departure-route">${dep.routeShortName}</div>
-              <div class="departure-destination">${dep.directionLabel}</div>
-              <div class="departure-time">${dep.departureText}</div>
-            </div>
-          `) : null}
+        <div class="departure-head-shell">
+          <div class="departure-heading">${bubble.stop?.id || ""} ${bubble.stop?.name || "Stop"}</div>
+        </div>
+        <div class="departure-body-shell">
+          <div class="departure-list">
+            ${bubble.loading ? html`<div class="departure-empty">Loading departures...</div>` : null}
+            ${!bubble.loading && bubble.departures.length === 0 ? html`<div class="departure-empty">No upcoming departures in the next 24h.</div>` : null}
+            ${!bubble.loading ? bubble.departures.map((dep) => html`
+              <div class="departure-item">
+                <div class="departure-route">${dep.routeShortName}</div>
+                <div class="departure-destination">${dep.directionLabel}</div>
+                <div class="departure-time">${dep.departureText}</div>
+              </div>
+            `) : null}
+          </div>
         </div>
       </div>
     `;
@@ -1640,43 +1644,92 @@ class MetlinkExplorerCard extends LitElement {
       .departure-bubble {
         position: absolute;
         z-index: 1000;
-        background: #000;
         color: #fff;
-        border-radius: 12px;
-        padding: 12px;
-        max-height: min(65vh, 420px);
-        overflow-y: auto;
-        overflow-x: hidden;
-        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
-        opacity: 0;
-        transform: translateX(0) scale(0.94);
-        transition: opacity 170ms ease, transform 220ms ease;
         pointer-events: auto;
       }
+      .departure-head-shell {
+        background: #000;
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+        opacity: 0;
+      }
+      .departure-bubble.right.open .departure-head-shell {
+        animation: bubble-header-slide-right 220ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+      }
+      .departure-bubble.left.open .departure-head-shell {
+        animation: bubble-header-slide-left 220ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+      }
+      .departure-body-shell {
+        margin-top: 8px;
+        background: #000;
+        border-radius: 12px;
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      .departure-bubble.open .departure-body-shell {
+        animation: bubble-body-drop 240ms ease 220ms forwards;
+      }
+      .departure-list {
+        display: block;
+        max-height: min(58vh, 360px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 0 12px 12px;
+      }
+      .departure-list::-webkit-scrollbar {
+        width: 8px;
+      }
+      .departure-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 999px;
+      }
+      .departure-list::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      @keyframes bubble-header-slide-right {
+        from {
+          opacity: 0;
+          transform: translateX(-18px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @keyframes bubble-header-slide-left {
+        from {
+          opacity: 0;
+          transform: translateX(18px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      @keyframes bubble-body-drop {
+        from {
+          opacity: 0;
+          max-height: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          max-height: 420px;
+          transform: translateY(0);
+        }
+      }
       .departure-bubble.open {
-        opacity: 1;
-        transform: translateX(0) scale(1);
-      }
-      .departure-bubble.right {
-        transform: translateX(16px) scale(0.94);
-      }
-      .departure-bubble.right.open {
-        transform: translateX(0) scale(1);
-      }
-      .departure-bubble.left {
-        transform: translateX(-16px) scale(0.94);
-      }
-      .departure-bubble.left.open {
-        transform: translateX(0) scale(1);
+        pointer-events: auto;
       }
       .departure-heading {
         font-size: 15px;
         line-height: 1.3;
         font-weight: 700;
-        margin: 0 0 8px;
-      }
-      .departure-list {
-        display: block;
+        margin: 0;
       }
       .departure-item {
         padding: 10px 0;
@@ -1711,7 +1764,9 @@ class MetlinkExplorerCard extends LitElement {
       @media (max-width: 640px) {
         .departure-bubble {
           width: min(90vw, 360px) !important;
-          max-height: 55vh;
+        }
+        .departure-list {
+          max-height: 50vh;
         }
       }
     `;

@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-05-11
+
+### Fix - Departure bubble staged slide animation and marker clearance
+
+- Updated bubble open animation to run in two stages: header slides out from the clicked stop, then the departures body slides down after header motion completes.
+- Increased bubble anchor offset so the card no longer overlaps the stop marker when opening.
+- Kept responsive and scroll behavior for departure rows while applying staged animation shells.
+- Updated frontend build marker to `0.10.2`.
+
 ## [0.10.1] - 2026-05-11
 
 ### Fix - Departure bubble route direction label
