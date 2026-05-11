@@ -545,6 +545,24 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
             self._transportation_type,
         )
 
+        # Build a mode-wide route lookup so row labels resolve correctly even
+        # when coordinators and route metadata come from different entries.
+        mode_route_short_name_by_id: dict[str, str] = {}
+        mode_route_meta_by_id: dict[str, dict[str, str]] = {}
+        for entry in entries:
+            for route in entry_routes(entry):
+                route_id = str(route.get(CONF_ROUTE_ID) or "").strip()
+                if not route_id:
+                    continue
+                route_short_name = str(route.get(CONF_ROUTE_SHORT_NAME) or "").strip()
+                if route_short_name and route_id not in mode_route_short_name_by_id:
+                    mode_route_short_name_by_id[route_id] = route_short_name
+                if route_id not in mode_route_meta_by_id:
+                    mode_route_meta_by_id[route_id] = {
+                        "route_long_name": str(route.get(CONF_ROUTE_LONG_NAME) or ""),
+                        "route_desc": str(route.get(CONF_ROUTE_DESC) or ""),
+                    }
+
         for entry in entries:
             runtime = self._hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
             routes = entry_routes(entry)
@@ -552,6 +570,14 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
             coordinators: dict[str, Any] = runtime.get("coordinators", {})
             route_short_name_by_id = {
                 str(r.get(CONF_ROUTE_ID)): r.get(CONF_ROUTE_SHORT_NAME)
+                for r in routes
+                if r.get(CONF_ROUTE_ID) is not None
+            }
+            route_meta_by_id = {
+                str(r.get(CONF_ROUTE_ID)): {
+                    "route_long_name": str(r.get(CONF_ROUTE_LONG_NAME) or ""),
+                    "route_desc": str(r.get(CONF_ROUTE_DESC) or ""),
+                }
                 for r in routes
                 if r.get(CONF_ROUTE_ID) is not None
             }
@@ -585,12 +611,21 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                         direction_id = int(direction_id_raw) if direction_id_raw is not None else None
                     except (TypeError, ValueError):
                         direction_id = None
-                    direction_label = _direction_from_entry(entry, direction_id) if direction_id is not None else None
+                    row_route_id = str(row.get("route_id") or route_id)
+                    route_meta = route_meta_by_id.get(row_route_id) or mode_route_meta_by_id.get(row_route_id)
+                    if direction_id is not None and route_meta:
+                        direction_label = _direction_label(
+                            route_meta.get("route_long_name", ""),
+                            route_meta.get("route_desc", ""),
+                            direction_id,
+                        )
+                    else:
+                        direction_label = _direction_from_entry(entry, direction_id) if direction_id is not None else None
 
                     rows.append(
                         {
-                            "route_id": route_id,
-                            "route_short_name": row.get("route_short_name") or route_short_name_by_id.get(str(route_id)),
+                            "route_id": row_route_id,
+                            "route_short_name": row.get("route_short_name") or route_short_name_by_id.get(row_route_id) or mode_route_short_name_by_id.get(row_route_id) or route_short_name_by_id.get(str(route_id)),
                             "service_label": row.get("service_label"),
                             "route_type": self._transportation_name.lower(),
                             "direction_id": direction_id,
@@ -632,13 +667,28 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
                         )
                         if eta_seconds is None or eta_seconds < 0:
                             continue
+                        direction_id_raw = row.get("direction_id")
+                        try:
+                            direction_id = int(direction_id_raw) if direction_id_raw is not None else None
+                        except (TypeError, ValueError):
+                            direction_id = None
+                        row_route_id = str(row.get("route_id") or route_id or "")
+                        route_meta = mode_route_meta_by_id.get(row_route_id)
+                        if direction_id is not None and route_meta:
+                            direction_label = _direction_label(
+                                route_meta.get("route_long_name", ""),
+                                route_meta.get("route_desc", ""),
+                                direction_id,
+                            )
+                        else:
+                            direction_label = _direction_from_entry(entry, direction_id) if direction_id is not None else None
                         rows.append(
                             {
-                                "route_id": route_id,
-                                "route_short_name": route_short_name,
+                                "route_id": row_route_id or route_id,
+                                "route_short_name": row.get("route_short_name") or route_short_name or mode_route_short_name_by_id.get(row_route_id),
                                 "route_type": self._transportation_name.lower(),
-                                "direction_id": row.get("direction_id"),
-                                "direction_label": None,
+                                "direction_id": direction_id,
+                                "direction_label": direction_label,
                                 "stop_id": row.get("stop_id"),
                                 "stop_name": row.get("stop_name"),
                                 "destination": row.get("destination"),

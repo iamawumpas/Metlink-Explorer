@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.7] - 2026-05-11
+
+### Fix - Correct train friendly direction labels across all lines
+
+- Fixed mode-board departure row labeling to resolve route metadata by row `route_id` across all same-mode entries.
+- Prevented cross-line label leakage where one train line could inherit another line's friendly direction name.
+- Applied the same route-aware label resolution in both coordinator and legacy fallback board aggregation paths.
+
 ## [0.10.6] - 2026-05-11
 
 ### Feature - Map projection switch with isometric mode
