@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.3] - 2026-05-12
+
+### Fix - Keep layer menu confined to card during dashboard editing
+
+- Added dashboard editor preview detection for map card layout mode.
+- Applied a bounded preview height while editing so absolute-positioned controls stay within card bounds.
+- Switched host height to a layout variable that updates between normal dashboard mode and editor preview mode.
+- Updated frontend build marker to `0.11.3`.
+
 ## [0.11.2] - 2026-05-12
 
 ### Fix - Icon size scaling consistency and YAML-aligned layer defaults

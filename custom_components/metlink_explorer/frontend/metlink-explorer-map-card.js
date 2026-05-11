@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.11.2)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.11.3)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -81,6 +81,7 @@ class MetlinkExplorerCard extends LitElement {
     this._liveLayersByMode  = new Map();
     this._layerPanelOpen    = false;
     this._layerResetTimer   = null;
+    this._isEditorPreview   = false;
   }
 
   static async getConfigElement() {
@@ -1932,6 +1933,7 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   updated(changedProps) {
+    this._applyLayoutMode();
     if (this.map) {
       if (changedProps.has('config')) {
         const oldConfig = changedProps.get('config');
@@ -1957,6 +1959,7 @@ class MetlinkExplorerCard extends LitElement {
 
   async firstUpdated() {
     console.log('[MetlinkExplorer] firstUpdated start');
+    this._applyLayoutMode();
     try {
       await loadMapLibre;
       console.log('[MetlinkExplorer] firstUpdated MapLibre ready');
@@ -2015,6 +2018,24 @@ class MetlinkExplorerCard extends LitElement {
       if (this.map) this.map.resize();
     });
     this._resizeObserver.observe(this);
+  }
+
+  _detectEditorPreviewMode() {
+    // Home Assistant card editor wrappers.
+    return Boolean(
+      this.closest('hui-dialog-edit-card')
+      || this.closest('hui-card-preview')
+      || this.closest('hui-card-element-editor')
+    );
+  }
+
+  _applyLayoutMode() {
+    this._isEditorPreview = this._detectEditorPreviewMode();
+    const hostHeight = this._isEditorPreview ? '420px' : 'calc(100vh - 64px)';
+    this.style.setProperty('--metlink-card-height', hostHeight);
+    if (this.map) {
+      try { this.map.resize(); } catch (_) {}
+    }
   }
 
   _centerMap() {
@@ -2128,7 +2149,7 @@ class MetlinkExplorerCard extends LitElement {
 
   static get styles() {
     return css`
-      :host { display: block; width: 100% !important; height: calc(100vh - 64px); grid-column: 1 / -1 !important; }
+      :host { display: block; width: 100% !important; height: var(--metlink-card-height, calc(100vh - 64px)); grid-column: 1 / -1 !important; }
       ha-card { height: 100%; width: 100%; position: relative; overflow: hidden; background: #1c1c1c; border: none; }
       #map { height: 100%; width: 100%; }
       .departure-bubble {
