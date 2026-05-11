@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-05-11
+
+### Feature - Phase 4 departure bubble interaction foundation
+
+- Added clickable stop hubs in the map card so selected stops can open an anchored departure bubble.
+- Added animated, anchored departure bubble UI with one-active-bubble behavior, outside-click close, and 15-second inactivity timeout.
+- Added frontend departure-board aggregation from mode board `data_url` payloads, merging departures by `stop_id` and sorting chronologically.
+- Applied bubble departure filtering rules: keep only future departures, drop services already passed by 1 minute or more, and cap display window to 24 hours.
+- Added local-time departure formatting in 24-hour format with countdown text (`xxmin` or `xh ymin`) and stop-level route/destination rows.
+- Updated frontend build marker to `0.10.0`.
+
 ## [0.9.11] - 2026-05-11
 
 ### Fix - Correct live badge pointer direction of travel

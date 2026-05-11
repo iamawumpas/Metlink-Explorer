@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.9.11)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.0)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -62,6 +62,12 @@ class MetlinkExplorerCard extends LitElement {
     this._vehicleLastPositions = new Map();
     this._activeVehicleSources = new Set();
     this._pendingLiveRender = false;
+    this._hubLayerIds = new Set();
+    this._boardPayloadCache = new Map();
+    this._departureBubble = null;
+    this._bubbleAutoCloseTimer = null;
+    this._boundMapClick = (event) => this._onMapClick(event);
+    this._boundMapMove = () => this._updateDepartureBubbleAnchor();
   }
 
   static async getConfigElement() {
@@ -861,6 +867,257 @@ class MetlinkExplorerCard extends LitElement {
       .join(";");
   }
 
+  _resetBubbleAutoCloseTimer() {
+    if (this._bubbleAutoCloseTimer) {
+      clearTimeout(this._bubbleAutoCloseTimer);
+      this._bubbleAutoCloseTimer = null;
+    }
+    if (!this._departureBubble) return;
+    this._bubbleAutoCloseTimer = setTimeout(() => {
+      this._closeDepartureBubble();
+    }, 15000);
+  }
+
+  _closeDepartureBubble() {
+    if (this._bubbleAutoCloseTimer) {
+      clearTimeout(this._bubbleAutoCloseTimer);
+      this._bubbleAutoCloseTimer = null;
+    }
+    if (!this._departureBubble) return;
+    this._departureBubble = null;
+    this.requestUpdate();
+  }
+
+  _stopBubbleSide(anchorX) {
+    if (!this.map) return "right";
+    const width = this.map.getContainer()?.clientWidth || 0;
+    return anchorX > (width * 0.6) ? "left" : "right";
+  }
+
+  _updateDepartureBubbleAnchor() {
+    if (!this.map || !this._departureBubble?.stop) return;
+    const [lon, lat] = this._departureBubble.stop.coordinates;
+    const projected = this.map.project([lon, lat]);
+    const nextSide = this._stopBubbleSide(projected.x);
+    this._departureBubble = {
+      ...this._departureBubble,
+      anchorX: projected.x,
+      anchorY: projected.y,
+      side: nextSide,
+    };
+    this.requestUpdate();
+  }
+
+  _boardEntitiesFromStates() {
+    const states = this.hass?.states || {};
+    return Object.entries(states)
+      .filter(([entityId, state]) => {
+        if (!entityId.startsWith("sensor.")) return false;
+        const attrs = state?.attributes || {};
+        const dataUrl = String(attrs.data_url || "");
+        return dataUrl.includes("/local/metlink_explorer/board/") && dataUrl.endsWith("_departures.json");
+      })
+      .map(([, state]) => state);
+  }
+
+  async _fetchBoardPayload(dataUrl) {
+    const now = Date.now();
+    const cached = this._boardPayloadCache.get(dataUrl);
+    if (cached && (now - cached.ts) < 10000) return cached.payload;
+
+    try {
+      const response = await fetch(dataUrl, { cache: "no-store" });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      this._boardPayloadCache.set(dataUrl, { ts: now, payload });
+      return payload;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _parseDepartureDateTime(serviceDate, departureTime) {
+    const raw = String(departureTime || "").replace(/^Scheduled:\s*/i, "").trim();
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) return null;
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    const seconds = Number(match[3] || 0);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+
+    let year;
+    let month;
+    let day;
+
+    const serviceText = String(serviceDate || "");
+    if (/^\d{8}$/.test(serviceText)) {
+      year = Number(serviceText.slice(0, 4));
+      month = Number(serviceText.slice(4, 6));
+      day = Number(serviceText.slice(6, 8));
+    } else {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+      day = now.getDate();
+    }
+
+    const dt = new Date(year, month - 1, day, 0, 0, 0, 0);
+    dt.setSeconds((hours * 3600) + (minutes * 60) + seconds);
+    return dt;
+  }
+
+  _formatCountdown(deltaMs) {
+    const totalMinutes = Math.max(0, Math.floor(deltaMs / 60000));
+    if (totalMinutes < 60) {
+      return `${totalMinutes}min`;
+    }
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}h ${minutes}min`;
+  }
+
+  _formatDepartureLine(departureDate, deltaMs) {
+    const timeFmt = new Intl.DateTimeFormat(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const dayFmt = new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+    return `Departs ${timeFmt.format(departureDate)} on ${dayFmt.format(departureDate)}, in ${this._formatCountdown(deltaMs)}.`;
+  }
+
+  async _departuresForStop(stopId) {
+    const now = Date.now();
+    const maxFutureMs = 24 * 3600 * 1000;
+    const maxPastMs = -60 * 1000;
+
+    const entities = this._boardEntitiesFromStates();
+    if (entities.length === 0) return [];
+
+    const payloads = await Promise.all(
+      entities.map((state) => this._fetchBoardPayload(String(state?.attributes?.data_url || "")))
+    );
+
+    const rows = [];
+    payloads.forEach((payload) => {
+      const departures = payload?.departures;
+      if (!Array.isArray(departures)) return;
+
+      departures.forEach((row) => {
+        if (String(row?.stop_id || "") !== String(stopId)) return;
+        const depDate = this._parseDepartureDateTime(row?.service_date, row?.scheduled_departure_time || row?.departure_time);
+        if (!depDate) return;
+        const deltaMs = depDate.getTime() - now;
+        if (deltaMs < maxPastMs || deltaMs > maxFutureMs) return;
+
+        rows.push({
+          routeShortName: String(row?.route_short_name || row?.service_label || row?.route_id || "?"),
+          destination: String(row?.destination || "Unknown destination"),
+          departureDate: depDate,
+          departureText: this._formatDepartureLine(depDate, deltaMs),
+          sortTime: depDate.getTime(),
+        });
+      });
+    });
+
+    rows.sort((a, b) => a.sortTime - b.sortTime);
+    return rows;
+  }
+
+  async _openDepartureBubble(stopFeature) {
+    const coords = stopFeature?.geometry?.coordinates || [];
+    const lon = Number(coords[0]);
+    const lat = Number(coords[1]);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+
+    const stopId = String(stopFeature?.properties?.stop_id || "");
+    const stopName = String(stopFeature?.properties?.stop_name || `Stop ${stopId}`);
+    const projected = this.map.project([lon, lat]);
+    const side = this._stopBubbleSide(projected.x);
+
+    this._departureBubble = {
+      loading: true,
+      side,
+      anchorX: projected.x,
+      anchorY: projected.y,
+      stop: {
+        id: stopId,
+        name: stopName,
+        coordinates: [lon, lat],
+      },
+      departures: [],
+    };
+    this.requestUpdate();
+    this._resetBubbleAutoCloseTimer();
+
+    const departures = await this._departuresForStop(stopId);
+    if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
+    this._departureBubble = {
+      ...this._departureBubble,
+      loading: false,
+      departures,
+    };
+    this.requestUpdate();
+  }
+
+  _hubFeatureAtPoint(point) {
+    if (!this.map || this._hubLayerIds.size === 0) return null;
+    const features = this.map.queryRenderedFeatures(point, {
+      layers: [...this._hubLayerIds],
+    });
+    return features && features.length > 0 ? features[0] : null;
+  }
+
+  _onMapClick(event) {
+    const feature = this._hubFeatureAtPoint(event.point);
+    if (!feature) {
+      this._closeDepartureBubble();
+      return;
+    }
+    this._openDepartureBubble(feature);
+  }
+
+  _renderDepartureBubble() {
+    const bubble = this._departureBubble;
+    if (!bubble) return null;
+
+    const cardWidth = 360;
+    const offset = 18;
+    const anchorX = Number(bubble.anchorX || 0);
+    const anchorY = Number(bubble.anchorY || 0);
+    const left = bubble.side === "right"
+      ? (anchorX + offset)
+      : (anchorX - cardWidth - offset);
+    const top = anchorY - 24;
+
+    return html`
+      <div
+        class=${`departure-bubble open ${bubble.side}`}
+        style=${`left:${left}px;top:${top}px;width:${cardWidth}px;`}
+        @click=${(e) => { e.stopPropagation(); this._resetBubbleAutoCloseTimer(); }}
+        @mousemove=${() => this._resetBubbleAutoCloseTimer()}
+      >
+        <div class="departure-heading">${bubble.stop?.id || ""} ${bubble.stop?.name || "Stop"}</div>
+        <div class="departure-list">
+          ${bubble.loading ? html`<div class="departure-empty">Loading departures...</div>` : null}
+          ${!bubble.loading && bubble.departures.length === 0 ? html`<div class="departure-empty">No upcoming departures in the next 24h.</div>` : null}
+          ${!bubble.loading ? bubble.departures.map((dep) => html`
+            <div class="departure-item">
+              <div class="departure-route">${dep.routeShortName}</div>
+              <div class="departure-destination">${dep.destination}</div>
+              <div class="departure-time">${dep.departureText}</div>
+            </div>
+          `) : null}
+        </div>
+      </div>
+    `;
+  }
+
   connectedCallback() {
     super.connectedCallback();
     setTimeout(() => this._forceSectionBreakout(), 500);
@@ -1099,6 +1356,7 @@ class MetlinkExplorerCard extends LitElement {
         if (this.map.getSource(`hub-source-${s}`)) this.map.removeSource(`hub-source-${s}`);
         if (this.map.getSource(s)) this.map.removeSource(s);
       });
+      this._hubLayerIds.clear();
 
       let layerIdx = 0;
       const topHubLayerIds = [];
@@ -1212,6 +1470,7 @@ class MetlinkExplorerCard extends LitElement {
                   ...(cat === 'train' ? { 'icon-rotate': 0, 'icon-rotation-alignment': 'viewport' } : {}),
                 },
               });
+              this._hubLayerIds.add(hubLayerId);
               if (cat === 'train' || cat === 'bus') {
                 topHubLayerIds.push(hubLayerId);
               }
@@ -1305,6 +1564,10 @@ class MetlinkExplorerCard extends LitElement {
       this._renderRoutes();
     });
 
+    this.map.on('click', this._boundMapClick);
+    this.map.on('move', this._boundMapMove);
+    this.map.on('zoom', this._boundMapMove);
+
     this.map.on('error', (event) => {
       console.error('[MetlinkExplorer] map error event', event?.error || event);
     });
@@ -1348,11 +1611,25 @@ class MetlinkExplorerCard extends LitElement {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
     }
+    if (this._bubbleAutoCloseTimer) {
+      clearTimeout(this._bubbleAutoCloseTimer);
+      this._bubbleAutoCloseTimer = null;
+    }
+    if (this.map) {
+      this.map.off('click', this._boundMapClick);
+      this.map.off('move', this._boundMapMove);
+      this.map.off('zoom', this._boundMapMove);
+    }
     super.disconnectedCallback();
   }
 
   render() {
-    return html`<ha-card><div id="map"></div></ha-card>`;
+    return html`
+      <ha-card>
+        <div id="map"></div>
+        ${this._renderDepartureBubble()}
+      </ha-card>
+    `;
   }
 
   static get styles() {
@@ -1360,6 +1637,83 @@ class MetlinkExplorerCard extends LitElement {
       :host { display: block; width: 100% !important; height: calc(100vh - 64px); grid-column: 1 / -1 !important; }
       ha-card { height: 100%; width: 100%; position: relative; overflow: hidden; background: #1c1c1c; border: none; }
       #map { height: 100%; width: 100%; }
+      .departure-bubble {
+        position: absolute;
+        z-index: 1000;
+        background: #000;
+        color: #fff;
+        border-radius: 12px;
+        padding: 12px;
+        max-height: min(65vh, 420px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        transform: translateX(0) scale(0.94);
+        transition: opacity 170ms ease, transform 220ms ease;
+        pointer-events: auto;
+      }
+      .departure-bubble.open {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+      }
+      .departure-bubble.right {
+        transform: translateX(16px) scale(0.94);
+      }
+      .departure-bubble.right.open {
+        transform: translateX(0) scale(1);
+      }
+      .departure-bubble.left {
+        transform: translateX(-16px) scale(0.94);
+      }
+      .departure-bubble.left.open {
+        transform: translateX(0) scale(1);
+      }
+      .departure-heading {
+        font-size: 15px;
+        line-height: 1.3;
+        font-weight: 700;
+        margin: 0 0 8px;
+      }
+      .departure-list {
+        display: block;
+      }
+      .departure-item {
+        padding: 10px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .departure-item:first-child {
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .departure-route {
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1.1;
+      }
+      .departure-destination {
+        margin-top: 3px;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .departure-time {
+        margin-top: 4px;
+        font-size: 13px;
+        line-height: 1.35;
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .departure-empty {
+        font-size: 14px;
+        line-height: 1.35;
+        color: rgba(255, 255, 255, 0.85);
+        padding: 8px 0 4px;
+      }
+      @media (max-width: 640px) {
+        .departure-bubble {
+          width: min(90vw, 360px) !important;
+          max-height: 55vh;
+        }
+      }
     `;
   }
 }
