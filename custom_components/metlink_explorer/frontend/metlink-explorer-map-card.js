@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.10.4)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.10.5)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -876,7 +876,7 @@ class MetlinkExplorerCard extends LitElement {
     if (!this._departureBubble) return;
     this._bubbleAutoCloseTimer = setTimeout(() => {
       this._closeDepartureBubble();
-    }, 15000);
+    }, 30000);
   }
 
   _closeDepartureBubble() {
@@ -992,6 +992,60 @@ class MetlinkExplorerCard extends LitElement {
     return `Departs ${timeFmt.format(departureDate)} on ${dayFmt.format(departureDate)}, in ${this._formatCountdown(deltaMs)}.`;
   }
 
+  _deriveDirectionMeta(rows) {
+    const uniqueKeys = [];
+    const seen = new Set();
+    (rows || []).forEach((row) => {
+      const key = String(row?.directionKey || "").trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      uniqueKeys.push(key);
+    });
+
+    const inboundKey = uniqueKeys.length > 0 ? uniqueKeys[0] : null;
+    const outboundKey = uniqueKeys.length > 1 ? uniqueKeys[1] : null;
+    return {
+      inboundKey,
+      outboundKey,
+      hasBoth: Boolean(inboundKey && outboundKey),
+    };
+  }
+
+  _filteredBubbleDepartures(bubble) {
+    const rows = Array.isArray(bubble?.departures) ? bubble.departures : [];
+    const filter = String(bubble?.directionFilter || "all");
+    const inboundKey = bubble?.directionMeta?.inboundKey;
+    const outboundKey = bubble?.directionMeta?.outboundKey;
+
+    if (filter === "inbound" && inboundKey) {
+      return rows.filter((row) => String(row?.directionKey || "") === inboundKey);
+    }
+    if (filter === "outbound" && outboundKey) {
+      return rows.filter((row) => String(row?.directionKey || "") === outboundKey);
+    }
+    return rows;
+  }
+
+  _departureDirectionTag(dep, bubble) {
+    if (!bubble?.directionMeta?.hasBoth) return "";
+    const key = String(dep?.directionKey || "");
+    if (key && key === bubble.directionMeta.inboundKey) return "Inbound";
+    if (key && key === bubble.directionMeta.outboundKey) return "Outbound";
+    return "";
+  }
+
+  _setBubbleDirectionFilter(filter) {
+    if (!this._departureBubble) return;
+    const next = String(filter || "all");
+    if (this._departureBubble.directionFilter === next) return;
+    this._departureBubble = {
+      ...this._departureBubble,
+      directionFilter: next,
+    };
+    this.requestUpdate();
+    this._resetBubbleAutoCloseTimer();
+  }
+
   async _departuresForStop(stopId) {
     const now = Date.now();
     const maxFutureMs = 24 * 3600 * 1000;
@@ -1019,6 +1073,11 @@ class MetlinkExplorerCard extends LitElement {
 
         const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
         const directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
+        const directionIdRaw = row?.direction_id;
+        const directionId = directionIdRaw === undefined || directionIdRaw === null
+          ? ""
+          : String(directionIdRaw).trim();
+        const directionKey = directionId || directionLabel;
         const routeCanonical = routeShortName.trim().toUpperCase();
         const directionCanonical = directionLabel.trim().toUpperCase();
         const dedupeKey = `row:${String(stopId)}:${routeCanonical}:${directionCanonical}:${depDate.getTime()}`;
@@ -1028,6 +1087,7 @@ class MetlinkExplorerCard extends LitElement {
         rows.push({
           routeShortName,
           directionLabel,
+          directionKey,
           departureDate: depDate,
           departureText: this._formatDepartureLine(depDate, deltaMs),
           sortTime: depDate.getTime(),
@@ -1071,6 +1131,12 @@ class MetlinkExplorerCard extends LitElement {
         coordinates: [lon, lat],
       },
       departures: [],
+      directionFilter: "all",
+      directionMeta: {
+        inboundKey: null,
+        outboundKey: null,
+        hasBoth: false,
+      },
     };
     this.requestUpdate();
     this._resetBubbleAutoCloseTimer();
@@ -1082,6 +1148,8 @@ class MetlinkExplorerCard extends LitElement {
       ...this._departureBubble,
       loading: false,
       departures,
+      directionFilter: "all",
+      directionMeta: this._deriveDirectionMeta(departures),
     };
     this.requestUpdate();
   }
@@ -1106,6 +1174,7 @@ class MetlinkExplorerCard extends LitElement {
   _renderDepartureBubble() {
     const bubble = this._departureBubble;
     if (!bubble) return null;
+    const visibleDepartures = this._filteredBubbleDepartures(bubble);
 
     const cardWidth = 360;
     const offset = 30;
@@ -1127,12 +1196,31 @@ class MetlinkExplorerCard extends LitElement {
           <div class="departure-heading">${bubble.stop?.id || ""} ${bubble.stop?.name || "Stop"}</div>
         </div>
         <div class="departure-body-shell">
+          ${bubble.directionMeta?.hasBoth ? html`
+            <div class="departure-filters" role="tablist" aria-label="Direction filter">
+              <button
+                class=${`departure-filter-btn ${bubble.directionFilter === "all" ? "active" : ""}`}
+                @click=${() => this._setBubbleDirectionFilter("all")}
+              >All</button>
+              <button
+                class=${`departure-filter-btn ${bubble.directionFilter === "inbound" ? "active" : ""}`}
+                @click=${() => this._setBubbleDirectionFilter("inbound")}
+              >Inbound</button>
+              <button
+                class=${`departure-filter-btn ${bubble.directionFilter === "outbound" ? "active" : ""}`}
+                @click=${() => this._setBubbleDirectionFilter("outbound")}
+              >Outbound</button>
+            </div>
+          ` : null}
           <div class="departure-list">
             ${bubble.loading ? html`<div class="departure-empty">Loading departures...</div>` : null}
-            ${!bubble.loading && bubble.departures.length === 0 ? html`<div class="departure-empty">No upcoming departures in the next 24h.</div>` : null}
-            ${!bubble.loading ? bubble.departures.map((dep) => html`
+            ${!bubble.loading && visibleDepartures.length === 0 ? html`<div class="departure-empty">No departures for this direction in the next 24h.</div>` : null}
+            ${!bubble.loading ? visibleDepartures.map((dep) => html`
               <div class="departure-item">
                 <div class="departure-route">${dep.routeShortName}</div>
+                ${this._departureDirectionTag(dep, bubble)
+                  ? html`<div class="departure-direction-chip">${this._departureDirectionTag(dep, bubble)}</div>`
+                  : null}
                 <div class="departure-destination">${dep.directionLabel}</div>
                 <div class="departure-time">${dep.departureText}</div>
               </div>
@@ -1691,6 +1779,29 @@ class MetlinkExplorerCard extends LitElement {
         opacity: 0;
         transform: translateY(-10px);
       }
+      .departure-filters {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        padding: 12px 12px 8px;
+      }
+      .departure-filter-btn {
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.32);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.9);
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 7px 10px;
+        cursor: pointer;
+      }
+      .departure-filter-btn.active {
+        background: #ffffff;
+        color: #111;
+        border-color: #ffffff;
+      }
       .departure-bubble.open .departure-body-shell {
         animation: bubble-body-drop 240ms ease 220ms forwards;
       }
@@ -1769,6 +1880,18 @@ class MetlinkExplorerCard extends LitElement {
         font-size: 15px;
         font-weight: 600;
         line-height: 1.2;
+      }
+      .departure-direction-chip {
+        margin-top: 5px;
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.14);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        color: rgba(255, 255, 255, 0.95);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
       }
       .departure-time {
         margin-top: 4px;

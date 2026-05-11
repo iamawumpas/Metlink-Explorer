@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.5] - 2026-05-11
+
+### Improvement - Direction filter controls and longer bubble dwell time
+
+- Added a segmented direction filter (`All`, `Inbound`, `Outbound`) to the stop departure bubble, keeping a single-column layout for better map readability.
+- Added per-row direction chips when both directions are present so mixed lists stay understandable at a glance.
+- Increased departure bubble inactivity timeout from 15 seconds to 30 seconds.
+- Updated frontend build marker to `0.10.5`.
+
 ## [0.10.4] - 2026-05-11
 
 ### Fix - Departure bubble duplicate rows at stop level
