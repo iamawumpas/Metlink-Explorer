@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.23)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.24)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -2195,11 +2195,8 @@ class MetlinkExplorerCard extends LitElement {
               selectedStops.forEach((stop) => {
                 const rawStopId = String(stop.stop_id || "").trim();
                 const normalizedTrainStopId = this._normalizeTrainStationStopId(rawStopId);
-                const stopLon = Number(stop.stop_lon);
-                const stopLat = Number(stop.stop_lat);
-                const coordKey = this._hubCoordKey(stopLon, stopLat);
                 const key = cat === 'train'
-                  ? `train:${normalizedTrainStopId || rawStopId.toUpperCase()}:${coordKey || `${stopLat}:${stopLon}`}`
+                  ? `train:${normalizedTrainStopId || rawStopId.toUpperCase()}`
                   : `${rawStopId}:${Number(stop.stop_lat)}:${Number(stop.stop_lon)}`;
                 if (!uniqueStops.has(key)) {
                   uniqueStops.set(
@@ -2270,6 +2267,9 @@ class MetlinkExplorerCard extends LitElement {
                     stop_id: stopId,
                     stop_name: String(stop.stop_name || 'Hub'),
                     mode: cat,
+                    canonical_stop_key: cat === 'train'
+                      ? (this._normalizeTrainStationStopId(stopId) || String(stopId || '').trim().toUpperCase())
+                      : String(stopId || '').trim().toUpperCase(),
                     influence_stop_ids: entryStop.influenceStopIds.join('|'),
                   },
                 };
@@ -2465,7 +2465,57 @@ class MetlinkExplorerCard extends LitElement {
 
     if (markers.length === 0) return;
 
-    const parent = markers.map((_, i) => i);
+    const hiddenMarkerKeys = new Set();
+    const trainCanonicalGroups = new Map();
+    markers.forEach((marker) => {
+      const canonicalKey = String(marker?.feature?.properties?.canonical_stop_key || "").trim().toUpperCase();
+      if (String(marker?.mode || '').toLowerCase() !== 'train' || !canonicalKey) return;
+      if (!trainCanonicalGroups.has(canonicalKey)) trainCanonicalGroups.set(canonicalKey, []);
+      trainCanonicalGroups.get(canonicalKey).push(marker);
+    });
+
+    trainCanonicalGroups.forEach((group) => {
+      if (!Array.isArray(group) || group.length <= 1) return;
+
+      const centerX = group.reduce((sum, item) => sum + item.x, 0) / group.length;
+      const centerY = group.reduce((sum, item) => sum + item.y, 0) / group.length;
+      const pickScore = (item) => {
+        const dx = item.x - centerX;
+        const dy = item.y - centerY;
+        return Math.sqrt((dx * dx) + (dy * dy));
+      };
+
+      const primary = [...group].sort((a, b) => pickScore(a) - pickScore(b))[0];
+      const mergedInfluence = new Set(
+        String(primary?.feature?.properties?.influence_stop_ids || "")
+          .split('|')
+          .map((id) => String(id || '').trim())
+          .filter(Boolean)
+      );
+
+      group.forEach((item) => {
+        if (item === primary) return;
+        const markerKey = `${item.hubSourceId}:${item.featureIndex}`;
+        hiddenMarkerKeys.add(markerKey);
+        String(item?.feature?.properties?.influence_stop_ids || "")
+          .split('|')
+          .map((id) => String(id || '').trim())
+          .filter(Boolean)
+          .forEach((id) => mergedInfluence.add(id));
+      });
+
+      if (primary?.feature?.properties) {
+        primary.feature.properties = {
+          ...primary.feature.properties,
+          influence_stop_ids: [...mergedInfluence].sort().join('|'),
+        };
+      }
+    });
+
+    const visibleMarkers = markers.filter((item) => !hiddenMarkerKeys.has(`${item.hubSourceId}:${item.featureIndex}`));
+    if (visibleMarkers.length === 0) return;
+
+    const parent = visibleMarkers.map((_, i) => i);
     const find = (i) => {
       let p = i;
       while (parent[p] !== p) {
@@ -2480,16 +2530,16 @@ class MetlinkExplorerCard extends LitElement {
       if (pa !== pb) parent[pb] = pa;
     };
 
-    for (let i = 0; i < markers.length; i++) {
-      for (let j = i + 1; j < markers.length; j++) {
-        if (this._stopBadgeCentersOverlapPx(markers[i], markers[j])) {
+    for (let i = 0; i < visibleMarkers.length; i++) {
+      for (let j = i + 1; j < visibleMarkers.length; j++) {
+        if (this._stopBadgeCentersOverlapPx(visibleMarkers[i], visibleMarkers[j])) {
           union(i, j);
         }
       }
     }
 
     const groups = new Map();
-    markers.forEach((marker, index) => {
+    visibleMarkers.forEach((marker, index) => {
       const root = find(index);
       if (!groups.has(root)) groups.set(root, []);
       groups.get(root).push(marker);
@@ -2498,6 +2548,32 @@ class MetlinkExplorerCard extends LitElement {
     const perSourceFeatures = new Map();
     this._stopBadgeLayoutSources.forEach((entry, hubSourceId) => {
       perSourceFeatures.set(hubSourceId, entry.baseFeatures.map((f) => ({ ...f })));
+    });
+
+    hiddenMarkerKeys.forEach((markerKey) => {
+      const [hubSourceId, indexText] = String(markerKey || '').split(':');
+      const featureIndex = Number(indexText);
+      const srcFeatures = perSourceFeatures.get(hubSourceId);
+      if (!Array.isArray(srcFeatures) || !Number.isInteger(featureIndex)) return;
+      srcFeatures[featureIndex] = null;
+    });
+
+    trainCanonicalGroups.forEach((group) => {
+      if (!Array.isArray(group) || group.length <= 1) return;
+      const visible = group.filter((item) => !hiddenMarkerKeys.has(`${item.hubSourceId}:${item.featureIndex}`));
+      if (visible.length !== 1) return;
+      const primary = visible[0];
+      const srcFeatures = perSourceFeatures.get(primary.hubSourceId);
+      if (!Array.isArray(srcFeatures)) return;
+      const existing = srcFeatures[primary.featureIndex];
+      if (!existing) return;
+      srcFeatures[primary.featureIndex] = {
+        ...existing,
+        properties: {
+          ...(existing.properties || {}),
+          ...(primary.feature?.properties || {}),
+        },
+      };
     });
 
     groups.forEach((group) => {
@@ -2527,7 +2603,7 @@ class MetlinkExplorerCard extends LitElement {
     perSourceFeatures.forEach((features, hubSourceId) => {
       const source = this.map.getSource(hubSourceId);
       if (!source || typeof source.setData !== 'function') return;
-      source.setData({ type: 'FeatureCollection', features });
+      source.setData({ type: 'FeatureCollection', features: features.filter(Boolean) });
     });
 
     this._bringHubLayersToFront();
@@ -2630,7 +2706,10 @@ class MetlinkExplorerCard extends LitElement {
     });
 
     this._resizeObserver = new ResizeObserver(() => {
-      if (this.map) this.map.resize();
+      if (this.map) {
+        this.map.resize();
+        this._scheduleStopBadgeOverlapLayout();
+      }
     });
     this._resizeObserver.observe(this);
   }
