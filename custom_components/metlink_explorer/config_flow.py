@@ -9,6 +9,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
 from .api import MetlinkApiClient, MetlinkApiError
@@ -101,6 +102,50 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            override_api_key = str(user_input.get(CONF_API_KEY, "")).strip() or None
+            override_ais_api_key = str(user_input.get(CONF_AIS_API_KEY, "")).strip() or None
+
+            if override_api_key:
+                session = async_get_clientsession(self.hass)
+                api_client = MetlinkApiClient(override_api_key, session, ais_api_key=override_ais_api_key or self._ais_api_key)
+                try:
+                    if await api_client.validate_api_key():
+                        self._api_key = override_api_key
+                        if CONF_AIS_API_KEY in user_input:
+                            self._ais_api_key = override_ais_api_key
+                        self._api_client = api_client
+                    else:
+                        errors["base"] = "invalid_auth"
+                except MetlinkApiError:
+                    errors["base"] = "cannot_connect"
+            elif not self._api_key:
+                errors["base"] = "invalid_auth"
+            elif CONF_AIS_API_KEY in user_input and str(user_input.get(CONF_AIS_API_KEY, "")).strip():
+                self._ais_api_key = override_ais_api_key
+                session = async_get_clientsession(self.hass)
+                self._api_client = MetlinkApiClient(self._api_key, session, ais_api_key=self._ais_api_key)
+
+            if errors:
+                available_transport_options = await self._get_available_transportation_types() if self._api_client else {}
+                if not available_transport_options:
+                    available_transport_options = {
+                        str(type_id): f"{type_name}"
+                        for type_id, type_name in TRANSPORTATION_TYPES.items()
+                    }
+                return self.async_show_form(
+                    step_id="transportation_type",
+                    data_schema=vol.Schema({
+                        vol.Required(CONF_TRANSPORTATION_TYPE, default=str(user_input.get(CONF_TRANSPORTATION_TYPE, ""))): vol.In(available_transport_options),
+                        vol.Optional(CONF_API_KEY, default=""): selector.TextSelector(
+                            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                        ),
+                        vol.Optional(CONF_AIS_API_KEY, default=""): selector.TextSelector(
+                            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                        ),
+                    }),
+                    errors=errors,
+                )
+
             transportation_type = int(user_input[CONF_TRANSPORTATION_TYPE])
             self._transportation_type = transportation_type
             
@@ -135,6 +180,12 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="transportation_type",
             data_schema=vol.Schema({
                 vol.Required(CONF_TRANSPORTATION_TYPE): vol.In(available_transport_options),
+                vol.Optional(CONF_API_KEY, default=""): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                ),
+                vol.Optional(CONF_AIS_API_KEY, default=""): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                ),
             }),
             errors=errors,
         )

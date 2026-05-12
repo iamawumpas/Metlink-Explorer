@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.3] - 2026-05-12
+
+### Improvement - Masked API key override fields on transport selection
+
+- Added password-style Metlink API key and AISStream API key override fields to the `Select Transportation Type` step.
+- Leaving the fields blank keeps the currently stored keys, while entering new values overwrites the keys used for the setup flow.
+- Updated transportation-type step copy to explain the optional override behavior directly in the UI.
+- Updated frontend build marker to `0.12.3`.
+
 ## [0.12.2] - 2026-05-12
 
 ### Improvement - Dynamic East by West ferry discovery and clearer AIS setup
