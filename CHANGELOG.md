@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.2] - 2026-05-12
+
+### Improvement - Dynamic East by West ferry discovery and clearer AIS setup
+
+- Replaced the manual ferry MMSI configuration path with dynamic ferry discovery based on the East by West fleet page.
+- Ferry AIS registry refresh now derives vessel names from the live East by West fleet website so ferry name changes do not require code changes.
+- Clarified the config flow and options flow text so users enter their own Metlink API key and can optionally add their own AISStream API key for live ferry tracking.
+- Removed the manual MMSI options UI and runtime override path.
+- Updated frontend build marker to `0.12.2`.
+
 ## [0.12.1] - 2026-05-12
 
 ### Hotfix - Resolve ferry live rendering script syntax error

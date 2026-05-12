@@ -5,6 +5,8 @@ import asyncio
 import json
 import math
 import logging
+import html
+import re
 from datetime import datetime, timedelta
 from email.utils import formatdate
 from typing import Any
@@ -22,6 +24,7 @@ from .const import (
     AISSTREAM_WS_URL,
     AIS_VESSEL_REFRESH_SECONDS,
     BASE_URL,
+    EAST_BY_WEST_FLEET_URL,
     DEFAULT_GTFS_CACHE_TTL_SECONDS,
     REQUEST_TIMEOUT,
     TRAIN_GTFS_CACHE_TTL_SECONDS,
@@ -83,6 +86,8 @@ class MetlinkApiClient:
         self._ais_position_cache_seconds = AISSTREAM_POSITION_CACHE_SECONDS
         self._ais_vessel_registry: dict[str, str] = {}
         self._ais_vessel_registry_ts: datetime | None = None
+        self._ais_fleet_names: list[str] = []
+        self._ais_fleet_names_ts: datetime | None = None
         # Stop predictions circuit breaker: track consecutive failures per stop.
         # After _STOP_PRED_FAIL_THRESHOLD failures the stop is skipped for
         # _STOP_PRED_BACKOFF_SECONDS before being retried.
@@ -979,10 +984,54 @@ class MetlinkApiClient:
             or (now - self._ais_vessel_registry_ts).total_seconds() > AIS_VESSEL_REFRESH_SECONDS
         )
 
+        if refresh_registry:
+            await self._refresh_east_by_west_fleet_names()
+
         raw_positions = await self._fetch_aisstream_position_reports(refresh_registry=refresh_registry)
         normalized = self._normalize_ais_positions(raw_positions, route_id)
         self._ais_positions_cache = (now, normalized)
         return normalized
+
+    async def _refresh_east_by_west_fleet_names(self) -> list[str]:
+        """Fetch the current East by West fleet names from the public website."""
+        now = datetime.now()
+        if (
+            self._ais_fleet_names
+            and self._ais_fleet_names_ts is not None
+            and (now - self._ais_fleet_names_ts).total_seconds() < AIS_VESSEL_REFRESH_SECONDS
+        ):
+            return self._ais_fleet_names
+
+        fallback_names = [name.upper() for name in AIS_FERRY_SEED_NAMES]
+        try:
+            async with async_timeout.timeout(REQUEST_TIMEOUT):
+                async with self._session.get(EAST_BY_WEST_FLEET_URL, headers={"accept": "text/html"}) as response:
+                    response.raise_for_status()
+                    page_html = await response.text()
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("Failed to fetch East by West fleet names: %s", exc)
+            self._ais_fleet_names = fallback_names
+            self._ais_fleet_names_ts = now
+            return self._ais_fleet_names
+
+        names: list[str] = []
+        for match in re.finditer(r"<h3[^>]*>(.*?)</h3>", page_html, flags=re.IGNORECASE | re.DOTALL):
+            text = re.sub(r"<[^>]+>", " ", html.unescape(match.group(1)))
+            normalized = re.sub(r"\s+", " ", text).strip()
+            if not normalized:
+                continue
+            if normalized.lower() in {"our fleet", "follow us", "services", "experiences"}:
+                continue
+            if len(normalized) < 3:
+                continue
+            names.append(normalized.upper())
+
+        if not names:
+            names = fallback_names
+
+        self._ais_fleet_names = list(dict.fromkeys(names))
+        self._ais_fleet_names_ts = now
+        return self._ais_fleet_names
 
     async def _fetch_aisstream_position_reports(self, refresh_registry: bool = False) -> list[dict[str, Any]]:
         """Collect a short sample of AISStream position reports from Wellington Harbour bbox."""
@@ -994,7 +1043,7 @@ class MetlinkApiClient:
             "FilterMessageTypes": ["PositionReport", "StandardClassBPositionReport", "ExtendedClassBPositionReport"],
         }
 
-        # Once a day, allow broad discovery; otherwise prefer known MMSI fleet set.
+        # Use known vessel registry between daily discovery refreshes.
         if self._ais_vessel_registry and not refresh_registry:
             subscription["FiltersShipMMSI"] = list(self._ais_vessel_registry.keys())[:50]
 
@@ -1058,7 +1107,7 @@ class MetlinkApiClient:
         if reports:
             if refresh_registry:
                 self._ais_vessel_registry = {}
-            seeds = {name.upper() for name in AIS_FERRY_SEED_NAMES}
+            seeds = {name.upper() for name in (self._ais_fleet_names or AIS_FERRY_SEED_NAMES)}
 
             if refresh_registry:
                 counts: dict[str, int] = {}
@@ -1102,8 +1151,9 @@ class MetlinkApiClient:
 
         normalized: list[dict[str, Any]] = []
         filtered_reports = reports
-        if self._ais_vessel_registry:
-            allowed = set(self._ais_vessel_registry.keys())
+        allowed_mmsi = set(self._ais_vessel_registry.keys())
+        if allowed_mmsi:
+            allowed = allowed_mmsi
             filtered_reports = [row for row in reports if str(row.get("mmsi") or "") in allowed]
 
         seen: set[str] = set()

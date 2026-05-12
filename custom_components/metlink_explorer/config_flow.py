@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -60,7 +59,11 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._ais_api_key = existing_entry.data.get(CONF_AIS_API_KEY)
             if self._api_key:
                 session = async_get_clientsession(self.hass)
-                self._api_client = MetlinkApiClient(self._api_key, session, ais_api_key=self._ais_api_key)
+                self._api_client = MetlinkApiClient(
+                    self._api_key,
+                    session,
+                    ais_api_key=self._ais_api_key,
+                )
                 return await self.async_step_transportation_type()
 
         if user_input is not None:
@@ -69,7 +72,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             # Validate API key
             session = async_get_clientsession(self.hass)
-            api_client = MetlinkApiClient(api_key, session)
+            api_client = MetlinkApiClient(api_key, session, ais_api_key=ais_api_key)
             
             try:
                 if await api_client.validate_api_key():
@@ -366,4 +369,34 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             route_options[route_id] = display_text
             
         return route_options
+
+
+class MetlinkExplorerOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for existing Metlink Explorer entries."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            updated_data = dict(self.config_entry.data)
+            updated_data[CONF_AIS_API_KEY] = str(user_input.get(CONF_AIS_API_KEY, "")).strip() or None
+            self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_AIS_API_KEY, default=str(self.config_entry.data.get(CONF_AIS_API_KEY, "") or "")): cv.string,
+            }),
+            errors=errors,
+        )
+
+
+async def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+    """Return the options flow handler."""
+    return MetlinkExplorerOptionsFlowHandler(config_entry)
 

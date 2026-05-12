@@ -51,6 +51,7 @@ TRAIN_GEOMETRY_SENSOR_KEY = "train_route_geometry"
 
 # AIS ferry live tracking
 FERRY_ROUTE_TYPE = 4
+EAST_BY_WEST_FLEET_URL = "https://eastbywest.co.nz/about-us/our-fleet/"
 AISSTREAM_WS_URL = "wss://stream.aisstream.io/v0/stream"
 AISSTREAM_DEFAULT_BBOX = [[[-41.38, 174.73], [-41.21, 174.92]]]
 AISSTREAM_SAMPLE_SECONDS = 2.5

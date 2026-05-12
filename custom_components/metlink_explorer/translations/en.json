@@ -3,9 +3,10 @@
     "step": {
       "user": {
         "title": "Metlink Explorer Setup",
-        "description": "Enter your Metlink Open Data API key to get started. You can get a free API key from the Metlink Open Data Developer Portal. See the Metlink Explorer documentation for more details. README.md for the link.",
+        "description": "Enter your Metlink Open Data API key to get started. You can get a free API key from the Metlink Open Data Developer Portal. Optionally add your own AISStream API key to enable live ferry tracking.",
         "data": {
-          "api_key": "API Key"
+          "api_key": "Metlink API Key",
+          "ais_api_key": "AISStream API Key (Optional)"
         }
       },
       "transportation_type": {
@@ -34,6 +35,17 @@
     "abort": {
       "already_configured": "This route is already configured.",
       "route_added_to_existing": "Route added to existing transportation integration."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Metlink Explorer Options",
+        "description": "Configure options for your Metlink Explorer integration. Add or update your own AISStream API key here to enable live ferry tracking.",
+        "data": {
+          "ais_api_key": "AISStream API Key (Optional)"
+        }
+      }
     }
   }
 }
