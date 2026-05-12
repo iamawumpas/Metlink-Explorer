@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.7] - 2026-05-12
+
+### Improvement - Configurable canonical ferry MMSI map and AIS binary frame parsing
+
+- Added persistent canonical ferry vessel mapping storage (`MMSI -> name`) with default entries for Cobar Cat, City Cat, and Ika Rere.
+- Added integration options field to edit ferry vessel mappings (one per line: `MMSI,NAME`) and propagate updates across entries sharing the same Metlink API key.
+- Updated runtime setup to pass configured vessel mapping into AIS parsing so live tracker filtering uses user-managed canonical MMSI values.
+- Updated AIS websocket parsing to accept binary frames in addition to text frames, improving compatibility with current AISStream payload delivery.
+- Corrected seed vessel name fallback from `COBALT` to `COBAR CAT`.
+- Updated frontend build marker to `0.12.7`.
+
 ## [0.12.6] - 2026-05-12
 
 ### Fix - Robust MMSI discovery from ferry vessel names

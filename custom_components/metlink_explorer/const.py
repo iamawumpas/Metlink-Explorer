@@ -40,6 +40,7 @@ CONF_ROUTES = "routes"
 CONF_ACTIVE_DIRECTION = "active_direction"
 CONF_LEGACY_DIRECTION_ENTITIES = "legacy_direction_entities"
 CONF_AIS_API_KEY = "ais_api_key"
+CONF_AIS_VESSEL_MAP = "ais_vessel_map"
 
 # Default Values
 DEFAULT_SCAN_INTERVAL = 30  # Aligned with Metlink backend update frequency and new RTI system
@@ -59,6 +60,11 @@ AISSTREAM_POSITION_CACHE_SECONDS = 20
 AIS_VESSEL_REFRESH_SECONDS = 24 * 60 * 60
 AIS_FERRY_SEED_NAMES = [
     "IKA RERE",
-    "COBALT",
+    "COBAR CAT",
     "CITY CAT",
 ]
+DEFAULT_AIS_FERRY_VESSELS = {
+    "512003410": "COBAR CAT",
+    "512003252": "CITY CAT",
+    "512010273": "IKA RERE",
+}

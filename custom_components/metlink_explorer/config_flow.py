@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -15,6 +16,7 @@ import homeassistant.helpers.config_validation as cv
 from .api import MetlinkApiClient, MetlinkApiError
 from .const import (
     CONF_AIS_API_KEY,
+    CONF_AIS_VESSEL_MAP,
     DOMAIN,
     CONF_ACTIVE_DIRECTION,
     CONF_API_KEY,
@@ -25,6 +27,7 @@ from .const import (
     CONF_ROUTE_LONG_NAME,
     CONF_ROUTE_DESC,
     CONF_ROUTES,
+    DEFAULT_AIS_FERRY_VESSELS,
     DEFAULT_ACTIVE_DIRECTION,
     TRANSPORTATION_TYPES,
 )
@@ -359,6 +362,7 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_API_KEY: self._api_key,
                         CONF_AIS_API_KEY: self._ais_api_key,
+                        CONF_AIS_VESSEL_MAP: DEFAULT_AIS_FERRY_VESSELS,
                         CONF_TRANSPORTATION_TYPE: self._transportation_type,
                         CONF_ROUTE_ID: route_id,
                         CONF_ROUTE_SHORT_NAME: route_short_name,
@@ -450,11 +454,48 @@ class MetlinkExplorerOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
 
+    def _format_vessel_map(self, vessel_map: dict[str, str] | None) -> str:
+        rows: list[str] = []
+        mapping = vessel_map if isinstance(vessel_map, dict) and vessel_map else DEFAULT_AIS_FERRY_VESSELS
+        for mmsi, name in sorted(mapping.items(), key=lambda item: str(item[0])):
+            rows.append(f"{mmsi},{name}")
+        return "\n".join(rows)
+
+    def _parse_vessel_map(self, raw_value: str | None) -> dict[str, str]:
+        result: dict[str, str] = {}
+        text = str(raw_value or "")
+        for line in text.splitlines():
+            cleaned = line.strip()
+            if not cleaned:
+                continue
+
+            parts = [part.strip() for part in re.split(r"[,;=\t]", cleaned, maxsplit=1)]
+            if len(parts) != 2:
+                continue
+
+            left, right = parts
+            if left.isdigit():
+                mmsi, name = left, right
+            elif right.isdigit():
+                mmsi, name = right, left
+            else:
+                continue
+
+            name = str(name or "").strip().upper()
+            if not name:
+                continue
+            result[str(mmsi).strip()] = name
+
+        return result
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
             new_ais_key = str(user_input.get(CONF_AIS_API_KEY, "")).strip() or None
+            new_vessel_map = self._parse_vessel_map(user_input.get(CONF_AIS_VESSEL_MAP))
+            if not new_vessel_map:
+                new_vessel_map = DEFAULT_AIS_FERRY_VESSELS
             shared_api_key = self.config_entry.data.get(CONF_API_KEY)
 
             for entry in self.hass.config_entries.async_entries(DOMAIN):
@@ -462,6 +503,7 @@ class MetlinkExplorerOptionsFlowHandler(config_entries.OptionsFlow):
                     continue
                 updated_data = dict(entry.data)
                 updated_data[CONF_AIS_API_KEY] = new_ais_key
+                updated_data[CONF_AIS_VESSEL_MAP] = new_vessel_map
                 self.hass.config_entries.async_update_entry(entry, data=updated_data)
                 await self.hass.config_entries.async_reload(entry.entry_id)
 
@@ -471,6 +513,12 @@ class MetlinkExplorerOptionsFlowHandler(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema({
                 vol.Optional(CONF_AIS_API_KEY, default=str(self.config_entry.data.get(CONF_AIS_API_KEY, "") or "")): cv.string,
+                vol.Optional(
+                    CONF_AIS_VESSEL_MAP,
+                    default=self._format_vessel_map(self.config_entry.data.get(CONF_AIS_VESSEL_MAP)),
+                ): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
             }),
             errors=errors,
         )

@@ -44,9 +44,10 @@
     "step": {
       "init": {
         "title": "Metlink Explorer Options",
-        "description": "Configure options for your Metlink Explorer integration. Add or update your own AISStream API key here to enable live ferry tracking.",
+        "description": "Configure options for your Metlink Explorer integration. Add or update your own AISStream API key and canonical ferry MMSI mapping for live ferry tracking.",
         "data": {
-          "ais_api_key": "AISStream API Key (Optional)"
+          "ais_api_key": "AISStream API Key (Optional)",
+          "ais_vessel_map": "Ferry Vessel Map (one per line: MMSI,NAME)"
         }
       }
     }

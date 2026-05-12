@@ -17,6 +17,7 @@ from .api import MetlinkApiClient
 from .coordinator import MetlinkDataUpdateCoordinator, MetlinkRouteGeometryCoordinator
 from .const import (
     CONF_AIS_API_KEY,
+    CONF_AIS_VESSEL_MAP,
     CONF_API_KEY,
     CONF_ROUTE_DESC,
     CONF_ROUTE_ID,
@@ -24,6 +25,7 @@ from .const import (
     CONF_ROUTE_SHORT_NAME,
     CONF_ROUTES,
     CONF_TRANSPORTATION_TYPE,
+    DEFAULT_AIS_FERRY_VESSELS,
     TRAIN_GEOMETRY_SENSOR_KEY,
     TRAIN_ROUTE_TYPE,
     TRANSPORTATION_TYPES,
@@ -224,6 +226,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session,
         transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
         ais_api_key=effective_ais_api_key,
+        ais_vessel_map=entry.data.get(CONF_AIS_VESSEL_MAP, DEFAULT_AIS_FERRY_VESSELS),
     )
 
     coordinators: dict[str, MetlinkDataUpdateCoordinator] = {}

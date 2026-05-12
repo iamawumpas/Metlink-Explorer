@@ -24,6 +24,7 @@ from .const import (
     AISSTREAM_WS_URL,
     AIS_VESSEL_REFRESH_SECONDS,
     BASE_URL,
+    DEFAULT_AIS_FERRY_VESSELS,
     EAST_BY_WEST_FLEET_URL,
     DEFAULT_GTFS_CACHE_TTL_SECONDS,
     REQUEST_TIMEOUT,
@@ -50,6 +51,7 @@ class MetlinkApiClient:
         session: aiohttp.ClientSession,
         transportation_type: int | None = None,
         ais_api_key: str | None = None,
+        ais_vessel_map: dict[str, str] | None = None,
     ) -> None:
         """Initialize the API client."""
         self._api_key = api_key
@@ -57,6 +59,12 @@ class MetlinkApiClient:
         self._base_url = BASE_URL
         self._transportation_type = int(transportation_type) if transportation_type is not None else None
         self._ais_api_key = str(ais_api_key or "").strip()
+        configured_map = ais_vessel_map if isinstance(ais_vessel_map, dict) and ais_vessel_map else DEFAULT_AIS_FERRY_VESSELS
+        self._ais_configured_vessel_registry: dict[str, str] = {
+            str(mmsi).strip(): str(name or "").strip().upper()
+            for mmsi, name in configured_map.items()
+            if str(mmsi).strip() and str(mmsi).strip().isdigit()
+        }
         # Simple caches to reduce repeated static lookups
         self._route_short_name_cache = {}
         # TTL caches for static endpoints
@@ -84,9 +92,9 @@ class MetlinkApiClient:
         self._live_cache_ttl_seconds = 30
         self._ais_positions_cache: tuple[datetime, list[dict[str, Any]]] | None = None
         self._ais_position_cache_seconds = AISSTREAM_POSITION_CACHE_SECONDS
-        self._ais_vessel_registry: dict[str, str] = {}
+        self._ais_vessel_registry: dict[str, str] = dict(self._ais_configured_vessel_registry)
         self._ais_vessel_registry_ts: datetime | None = None
-        self._ais_fleet_names: list[str] = []
+        self._ais_fleet_names: list[str] = list(dict.fromkeys(self._ais_configured_vessel_registry.values()))
         self._ais_fleet_names_ts: datetime | None = None
         # Stop predictions circuit breaker: track consecutive failures per stop.
         # After _STOP_PRED_FAIL_THRESHOLD failures the stop is skipped for
@@ -1072,8 +1080,13 @@ class MetlinkApiClient:
                     except asyncio.TimeoutError:
                         continue
 
+                    payload: dict[str, Any] | None = None
                     if msg.type == aiohttp.WSMsgType.TEXT:
                         payload = json.loads(msg.data)
+                    elif msg.type == aiohttp.WSMsgType.BINARY:
+                        payload = json.loads(msg.data.decode("utf-8", errors="ignore"))
+
+                    if payload is not None:
                         if not isinstance(payload, dict):
                             continue
 
@@ -1147,15 +1160,16 @@ class MetlinkApiClient:
         # Dynamic vessel refresh: keep known ferry vessel MMSI/name mapping current.
         if reports:
             if refresh_registry:
-                self._ais_vessel_registry = {}
+                self._ais_vessel_registry = dict(self._ais_configured_vessel_registry)
             seed_names = self._ais_fleet_names or [name.upper() for name in AIS_FERRY_SEED_NAMES]
+            seed_names.extend(self._ais_configured_vessel_registry.values())
             seeds = {
                 self._normalize_vessel_name(name)
                 for name in seed_names
                 if self._normalize_vessel_name(name)
             }
 
-            if refresh_registry:
+            if refresh_registry and not self._ais_configured_vessel_registry:
                 counts: dict[str, int] = {}
                 names: dict[str, str] = {}
                 seeded_mmsi: set[str] = set()
@@ -1185,12 +1199,12 @@ class MetlinkApiClient:
 
                 for mmsi in selected[:3]:
                     self._ais_vessel_registry[mmsi] = names.get(mmsi, mmsi)
-            else:
-                for row in reports:
-                    mmsi = str(row.get("mmsi") or "").strip()
-                    ship_name = str(row.get("ship_name") or "").strip().upper()
-                    if mmsi in self._ais_vessel_registry and ship_name:
-                        self._ais_vessel_registry[mmsi] = ship_name
+
+            for row in reports:
+                mmsi = str(row.get("mmsi") or "").strip()
+                ship_name = str(row.get("ship_name") or "").strip().upper()
+                if mmsi in self._ais_vessel_registry and ship_name:
+                    self._ais_vessel_registry[mmsi] = ship_name
             self._ais_vessel_registry_ts = datetime.now()
 
         return reports
