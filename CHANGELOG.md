@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.23] - 2026-05-13
+
+### Fix - Collapse co-located station suffix stop badges
+
+- Normalized train station stop IDs to collapse numeric suffix variants (for example `WELL1`, `WELL2`, `WELL-3`, `WELL_4`) to a shared station key.
+- Updated train stop badge dedupe to collapse only when those normalized station variants are co-located.
+- Preserved aggregated departure behavior for the merged station badge.
+- Updated frontend build marker to `0.12.23`.
+
 ## [0.12.22] - 2026-05-13
 
 ### Fix - Stop badge overlap realignment and kiosk startup redraw resilience

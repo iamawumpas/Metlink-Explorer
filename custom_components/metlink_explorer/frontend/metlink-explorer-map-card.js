@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.22)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.23)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1626,7 +1626,8 @@ class MetlinkExplorerCard extends LitElement {
   _normalizeTrainStationStopId(stopId) {
     const raw = String(stopId || "").trim().toUpperCase();
     if (!raw) return "";
-    return raw.replace(/\s*\d+$/, "");
+    // Collapse platform/index suffixes such as WELL1/WELL2, WELL_1, WELL-2, WELL 3.
+    return raw.replace(/[\s_-]*\d+$/, "");
   }
 
   _stopIdMatchesBubbleStop(row, bubbleStopId, payloadTransportationType = "") {
@@ -2194,8 +2195,11 @@ class MetlinkExplorerCard extends LitElement {
               selectedStops.forEach((stop) => {
                 const rawStopId = String(stop.stop_id || "").trim();
                 const normalizedTrainStopId = this._normalizeTrainStationStopId(rawStopId);
+                const stopLon = Number(stop.stop_lon);
+                const stopLat = Number(stop.stop_lat);
+                const coordKey = this._hubCoordKey(stopLon, stopLat);
                 const key = cat === 'train'
-                  ? `train:${normalizedTrainStopId || rawStopId.toUpperCase()}`
+                  ? `train:${normalizedTrainStopId || rawStopId.toUpperCase()}:${coordKey || `${stopLat}:${stopLon}`}`
                   : `${rawStopId}:${Number(stop.stop_lat)}:${Number(stop.stop_lon)}`;
                 if (!uniqueStops.has(key)) {
                   uniqueStops.set(
