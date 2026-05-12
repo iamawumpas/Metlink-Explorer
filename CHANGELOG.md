@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.9] - 2026-05-12
+
+### Fix - Preserve saved API keys in integration options
+
+- Fixed options flow behavior so leaving Metlink or AIS API key fields blank no longer clears previously saved keys.
+- Added masked Metlink API key field to options alongside the AIS key field for explicit key overwrite behavior.
+- Updated options flow validation so Metlink API key is only revalidated when a new key is entered.
+- Clarified options UI copy to state that blank key fields keep existing stored values.
+- Updated frontend build marker to `0.12.9`.
+
 ## [0.12.8] - 2026-05-12
 
 ### Fix - Guard map card async flows against unhandled promise noise

@@ -492,17 +492,60 @@ class MetlinkExplorerOptionsFlowHandler(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            new_ais_key = str(user_input.get(CONF_AIS_API_KEY, "")).strip() or None
-            new_vessel_map = self._parse_vessel_map(user_input.get(CONF_AIS_VESSEL_MAP))
-            if not new_vessel_map:
-                new_vessel_map = DEFAULT_AIS_FERRY_VESSELS
             shared_api_key = self.config_entry.data.get(CONF_API_KEY)
+            typed_api_key = str(user_input.get(CONF_API_KEY, "")).strip()
+            typed_ais_key = str(user_input.get(CONF_AIS_API_KEY, "")).strip()
+            parsed_vessel_map = self._parse_vessel_map(user_input.get(CONF_AIS_VESSEL_MAP))
+
+            # Security behavior: blank key fields mean "keep existing".
+            new_api_key = typed_api_key or shared_api_key
+            new_ais_key = typed_ais_key if typed_ais_key else None
+
+            # Validate only when the Metlink API key is being changed.
+            if typed_api_key:
+                session = async_get_clientsession(self.hass)
+                api_client = MetlinkApiClient(new_api_key, session, ais_api_key=(typed_ais_key or None))
+                try:
+                    if not await api_client.validate_api_key():
+                        errors["base"] = "invalid_auth"
+                except MetlinkApiError:
+                    errors["base"] = "cannot_connect"
+
+            if errors:
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=vol.Schema({
+                        vol.Optional(CONF_API_KEY, default=""): selector.TextSelector(
+                            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                        ),
+                        vol.Optional(CONF_AIS_API_KEY, default=""): selector.TextSelector(
+                            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                        ),
+                        vol.Optional(
+                            CONF_AIS_VESSEL_MAP,
+                            default=self._format_vessel_map(
+                                self.config_entry.data.get(CONF_AIS_VESSEL_MAP)
+                            ),
+                        ): selector.TextSelector(
+                            selector.TextSelectorConfig(multiline=True)
+                        ),
+                    }),
+                    errors=errors,
+                )
+
+            new_vessel_map = parsed_vessel_map
+            if not new_vessel_map:
+                new_vessel_map = self.config_entry.data.get(CONF_AIS_VESSEL_MAP)
+            if not isinstance(new_vessel_map, dict) or not new_vessel_map:
+                new_vessel_map = DEFAULT_AIS_FERRY_VESSELS
 
             for entry in self.hass.config_entries.async_entries(DOMAIN):
                 if entry.data.get(CONF_API_KEY) != shared_api_key:
                     continue
                 updated_data = dict(entry.data)
-                updated_data[CONF_AIS_API_KEY] = new_ais_key
+                updated_data[CONF_API_KEY] = new_api_key
+                if typed_ais_key:
+                    updated_data[CONF_AIS_API_KEY] = new_ais_key
                 updated_data[CONF_AIS_VESSEL_MAP] = new_vessel_map
                 self.hass.config_entries.async_update_entry(entry, data=updated_data)
                 await self.hass.config_entries.async_reload(entry.entry_id)
@@ -512,7 +555,12 @@ class MetlinkExplorerOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Optional(CONF_AIS_API_KEY, default=str(self.config_entry.data.get(CONF_AIS_API_KEY, "") or "")): cv.string,
+                vol.Optional(CONF_API_KEY, default=""): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                ),
+                vol.Optional(CONF_AIS_API_KEY, default=""): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+                ),
                 vol.Optional(
                     CONF_AIS_VESSEL_MAP,
                     default=self._format_vessel_map(self.config_entry.data.get(CONF_AIS_VESSEL_MAP)),

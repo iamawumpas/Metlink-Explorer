@@ -45,8 +45,9 @@
     "step": {
       "init": {
         "title": "Metlink Explorer Options",
-        "description": "Configure options for your Metlink Explorer integration. Add or update your own AISStream API key and canonical ferry MMSI mapping for live ferry tracking.",
+        "description": "Configure options for your Metlink Explorer integration. Enter new API keys only when you want to overwrite stored values; leaving key fields blank keeps existing saved keys.",
         "data": {
+          "api_key": "Metlink API Key (Optional Override)",
           "ais_api_key": "AISStream API Key (Optional)",
           "ais_vessel_map": "Ferry Vessel Map (one per line: MMSI,NAME)"
         }
