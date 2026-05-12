@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.20] - 2026-05-13
+
+### Fix - Ferry live tracking continuity and websocket resilience
+
+- Changed AIS websocket reconnect backoff to 60 seconds when disconnected.
+- Disabled server-side MMSI websocket filtering and kept MMSI filtering local to avoid upstream over-filter suppression.
+- Extended in-memory ferry report retention horizon so sparse AIS transmissions continue to plot instead of dropping after 20 seconds.
+- Removed ferry position cache reuse in the API call path so latest buffered coordinates are normalized each update cycle.
+- Updated frontend build marker to `0.12.20`.
+
 ## [0.12.19] - 2026-05-12
 
 ### Fix - Critical: AIS websocket position buffer not being populated

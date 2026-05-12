@@ -20,6 +20,8 @@ from .const import (
     AIS_FERRY_SEED_NAMES,
     AISSTREAM_DEFAULT_BBOX,
     AISSTREAM_POSITION_CACHE_SECONDS,
+    AISSTREAM_RECONNECT_SECONDS,
+    AISSTREAM_REPORT_MAX_AGE_SECONDS,
     AISSTREAM_SAMPLE_SECONDS,
     AISSTREAM_WS_URL,
     AIS_VESSEL_REFRESH_SECONDS,
@@ -988,12 +990,6 @@ class MetlinkApiClient:
             return []
 
         now = datetime.now()
-        if (
-            self._ais_positions_cache is not None
-            and (now - self._ais_positions_cache[0]).total_seconds() < self._ais_position_cache_seconds
-        ):
-            _LOGGER.debug(f"[FERRY] Using cached AIS positions (age: {(now - self._ais_positions_cache[0]).total_seconds():.1f}s)")
-            return self._ais_positions_cache[1]
 
         refresh_registry = (
             self._ais_vessel_registry_ts is None
@@ -1010,7 +1006,6 @@ class MetlinkApiClient:
         _LOGGER.debug(f"[FERRY] Got {len(raw_positions)} raw AIS position reports")
         normalized = self._normalize_ais_positions(raw_positions, route_id)
         _LOGGER.debug(f"[FERRY] Normalized to {len(normalized)} positions for route {route_id}")
-        self._ais_positions_cache = (now, normalized)
         return normalized
 
     async def _ensure_ais_stream_task(self) -> None:
@@ -1062,9 +1057,9 @@ class MetlinkApiClient:
 
                 configured_mmsi = sorted(str(mmsi).strip() for mmsi in self._ais_configured_vessel_registry.keys())
                 if configured_mmsi:
-                    # Keep websocket traffic focused on explicitly configured ferry MMSIs.
-                    subscription["FiltersShipMMSI"] = configured_mmsi
-                    _LOGGER.debug("[FERRY] AIS stream using server-side MMSI filter: %s", configured_mmsi)
+                    # Keep filtering local; server-side MMSI filtering has proven unreliable
+                    # and can suppress all traffic for valid ferry MMSIs.
+                    _LOGGER.debug("[FERRY] AIS stream using local MMSI filtering only: %s", configured_mmsi)
 
                 async with self._session.ws_connect(AISSTREAM_WS_URL, heartbeat=15) as ws:
                     _LOGGER.debug("[FERRY] AIS persistent websocket connected")
@@ -1118,8 +1113,9 @@ class MetlinkApiClient:
                         if mmsi in self._ais_vessel_registry and ship_name:
                             self._ais_vessel_registry[mmsi] = ship_name
 
-                        # Keep in-memory buffer bounded and recent.
-                        cutoff_ts = datetime.now().timestamp() - (AISSTREAM_SAMPLE_SECONDS * 3)
+                        # Keep in-memory buffer bounded over a long horizon so sparse ferry
+                        # transmissions still remain available to the live tracker pipeline.
+                        cutoff_ts = datetime.now().timestamp() - AISSTREAM_REPORT_MAX_AGE_SECONDS
                         stale_keys = [
                             key
                             for key, value in self._ais_live_reports.items()
@@ -1138,8 +1134,12 @@ class MetlinkApiClient:
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.warning("[FERRY] AIS persistent stream loop error (iteration %d): %s", loop_iteration, exc)
 
-            _LOGGER.debug("[FERRY] AIS stream reconnecting in 2 seconds (iteration %d)", loop_iteration)
-            await asyncio.sleep(2)
+            _LOGGER.debug(
+                "[FERRY] AIS stream reconnecting in %d seconds (iteration %d)",
+                AISSTREAM_RECONNECT_SECONDS,
+                loop_iteration,
+            )
+            await asyncio.sleep(AISSTREAM_RECONNECT_SECONDS)
 
     def _ais_payload_to_report(
         self,
@@ -1244,14 +1244,18 @@ class MetlinkApiClient:
     async def _fetch_aisstream_position_reports(self, refresh_registry: bool = False) -> list[dict[str, Any]]:
         """Return latest in-memory AIS reports from the persistent websocket stream."""
         now_ts = datetime.now().timestamp()
-        cutoff_ts = now_ts - AISSTREAM_SAMPLE_SECONDS
+        cutoff_ts = now_ts - AISSTREAM_REPORT_MAX_AGE_SECONDS
         reports = [
             dict(report)
             for report in self._ais_live_reports.values()
             if float(report.get("_received_ts", 0)) >= cutoff_ts
         ]
 
-        _LOGGER.debug("[FERRY] AIS snapshot read: %d live reports in last %ss", len(reports), AISSTREAM_SAMPLE_SECONDS)
+        _LOGGER.debug(
+            "[FERRY] AIS snapshot read: %d live reports in last %ss",
+            len(reports),
+            AISSTREAM_REPORT_MAX_AGE_SECONDS,
+        )
 
         # Dynamic vessel refresh: keep known ferry vessel MMSI/name mapping current.
         if reports:
