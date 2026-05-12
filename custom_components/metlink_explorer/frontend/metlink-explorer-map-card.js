@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.9)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.10)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1020,6 +1020,15 @@ class MetlinkExplorerCard extends LitElement {
       variants.add(String(Number(digits)));
     }
 
+    // Metlink ferry schedules can expose MIF/QDF as service labels while live
+    // ferry trackers remain attached to the shared published ferry route id.
+    if (raw === "mif" || raw === "qdf" || digits === "8" || digits === "14") {
+      variants.add("mif");
+      variants.add("qdf");
+      variants.add("8");
+      variants.add("14");
+    }
+
     return new Set([...variants].filter(Boolean));
   }
 
@@ -1173,7 +1182,7 @@ class MetlinkExplorerCard extends LitElement {
           "icon-anchor": "center",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
-          "icon-rotate": ["get", "bearing"],
+          "icon-rotate": ["coalesce", ["get", "icon_rotation"], 0],
           "icon-rotation-alignment": "map",
           "icon-pitch-alignment": "map",
         },
@@ -1790,24 +1799,30 @@ class MetlinkExplorerCard extends LitElement {
 
       this._vehicleLastPositions.set(entityId, { lat, lon, bearing });
 
-      const routeLabel  = feature.properties.route_label || "";
+      const routeLabel  = mode === 'ferry' ? "" : (feature.properties.route_label || "");
       const markerColor = feature.properties.marker_color || VEHICLE_COLORS[mode] || "#ff9800";
       const textColor   = feature.properties.text_color || "#ffffff";
       const haloColor   = feature.properties.text_halo_color || "rgba(0,0,0,0.45)";
       let shapeId = this._badgeShapeId(markerColor, badgeDiameter, borderWidth);
-      const textId  = this._badgeTextId(routeLabel, textColor, badgeDiameter, fontSize);
+      let textId = "";
       if (mode === 'ferry') {
         const directionVariant = this._ferryDirectionVariant(bearing);
         shapeId = this._ferryLiveShapeId(badgeDiameter, borderWidth, directionVariant);
         await this._ensureFerryLiveBadge(shapeId, badgeDiameter, borderWidth, dpr, directionVariant === 'west');
       } else {
         this._ensureBadgeShape(shapeId, markerColor, badgeDiameter, borderWidth, dpr);
+        textId = this._badgeTextId(routeLabel, textColor, badgeDiameter, fontSize);
+        this._ensureBadgeText(textId, routeLabel, textColor, haloColor, badgeDiameter, fontSize, dpr);
       }
-      this._ensureBadgeText(textId, routeLabel, textColor, haloColor, badgeDiameter, fontSize, dpr);
 
       const featureWithBadge = {
         ...feature,
-        properties: { ...feature.properties, shape_badge_id: shapeId, text_badge_id: textId },
+        properties: {
+          ...feature.properties,
+          shape_badge_id: shapeId,
+          text_badge_id: textId,
+          icon_rotation: mode === 'ferry' ? 0 : bearing,
+        },
       };
 
       this._setLiveSourceData(sourceId, [featureWithBadge]);

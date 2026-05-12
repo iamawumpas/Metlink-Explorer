@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.10] - 2026-05-12
+
+### Fix - Ferry live badge icon-only rendering and MIF/QDF live aliasing
+
+- Removed ferry live badge text overlay so live ferry markers render as icon-only badges.
+- Stopped ferry live badge rotation by bearing and kept east/west behavior driven only by flipped ferry icon variants.
+- Added shared ferry route alias matching so `MIF`, `QDF`, and shared ferry route ids can resolve to the same live ferry trackers in the frontend.
+- Updated frontend build marker to `0.12.10`.
+
 ## [0.12.9] - 2026-05-12
 
 ### Fix - Preserve saved API keys in integration options
