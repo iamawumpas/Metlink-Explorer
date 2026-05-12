@@ -993,6 +993,7 @@ class MetlinkApiClient:
             self._ais_positions_cache is not None
             and (now - self._ais_positions_cache[0]).total_seconds() < self._ais_position_cache_seconds
         ):
+            _LOGGER.debug(f"[FERRY] Using cached AIS positions (age: {(now - self._ais_positions_cache[0]).total_seconds():.1f}s)")
             return self._ais_positions_cache[1]
 
         refresh_registry = (
@@ -1001,10 +1002,14 @@ class MetlinkApiClient:
         )
 
         if refresh_registry:
+            _LOGGER.debug("[FERRY] Refreshing East by West fleet names...")
             await self._refresh_east_by_west_fleet_names()
 
+        _LOGGER.debug(f"[FERRY] Fetching raw AIS reports (registry has {len(self._ais_vessel_registry)} vessels)...")
         raw_positions = await self._fetch_aisstream_position_reports(refresh_registry=refresh_registry)
+        _LOGGER.debug(f"[FERRY] Got {len(raw_positions)} raw AIS position reports")
         normalized = self._normalize_ais_positions(raw_positions, route_id)
+        _LOGGER.debug(f"[FERRY] Normalized to {len(normalized)} positions for route {route_id}")
         self._ais_positions_cache = (now, normalized)
         return normalized
 
@@ -1071,8 +1076,12 @@ class MetlinkApiClient:
 
         try:
             async with self._session.ws_connect(AISSTREAM_WS_URL, heartbeat=10) as ws:
+                _LOGGER.debug(f"[FERRY] AIS WebSocket connected")
                 await ws.send_str(json.dumps(subscription))
+                _LOGGER.debug(f"[FERRY] AIS subscription sent: {json.dumps(subscription, indent=2)}")
                 end_at = asyncio.get_running_loop().time() + AISSTREAM_SAMPLE_SECONDS
+                msg_count = 0
+                filtered_count = 0
 
                 while asyncio.get_running_loop().time() < end_at:
                     try:
@@ -1157,10 +1166,13 @@ class MetlinkApiClient:
             _LOGGER.warning("AISStream fetch failed: %s", exc)
             return []
 
+        _LOGGER.debug(f"[FERRY] AIS fetch complete: {msg_count} messages received, {len(reports)} position reports collected")
+
         # Dynamic vessel refresh: keep known ferry vessel MMSI/name mapping current.
         if reports:
             if refresh_registry:
                 self._ais_vessel_registry = dict(self._ais_configured_vessel_registry)
+                _LOGGER.debug(f"[FERRY] Registry refreshed from configured vessels: {self._ais_vessel_registry}")
             seed_names = self._ais_fleet_names or [name.upper() for name in AIS_FERRY_SEED_NAMES]
             seed_names.extend(self._ais_configured_vessel_registry.values())
             seeds = {
@@ -1206,6 +1218,9 @@ class MetlinkApiClient:
                 if mmsi in self._ais_vessel_registry and ship_name:
                     self._ais_vessel_registry[mmsi] = ship_name
             self._ais_vessel_registry_ts = datetime.now()
+            _LOGGER.debug(f"[FERRY] Final registry after update: {self._ais_vessel_registry}")
+        else:
+            _LOGGER.warning("[FERRY] No AIS reports returned from websocket!")
 
         return reports
 
@@ -1214,12 +1229,24 @@ class MetlinkApiClient:
         if not isinstance(reports, list):
             return []
 
+        _LOGGER.debug(f"[FERRY] _normalize_ais_positions: route_id={route_id}, {len(reports)} input reports")
+        _LOGGER.debug(f"[FERRY] Vessel registry has {len(self._ais_vessel_registry)} MMSIs: {list(self._ais_vessel_registry.keys())}")
+        
         normalized: list[dict[str, Any]] = []
         filtered_reports = reports
         allowed_mmsi = set(self._ais_vessel_registry.keys())
+        
         if allowed_mmsi:
             allowed = allowed_mmsi
             filtered_reports = [row for row in reports if str(row.get("mmsi") or "") in allowed]
+            _LOGGER.debug(f"[FERRY] After MMSI filtering: {len(filtered_reports)}/{len(reports)} reports kept (registry has {len(allowed_mmsi)} MMSIs)")
+            if filtered_reports:
+                for report in filtered_reports[:3]:
+                    _LOGGER.debug(f"[FERRY]   - MMSI {report.get('mmsi')}: {report.get('ship_name')} at ({report.get('latitude')}, {report.get('longitude')})")
+            else:
+                _LOGGER.warning(f"[FERRY] All reports filtered out! Report MMSIs: {[str(r.get('mmsi')) for r in reports[:5]]}")
+        else:
+            _LOGGER.warning(f"[FERRY] Vessel registry is EMPTY - no MMSIs configured!")
 
         seen: set[str] = set()
         for row in filtered_reports:

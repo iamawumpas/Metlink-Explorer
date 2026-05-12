@@ -52,7 +52,9 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # frontend rendering visibility, not backend data collection.
             if self.transportation_type == FERRY_ROUTE_TYPE:
                 # Ferry live tracking is sourced from AIS, not Metlink GTFS-RT.
+                _LOGGER.debug(f"[FERRY] Coordinator fetching AIS positions for route {self.route_id}")
                 vehicle_positions = await self.api_client.get_ferry_ais_positions(self.route_id)
+                _LOGGER.debug(f"[FERRY] Coordinator got {len(vehicle_positions)} positions from AIS for route {self.route_id}")
             else:
                 vehicle_positions = await self.api_client.get_vehicle_positions()
             vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
