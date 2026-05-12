@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.24)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.25)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -93,6 +93,7 @@ class MetlinkExplorerCard extends LitElement {
     this._startupRedrawTimer = null;
     this._startupStableTicks = 0;
     this._startupSettled = false;
+    this._liveUpdateBadgeLayoutTimer = null;
     this._stopBadgeLayoutSources = new Map();
     this._stopLayoutDebounceTimer = null;
   }
@@ -2074,6 +2075,9 @@ class MetlinkExplorerCard extends LitElement {
 
     // Hub layers must remain above vehicle badges.
     this._bringHubLayersToFront();
+
+    // Recalculate stop badge collision layout in case live vehicle positions changed (e.g., ferries moved).
+    this._scheduleStopBadgeOverlapLayout();
   }
 
   async _renderRoutes() {
@@ -2788,7 +2792,27 @@ class MetlinkExplorerCard extends LitElement {
     }
   }
 
+  _startLiveUpdateBadgeLayoutTimer() {
+    if (this._liveUpdateBadgeLayoutTimer) return;
+    // After startup settles, periodically recalculate badge layout for live data changes (ferry positions, etc.)
+    this._liveUpdateBadgeLayoutTimer = setInterval(() => {
+      if (this.map && this.map.isStyleLoaded()) {
+        this._scheduleStopBadgeOverlapLayout();
+      }
+    }, 5000);
+    console.log('[MetlinkExplorer] started live badge layout update timer (every 5s)');
+  }
+
+  _stopLiveUpdateBadgeLayoutTimer() {
+    if (this._liveUpdateBadgeLayoutTimer) {
+      clearInterval(this._liveUpdateBadgeLayoutTimer);
+      this._liveUpdateBadgeLayoutTimer = null;
+      console.log('[MetlinkExplorer] stopped live badge layout update timer');
+    }
+  }
+
   _restartStartupOverlayRedrawLoop() {
+    this._stopLiveUpdateBadgeLayoutTimer();
     this._startupSettled = false;
     this._startupStableTicks = 0;
     this._startStartupOverlayRedrawLoop();
@@ -2817,7 +2841,8 @@ class MetlinkExplorerCard extends LitElement {
       if (this._startupStableTicks >= STARTUP_STABLE_TICKS_REQUIRED) {
         this._startupSettled = true;
         this._stopStartupOverlayRedrawLoop();
-        console.log('[MetlinkExplorer] startup overlay redraw loop settled; stopping forced redraws');
+        this._startLiveUpdateBadgeLayoutTimer();
+        console.log('[MetlinkExplorer] startup overlay redraw loop settled; stopping forced redraws and starting live badge layout updates');
       }
       return;
     }
@@ -2851,6 +2876,7 @@ class MetlinkExplorerCard extends LitElement {
   disconnectedCallback() {
     window.removeEventListener('pointerdown', this._boundDocumentPointerDown, true);
     this._stopStartupOverlayRedrawLoop();
+    this._stopLiveUpdateBadgeLayoutTimer();
     if (this._stopLayoutDebounceTimer) {
       clearTimeout(this._stopLayoutDebounceTimer);
       this._stopLayoutDebounceTimer = null;

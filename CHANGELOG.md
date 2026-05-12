@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.25] - 2026-05-13
+
+### Fix - Badge collision logic continuous operation and resilience
+
+- Fixed badge collision logic stopping after ~120 seconds by adding persistent live update timer that runs every 5 seconds after startup settles.
+- Ensured badge overlap recalculation fires on all live vehicle data updates (e.g., ferry position changes).
+- Badge collision logic now stays active indefinitely with continuous periodic re-evaluation.
+- Timer automatically restarts if the integration restarts while kiosk is open.
+- Improved consistency of badge layout when map moves, zooms, or rotates.
+- Updated frontend build marker to `0.12.25`.
+
 ## [0.12.24] - 2026-05-13
 
 ### Fix - Train station suffix collapse and badge layout resilience
