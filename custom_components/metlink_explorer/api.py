@@ -1045,9 +1045,12 @@ class MetlinkApiClient:
             "ShipStaticData",
             "StaticDataReport",
         }
+        loop_iteration = 0
 
         while True:
             try:
+                loop_iteration += 1
+                _LOGGER.debug("[FERRY] AIS stream loop iteration %d starting", loop_iteration)
                 subscription: dict[str, Any] = {
                     "APIKey": self._ais_api_key,
                     "BoundingBoxes": AISSTREAM_DEFAULT_BBOX,
@@ -1058,18 +1061,27 @@ class MetlinkApiClient:
                 if configured_mmsi:
                     # Keep websocket traffic focused on explicitly configured ferry MMSIs.
                     subscription["FiltersShipMMSI"] = configured_mmsi
+                    _LOGGER.debug("[FERRY] AIS stream using server-side MMSI filter: %s", configured_mmsi)
 
                 async with self._session.ws_connect(AISSTREAM_WS_URL, heartbeat=15) as ws:
                     _LOGGER.debug("[FERRY] AIS persistent websocket connected")
                     await ws.send_str(json.dumps(subscription))
-                    _LOGGER.debug("[FERRY] AIS subscription sent on connect")
+                    _LOGGER.info("[FERRY] AIS subscription sent on connect (iteration %d)", loop_iteration)
+                    msg_count = 0
+                    position_count = 0
+                    last_log_at = asyncio.get_running_loop().time()
 
                     while True:
                         try:
                             msg = await ws.receive(timeout=30)
                         except asyncio.TimeoutError:
+                            now = asyncio.get_running_loop().time()
+                            if now - last_log_at > 60:
+                                _LOGGER.debug("[FERRY] AIS stream alive (no timeout), %d messages received, %d positions buffered", msg_count, len(self._ais_live_reports))
+                                last_log_at = now
                             continue
 
+                        msg_count += 1
                         payload: dict[str, Any] | None = None
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             payload = json.loads(msg.data)
@@ -1089,11 +1101,8 @@ class MetlinkApiClient:
                         if report is None:
                             continue
 
-                        mmsi = str(report.get("mmsi") or "").strip()
-                        if not mmsi:
-                            continue
-
-                        self._ais_live_reports[mmsi] = report
+                        position_count += 1
+                        _LOGGER.debug("[FERRY] AIS position buffered for MMSI %s: (%s, %s)", mmsi, report.get("latitude"), report.get("longitude"))
 
                         ship_name = str(report.get("ship_name") or "").strip().upper()
                         if mmsi in self._ais_vessel_registry and ship_name:
@@ -1108,12 +1117,18 @@ class MetlinkApiClient:
                         ]
                         for key in stale_keys:
                             self._ais_live_reports.pop(key, None)
+                        if stale_keys:
+                            _LOGGER.debug("[FERRY] AIS buffer purged %d stale reports; now holding %d", len(stale_keys), len(self._ais_live_reports))
+
+                    _LOGGER.info("[FERRY] AIS websocket iteration %d ended: %d total messages, %d position updates", loop_iteration, msg_count, position_count)
 
             except asyncio.CancelledError:
+                _LOGGER.debug("[FERRY] AIS stream loop cancelled (iteration %d)", loop_iteration)
                 raise
             except Exception as exc:  # noqa: BLE001
-                _LOGGER.warning("AIS persistent stream loop error: %s", exc)
+                _LOGGER.warning("[FERRY] AIS persistent stream loop error (iteration %d): %s", loop_iteration, exc)
 
+            _LOGGER.debug("[FERRY] AIS stream reconnecting in 2 seconds (iteration %d)", loop_iteration)
             await asyncio.sleep(2)
 
     def _ais_payload_to_report(
