@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.16] - 2026-05-12
+
+### Fix - Enforce strict configured ferry MMSI filtering
+
+- Enforced strict MMSI filtering when a configured ferry vessel map is present.
+- Disabled adaptive MMSI fallback in strict mode so unrelated harbour vessels are not learned into ferry tracking.
+- Preserved adaptive fallback behavior only when no explicit vessel map is configured.
+- Updated frontend build marker to `0.12.16`.
+
 ## [0.12.15] - 2026-05-12
 
 ### Fix - Keep ferry trackers visible while stationary

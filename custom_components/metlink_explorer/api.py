@@ -1233,6 +1233,8 @@ class MetlinkApiClient:
         filtered_reports = reports
         allowed_mmsi = set(self._ais_vessel_registry.keys())
         
+        has_explicit_vessel_map = bool(self._ais_configured_vessel_registry)
+
         if allowed_mmsi:
             allowed = allowed_mmsi
             filtered_reports = [row for row in reports if str(row.get("mmsi") or "") in allowed]
@@ -1241,40 +1243,45 @@ class MetlinkApiClient:
                 for report in filtered_reports[:3]:
                     _LOGGER.debug(f"[FERRY]   - MMSI {report.get('mmsi')}: {report.get('ship_name')} at ({report.get('latitude')}, {report.get('longitude')})")
             else:
-                # If strict MMSI filtering yields nothing, accept a small live MMSI set
-                # and learn it in-memory so ferry tracking keeps flowing.
-                reports_by_mmsi: dict[str, list[dict[str, Any]]] = {}
-                for row in reports:
-                    mmsi = str(row.get("mmsi") or "").strip()
-                    if not mmsi:
-                        continue
-                    reports_by_mmsi.setdefault(mmsi, []).append(row)
-
-                live_mmsi = sorted(
-                    reports_by_mmsi.keys(),
-                    key=lambda key: len(reports_by_mmsi[key]),
-                    reverse=True,
-                )
-                _LOGGER.debug(
-                    "[FERRY] All reports filtered out by registry. Live MMSIs seen: %s",
-                    live_mmsi[:5],
-                )
-
-                if 1 <= len(live_mmsi) <= 3:
-                    chosen = live_mmsi[:3]
-                    filtered_reports = [
-                        row for row in reports if str(row.get("mmsi") or "").strip() in set(chosen)
-                    ]
-                    for mmsi in chosen:
-                        if mmsi not in self._ais_vessel_registry:
-                            sample = reports_by_mmsi[mmsi][0] if reports_by_mmsi[mmsi] else {}
-                            learned_name = str(sample.get("ship_name") or f"UNKNOWN FERRY {mmsi}").strip().upper()
-                            self._ais_vessel_registry[mmsi] = learned_name
-                    _LOGGER.info(
-                        "[FERRY] Applied adaptive MMSI fallback: %s (%d reports)",
-                        chosen,
-                        len(filtered_reports),
+                if has_explicit_vessel_map:
+                    _LOGGER.debug(
+                        "[FERRY] Strict MMSI mode enabled from configured vessel map; no adaptive fallback applied"
                     )
+                else:
+                    # If strict MMSI filtering yields nothing and no explicit vessel map is
+                    # configured, accept a small live MMSI set and learn it in-memory.
+                    reports_by_mmsi: dict[str, list[dict[str, Any]]] = {}
+                    for row in reports:
+                        mmsi = str(row.get("mmsi") or "").strip()
+                        if not mmsi:
+                            continue
+                        reports_by_mmsi.setdefault(mmsi, []).append(row)
+
+                    live_mmsi = sorted(
+                        reports_by_mmsi.keys(),
+                        key=lambda key: len(reports_by_mmsi[key]),
+                        reverse=True,
+                    )
+                    _LOGGER.debug(
+                        "[FERRY] All reports filtered out by registry. Live MMSIs seen: %s",
+                        live_mmsi[:5],
+                    )
+
+                    if 1 <= len(live_mmsi) <= 3:
+                        chosen = live_mmsi[:3]
+                        filtered_reports = [
+                            row for row in reports if str(row.get("mmsi") or "").strip() in set(chosen)
+                        ]
+                        for mmsi in chosen:
+                            if mmsi not in self._ais_vessel_registry:
+                                sample = reports_by_mmsi[mmsi][0] if reports_by_mmsi[mmsi] else {}
+                                learned_name = str(sample.get("ship_name") or f"UNKNOWN FERRY {mmsi}").strip().upper()
+                                self._ais_vessel_registry[mmsi] = learned_name
+                        _LOGGER.info(
+                            "[FERRY] Applied adaptive MMSI fallback: %s (%d reports)",
+                            chosen,
+                            len(filtered_reports),
+                        )
         else:
             _LOGGER.debug("[FERRY] Vessel registry is empty; using unfiltered AIS reports")
 
