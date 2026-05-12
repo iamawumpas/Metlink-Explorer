@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.28)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.29)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1629,9 +1629,31 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
+  _deriveDirectionMetaForMode(rows, modeBucket = "") {
+    const base = this._deriveDirectionMeta(rows);
+    if (this._modeBucket(modeBucket) !== "ferry") return base;
+
+    const fallbackKey = base.outboundKey
+      || base.inboundKey
+      || String((rows || [])[0]?.directionKey || "").trim()
+      || null;
+
+    return {
+      inboundKey: null,
+      outboundKey: fallbackKey,
+      hasBoth: false,
+    };
+  }
+
+  _isFerryBubble(bubble) {
+    return this._modeBucket(bubble?.stop?.mode || "") === "ferry";
+  }
+
   _filteredBubbleDepartures(bubble) {
     const rows = Array.isArray(bubble?.departures) ? bubble.departures : [];
-    const filter = String(bubble?.directionFilter || "all");
+    const filter = this._isFerryBubble(bubble)
+      ? "outbound"
+      : String(bubble?.directionFilter || "all");
     const inboundKey = bubble?.directionMeta?.inboundKey;
     const outboundKey = bubble?.directionMeta?.outboundKey;
 
@@ -1655,6 +1677,7 @@ class MetlinkExplorerCard extends LitElement {
   _setBubbleDirectionFilter(filter) {
     if (!this._departureBubble) return;
     const next = String(filter || "all");
+    if (this._isFerryBubble(this._departureBubble) && next !== "outbound") return;
     const inboundKey = this._departureBubble?.directionMeta?.inboundKey;
     const outboundKey = this._departureBubble?.directionMeta?.outboundKey;
     if (next === "inbound" && !inboundKey) return;
@@ -1799,11 +1822,12 @@ class MetlinkExplorerCard extends LitElement {
       stop: {
         id: stopId,
         name: stopName,
+        mode: modeBucket,
         coordinates: [lon, lat],
         influenceStopIds: stopScopeIds,
       },
       departures: [],
-      directionFilter: "all",
+      directionFilter: modeBucket === "ferry" ? "outbound" : "all",
       directionMeta: {
         inboundKey: null,
         outboundKey: null,
@@ -1820,8 +1844,8 @@ class MetlinkExplorerCard extends LitElement {
       ...this._departureBubble,
       loading: false,
       departures,
-      directionFilter: "all",
-      directionMeta: this._deriveDirectionMeta(departures),
+      directionFilter: modeBucket === "ferry" ? "outbound" : "all",
+      directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket),
     };
     this.requestUpdate();
   }
@@ -1856,6 +1880,7 @@ class MetlinkExplorerCard extends LitElement {
   _renderDepartureBubble() {
     const bubble = this._departureBubble;
     if (!bubble) return null;
+    const isFerryBubble = this._isFerryBubble(bubble);
     const visibleDepartures = this._filteredBubbleDepartures(bubble);
     const canFilterInbound = Boolean(bubble?.directionMeta?.inboundKey);
     const canFilterOutbound = Boolean(bubble?.directionMeta?.outboundKey);
@@ -1890,11 +1915,12 @@ class MetlinkExplorerCard extends LitElement {
           <div class="departure-filters" role="tablist" aria-label="Direction filter">
             <button
               class=${`departure-filter-btn ${bubble.directionFilter === "all" ? "active" : ""}`}
+              ?disabled=${isFerryBubble}
               @click=${() => this._setBubbleDirectionFilter("all")}
             >All</button>
             <button
               class=${`departure-filter-btn ${bubble.directionFilter === "inbound" ? "active" : ""}`}
-              ?disabled=${!canFilterInbound}
+              ?disabled=${isFerryBubble || !canFilterInbound}
               @click=${() => this._setBubbleDirectionFilter("inbound")}
             >Inbound</button>
             <button

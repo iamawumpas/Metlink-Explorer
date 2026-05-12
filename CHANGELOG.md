@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.29] - 2026-05-13
+
+### Fix - Ferry stop bubbles outbound-only departures
+
+- Limited ferry stop bubble cards to outbound departures only.
+- Locked ferry bubble direction filtering to outbound to prevent inbound/all selection for ferry stops.
+- Applied ferry-specific direction metadata handling so outbound remains the active scope.
+- Updated frontend build marker to `0.12.29`.
+
 ## [0.12.28] - 2026-05-13
 
 ### Fix - Inline ordering for mixed ferry/train/bus stop badges
