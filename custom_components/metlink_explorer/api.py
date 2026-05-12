@@ -107,6 +107,14 @@ class MetlinkApiClient:
             return TRAIN_GTFS_CACHE_TTL_SECONDS
         return self._cache_ttl_seconds
 
+    @staticmethod
+    def _normalize_vessel_name(value: str | None) -> str:
+        """Return an uppercase alphanumeric vessel-name key for robust matching."""
+        text = str(value or "").upper().strip()
+        # AIS names often include padding or punctuation; normalize to a stable key.
+        text = re.sub(r"[^A-Z0-9]+", "", text)
+        return text
+
     async def _request(self, endpoint: str) -> dict[str, Any]:
         """Make a request to the API."""
         url = f"{self._base_url}{endpoint}"
@@ -1040,7 +1048,13 @@ class MetlinkApiClient:
         subscription = {
             "APIKey": self._ais_api_key,
             "BoundingBoxes": AISSTREAM_DEFAULT_BBOX,
-            "FilterMessageTypes": ["PositionReport", "StandardClassBPositionReport", "ExtendedClassBPositionReport"],
+            "FilterMessageTypes": [
+                "PositionReport",
+                "StandardClassBPositionReport",
+                "ExtendedClassBPositionReport",
+                "ShipStaticData",
+                "StaticDataReport",
+            ],
         }
 
         # Use known vessel registry between daily discovery refreshes.
@@ -1068,6 +1082,8 @@ class MetlinkApiClient:
                             "PositionReport",
                             "StandardClassBPositionReport",
                             "ExtendedClassBPositionReport",
+                            "ShipStaticData",
+                            "StaticDataReport",
                         }:
                             continue
 
@@ -1076,6 +1092,15 @@ class MetlinkApiClient:
                         ship_name = str(metadata.get("ShipName") or "").strip()
 
                         body = (payload.get("Message") or {}).get(msg_type) or {}
+                        if not ship_name:
+                            if msg_type == "ShipStaticData":
+                                ship_name = str(body.get("Name") or "").strip()
+                            elif msg_type == "StaticDataReport":
+                                report_a = body.get("ReportA") if isinstance(body.get("ReportA"), dict) else {}
+                                ship_name = str(report_a.get("Name") or "").strip()
+                            elif msg_type == "ExtendedClassBPositionReport":
+                                ship_name = str(body.get("Name") or "").strip()
+
                         lat = body.get("Latitude", metadata.get("latitude", metadata.get("Latitude")))
                         lon = body.get("Longitude", metadata.get("longitude", metadata.get("Longitude")))
                         cog = body.get("Cog")
@@ -1083,7 +1108,23 @@ class MetlinkApiClient:
                         sog = body.get("Sog")
                         ts = metadata.get("time_utc")
 
+                        if not mmsi:
+                            continue
+
+                        # Keep name-only AIS messages so registry discovery can map MMSI by vessel name.
                         if lat is None or lon is None:
+                            if not ship_name:
+                                continue
+                            report = {
+                                "mmsi": mmsi,
+                                "ship_name": ship_name,
+                                "latitude": None,
+                                "longitude": None,
+                                "bearing": None,
+                                "speed": None,
+                                "timestamp": ts,
+                            }
+                            reports.append(report)
                             continue
 
                         report = {
@@ -1107,11 +1148,17 @@ class MetlinkApiClient:
         if reports:
             if refresh_registry:
                 self._ais_vessel_registry = {}
-            seeds = {name.upper() for name in (self._ais_fleet_names or AIS_FERRY_SEED_NAMES)}
+            seed_names = self._ais_fleet_names or [name.upper() for name in AIS_FERRY_SEED_NAMES]
+            seeds = {
+                self._normalize_vessel_name(name)
+                for name in seed_names
+                if self._normalize_vessel_name(name)
+            }
 
             if refresh_registry:
                 counts: dict[str, int] = {}
                 names: dict[str, str] = {}
+                seeded_mmsi: set[str] = set()
                 for row in reports:
                     mmsi = str(row.get("mmsi") or "").strip()
                     if not mmsi:
@@ -1120,11 +1167,15 @@ class MetlinkApiClient:
                     ship_name = str(row.get("ship_name") or "").strip().upper()
                     if ship_name:
                         names[mmsi] = ship_name
+                        if self._normalize_vessel_name(ship_name) in seeds:
+                            seeded_mmsi.add(mmsi)
 
                 # Prefer known East-by-West seed names first, then highest activity.
-                selected: list[str] = [
-                    mmsi for mmsi, name in names.items() if name in seeds
-                ]
+                selected: list[str] = sorted(
+                    seeded_mmsi,
+                    key=lambda key: counts.get(key, 0),
+                    reverse=True,
+                )
                 selected_sorted = sorted(counts.keys(), key=lambda key: counts.get(key, 0), reverse=True)
                 for mmsi in selected_sorted:
                     if mmsi not in selected:

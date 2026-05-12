@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.6] - 2026-05-12
+
+### Fix - Robust MMSI discovery from ferry vessel names
+
+- Expanded AIS discovery sampling to include static/name-bearing message types (`ShipStaticData`, `StaticDataReport`) in addition to position reports.
+- Added vessel-name extraction from multiple AIS payload locations and metadata fields to improve name availability during registry refresh.
+- Normalized vessel and fleet names before matching so punctuation/case differences do not block MMSI selection.
+- Allowed name-only AIS messages (without coordinates) to contribute to MMSI registry building while keeping position normalization strict for tracker updates.
+- Improved registry candidate selection to prioritize confirmed East by West fleet-name matches before activity-based fallback.
+
 ## [0.12.5] - 2026-05-12
 
 ### Fix - Improve ferry tracker discovery reliability
