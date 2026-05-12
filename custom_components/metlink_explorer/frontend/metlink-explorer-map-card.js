@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.27)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.28)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -751,11 +751,9 @@ class MetlinkExplorerCard extends LitElement {
 
         others.forEach((stop, index) => {
           const radius = ferryRadius + radiusMeters + (index * Math.max(10, Math.round(radiusMeters * 0.35)));
-          const sideShift = (index % 2 === 0 ? -1 : 1) * Math.max(6, Math.round(radiusMeters * 0.18));
           const awayRad = ((towardHarbor + 180) % 360) * (Math.PI / 180);
-          const perpRad = (towardHarbor + 90) * (Math.PI / 180);
-          const dLon = ((Math.cos(awayRad) * radius) + (Math.cos(perpRad) * sideShift)) / metersPerDegLon;
-          const dLat = ((Math.sin(awayRad) * radius) + (Math.sin(perpRad) * sideShift)) / metersPerDegLat;
+          const dLon = (Math.cos(awayRad) * radius) / metersPerDegLon;
+          const dLat = (Math.sin(awayRad) * radius) / metersPerDegLat;
           offsets[stop.stop_id] = { dLon, dLat };
         });
       } else {
@@ -2489,12 +2487,14 @@ class MetlinkExplorerCard extends LitElement {
 
     const primaryDx = Number(primary?.x) - Number(harborPoint.x);
     const primaryDy = Number(primary?.y) - Number(harborPoint.y);
-    const bearing = Math.atan2(primaryDy, primaryDx);
+    const fallbackDx = group.reduce((sum, item) => sum + (Number(item?.x) - Number(harborPoint.x)), 0);
+    const fallbackDy = group.reduce((sum, item) => sum + (Number(item?.y) - Number(harborPoint.y)), 0);
+    const bearing = (Math.abs(primaryDx) < 0.001 && Math.abs(primaryDy) < 0.001)
+      ? Math.atan2(fallbackDy || 0, fallbackDx || 1)
+      : Math.atan2(primaryDy, primaryDx);
     const baseDistance = Math.max(18, Math.max(...group.map((item) => Math.max(1, Number(item.diameter) || 1))) + 3);
     const awayDx = Math.cos(bearing);
     const awayDy = Math.sin(bearing);
-    const perpDx = Math.cos(bearing + (Math.PI / 2));
-    const perpDy = Math.sin(bearing + (Math.PI / 2));
 
     const others = group
       .filter((item) => item !== primary)
@@ -2508,14 +2508,11 @@ class MetlinkExplorerCard extends LitElement {
 
     const layout = [{ ...primary, layoutX: primary.x, layoutY: primary.y }];
     others.forEach((item, index) => {
-      const ring = Math.floor(index / 2) + 1;
-      const side = index % 2 === 0 ? -1 : 1;
-      const radialDistance = baseDistance * ring;
-      const lateralDistance = baseDistance * 0.42 * ring * side;
+      const radialDistance = baseDistance * (index + 1);
       layout.push({
         ...item,
-        layoutX: primary.x + (awayDx * radialDistance) + (perpDx * lateralDistance),
-        layoutY: primary.y + (awayDy * radialDistance) + (perpDy * lateralDistance),
+        layoutX: primary.x + (awayDx * radialDistance),
+        layoutY: primary.y + (awayDy * radialDistance),
       });
     });
 

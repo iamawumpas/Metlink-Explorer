@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.28] - 2026-05-13
+
+### Fix - Inline ordering for mixed ferry/train/bus stop badges
+
+- Replaced radial/fan placement in ferry-mixed groups with strict inline ordering.
+- Kept ferry as the primary anchor closest to the harbor center direction.
+- Forced non-ferry badges to line up in one sequence at increasing distance from the ferry anchor (no side spread).
+- Applied the same inline rule in both the source-offset pass and the overlap-layout pass for redraw consistency.
+- Updated frontend build marker to `0.12.28`.
+
 ## [0.12.27] - 2026-05-13
 
 ### Fix - Harbor-anchored ferry badge priority
