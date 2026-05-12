@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.30)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.31)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -54,6 +54,7 @@ const VEHICLE_COLORS = {
 const TILE_FADE_DURATION_MS = 250000;
 const STARTUP_REDRAW_INTERVAL_MS = 10000;
 const STARTUP_STABLE_TICKS_REQUIRED = 2;
+const LAYER_PANEL_INACTIVITY_CLOSE_MS = 30000;
 
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
@@ -88,6 +89,7 @@ class MetlinkExplorerCard extends LitElement {
     this._liveLayersByMode  = new Map();
     this._layerPanelOpen    = false;
     this._layerResetTimer   = null;
+    this._layerPanelAutoCloseTimer = null;
     this._isEditorPreview   = false;
     this._appliedHostHeight = "";
     this._startupRedrawTimer = null;
@@ -96,11 +98,6 @@ class MetlinkExplorerCard extends LitElement {
     this._liveUpdateBadgeLayoutTimer = null;
     this._stopBadgeLayoutSources = new Map();
     this._stopLayoutDebounceTimer = null;
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    window.addEventListener('pointerdown', this._boundDocumentPointerDown, true);
   }
 
   static async getConfigElement() {
@@ -1007,16 +1004,43 @@ class MetlinkExplorerCard extends LitElement {
       this._scheduleStopBadgeOverlapLayout();
     }
     this._scheduleLayerRevert();
+    this._scheduleLayerPanelAutoClose();
     this.requestUpdate();
+  }
+
+  _setLayerPanelOpen(open) {
+    const next = Boolean(open);
+    this._layerPanelOpen = next;
+    if (next) this._scheduleLayerPanelAutoClose();
+    else this._clearLayerPanelAutoClose();
+    this.requestUpdate();
+  }
+
+  _clearLayerPanelAutoClose() {
+    if (this._layerPanelAutoCloseTimer) {
+      clearTimeout(this._layerPanelAutoCloseTimer);
+      this._layerPanelAutoCloseTimer = null;
+    }
+  }
+
+  _scheduleLayerPanelAutoClose() {
+    if (!this._layerPanelOpen) return;
+    this._clearLayerPanelAutoClose();
+    this._layerPanelAutoCloseTimer = setTimeout(() => {
+      this._layerPanelAutoCloseTimer = null;
+      this._setLayerPanelOpen(false);
+    }, LAYER_PANEL_INACTIVITY_CLOSE_MS);
   }
 
   _onDocumentPointerDown(event) {
     if (!this._layerPanelOpen) return;
     const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
     const clickedInsidePanel = path.some((node) => node?.classList?.contains?.('layer-panel-wrap'));
-    if (clickedInsidePanel) return;
-    this._layerPanelOpen = false;
-    this.requestUpdate();
+    if (clickedInsidePanel) {
+      this._scheduleLayerPanelAutoClose();
+      return;
+    }
+    this._setLayerPanelOpen(false);
   }
 
   _applyLayerVisibility(type, mode) {
@@ -2020,6 +2044,7 @@ class MetlinkExplorerCard extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener('pointerdown', this._boundDocumentPointerDown, true);
     setTimeout(() => this._forceSectionBreakout(), 500);
   }
 
@@ -3074,6 +3099,7 @@ class MetlinkExplorerCard extends LitElement {
 
   disconnectedCallback() {
     window.removeEventListener('pointerdown', this._boundDocumentPointerDown, true);
+    this._clearLayerPanelAutoClose();
     this._stopStartupOverlayRedrawLoop();
     this._stopLiveUpdateBadgeLayoutTimer();
     if (this._stopLayoutDebounceTimer) {
@@ -3134,7 +3160,7 @@ class MetlinkExplorerCard extends LitElement {
       <div class="layer-panel-wrap">
         <button
           class="lp-hamburger"
-          @click=${() => { this._layerPanelOpen = !this._layerPanelOpen; this.requestUpdate(); }}
+          @click=${() => this._setLayerPanelOpen(!this._layerPanelOpen)}
           title="Layer controls"
           aria-label="Layer controls"
         >

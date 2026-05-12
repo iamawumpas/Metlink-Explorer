@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.31] - 2026-05-13
+
+### Fix - Layer menu close behavior consistency
+
+- Added 30-second inactivity auto-close for the layer hamburger menu.
+- Ensured the menu closes when the user clicks elsewhere on the card.
+- Merged duplicate lifecycle setup so outside-click listeners are always registered.
+- Added proper panel auto-close timer cleanup on component disconnect.
+- Updated frontend build marker to `0.12.31`.
+
 ## [0.12.30] - 2026-05-13
 
 ### Fix - Outbound-only terminal train and bus stop bubbles
