@@ -92,6 +92,9 @@ class MetlinkApiClient:
         self._ais_vessel_registry_ts: datetime | None = None
         self._ais_fleet_names: list[str] = list(dict.fromkeys(self._ais_configured_vessel_registry.values()))
         self._ais_fleet_names_ts: datetime | None = None
+        self._ais_stream_task: asyncio.Task[None] | None = None
+        self._ais_stream_lock = asyncio.Lock()
+        self._ais_live_reports: dict[str, dict[str, Any]] = {}
         # Stop predictions circuit breaker: track consecutive failures per stop.
         # After _STOP_PRED_FAIL_THRESHOLD failures the stop is skipped for
         # _STOP_PRED_BACKOFF_SECONDS before being retried.
@@ -1001,13 +1004,176 @@ class MetlinkApiClient:
             _LOGGER.debug("[FERRY] Refreshing East by West fleet names...")
             await self._refresh_east_by_west_fleet_names()
 
-        _LOGGER.debug(f"[FERRY] Fetching raw AIS reports (registry has {len(self._ais_vessel_registry)} vessels)...")
+        await self._ensure_ais_stream_task()
+        _LOGGER.debug(f"[FERRY] Fetching raw AIS reports from live stream snapshot (registry has {len(self._ais_vessel_registry)} vessels)...")
         raw_positions = await self._fetch_aisstream_position_reports(refresh_registry=refresh_registry)
         _LOGGER.debug(f"[FERRY] Got {len(raw_positions)} raw AIS position reports")
         normalized = self._normalize_ais_positions(raw_positions, route_id)
         _LOGGER.debug(f"[FERRY] Normalized to {len(normalized)} positions for route {route_id}")
         self._ais_positions_cache = (now, normalized)
         return normalized
+
+    async def _ensure_ais_stream_task(self) -> None:
+        """Ensure the AIS stream background task is running."""
+        if not self._ais_api_key:
+            return
+
+        async with self._ais_stream_lock:
+            if self._ais_stream_task is not None and not self._ais_stream_task.done():
+                return
+            self._ais_stream_task = asyncio.create_task(self._ais_stream_loop())
+
+    async def async_shutdown(self) -> None:
+        """Stop background tasks and release external connections for this client."""
+        async with self._ais_stream_lock:
+            task = self._ais_stream_task
+            self._ais_stream_task = None
+
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    async def _ais_stream_loop(self) -> None:
+        """Maintain a persistent AISStream websocket and keep latest reports in memory."""
+        message_types = {
+            "PositionReport",
+            "StandardClassBPositionReport",
+            "ExtendedClassBPositionReport",
+            "ShipStaticData",
+            "StaticDataReport",
+        }
+
+        while True:
+            try:
+                subscription: dict[str, Any] = {
+                    "APIKey": self._ais_api_key,
+                    "BoundingBoxes": AISSTREAM_DEFAULT_BBOX,
+                    "FilterMessageTypes": sorted(message_types),
+                }
+
+                configured_mmsi = sorted(str(mmsi).strip() for mmsi in self._ais_configured_vessel_registry.keys())
+                if configured_mmsi:
+                    # Keep websocket traffic focused on explicitly configured ferry MMSIs.
+                    subscription["FiltersShipMMSI"] = configured_mmsi
+
+                async with self._session.ws_connect(AISSTREAM_WS_URL, heartbeat=15) as ws:
+                    _LOGGER.debug("[FERRY] AIS persistent websocket connected")
+                    await ws.send_str(json.dumps(subscription))
+                    _LOGGER.debug("[FERRY] AIS subscription sent on connect")
+
+                    while True:
+                        try:
+                            msg = await ws.receive(timeout=30)
+                        except asyncio.TimeoutError:
+                            continue
+
+                        payload: dict[str, Any] | None = None
+                        if msg.type == aiohttp.WSMsgType.TEXT:
+                            payload = json.loads(msg.data)
+                        elif msg.type == aiohttp.WSMsgType.BINARY:
+                            payload = json.loads(msg.data.decode("utf-8", errors="ignore"))
+                        elif msg.type in {aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.ERROR}:
+                            _LOGGER.debug("[FERRY] AIS websocket closed; reconnecting")
+                            break
+
+                        if not isinstance(payload, dict):
+                            continue
+                        if payload.get("error"):
+                            _LOGGER.warning("AISStream server error payload: %s", payload.get("error"))
+                            continue
+
+                        report = self._ais_payload_to_report(payload, message_types)
+                        if report is None:
+                            continue
+
+                        mmsi = str(report.get("mmsi") or "").strip()
+                        if not mmsi:
+                            continue
+
+                        self._ais_live_reports[mmsi] = report
+
+                        ship_name = str(report.get("ship_name") or "").strip().upper()
+                        if mmsi in self._ais_vessel_registry and ship_name:
+                            self._ais_vessel_registry[mmsi] = ship_name
+
+                        # Keep in-memory buffer bounded and recent.
+                        cutoff_ts = datetime.now().timestamp() - (AISSTREAM_SAMPLE_SECONDS * 3)
+                        stale_keys = [
+                            key
+                            for key, value in self._ais_live_reports.items()
+                            if float(value.get("_received_ts", 0)) < cutoff_ts
+                        ]
+                        for key in stale_keys:
+                            self._ais_live_reports.pop(key, None)
+
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning("AIS persistent stream loop error: %s", exc)
+
+            await asyncio.sleep(2)
+
+    def _ais_payload_to_report(
+        self,
+        payload: dict[str, Any],
+        allowed_message_types: set[str],
+    ) -> dict[str, Any] | None:
+        """Convert one AIS websocket payload into internal report shape."""
+        msg_type = str(payload.get("MessageType", "")).strip()
+        if msg_type not in allowed_message_types:
+            return None
+
+        metadata = payload.get("MetaData") or payload.get("Metadata") or {}
+        mmsi = str(metadata.get("MMSI") or "").strip()
+        ship_name = str(metadata.get("ShipName") or "").strip()
+
+        body = (payload.get("Message") or {}).get(msg_type) or {}
+        if not ship_name:
+            if msg_type == "ShipStaticData":
+                ship_name = str(body.get("Name") or "").strip()
+            elif msg_type == "StaticDataReport":
+                report_a = body.get("ReportA") if isinstance(body.get("ReportA"), dict) else {}
+                ship_name = str(report_a.get("Name") or "").strip()
+            elif msg_type == "ExtendedClassBPositionReport":
+                ship_name = str(body.get("Name") or "").strip()
+
+        lat = body.get("Latitude", metadata.get("latitude", metadata.get("Latitude")))
+        lon = body.get("Longitude", metadata.get("longitude", metadata.get("Longitude")))
+        cog = body.get("Cog")
+        hdg = body.get("TrueHeading")
+        sog = body.get("Sog")
+        ts = metadata.get("time_utc")
+
+        if not mmsi:
+            return None
+
+        if lat is None or lon is None:
+            if not ship_name:
+                return None
+            return {
+                "mmsi": mmsi,
+                "ship_name": ship_name,
+                "latitude": None,
+                "longitude": None,
+                "bearing": None,
+                "speed": None,
+                "timestamp": ts,
+                "_received_ts": datetime.now().timestamp(),
+            }
+
+        return {
+            "mmsi": mmsi,
+            "ship_name": ship_name,
+            "latitude": lat,
+            "longitude": lon,
+            "bearing": hdg if hdg not in (None, 511) else cog,
+            "speed": sog,
+            "timestamp": ts,
+            "_received_ts": datetime.now().timestamp(),
+        }
 
     async def _refresh_east_by_west_fleet_names(self) -> list[str]:
         """Fetch the current East by West fleet names from the public website."""
@@ -1051,119 +1217,16 @@ class MetlinkApiClient:
         return self._ais_fleet_names
 
     async def _fetch_aisstream_position_reports(self, refresh_registry: bool = False) -> list[dict[str, Any]]:
-        """Collect a short sample of AISStream position reports from Wellington Harbour bbox."""
-        reports: list[dict[str, Any]] = []
+        """Return latest in-memory AIS reports from the persistent websocket stream."""
+        now_ts = datetime.now().timestamp()
+        cutoff_ts = now_ts - AISSTREAM_SAMPLE_SECONDS
+        reports = [
+            dict(report)
+            for report in self._ais_live_reports.values()
+            if float(report.get("_received_ts", 0)) >= cutoff_ts
+        ]
 
-        subscription = {
-            "APIKey": self._ais_api_key,
-            "BoundingBoxes": AISSTREAM_DEFAULT_BBOX,
-            "FilterMessageTypes": [
-                "PositionReport",
-                "StandardClassBPositionReport",
-                "ExtendedClassBPositionReport",
-                "ShipStaticData",
-                "StaticDataReport",
-            ],
-        }
-
-        try:
-            async with self._session.ws_connect(AISSTREAM_WS_URL, heartbeat=10) as ws:
-                _LOGGER.debug(f"[FERRY] AIS WebSocket connected")
-                await ws.send_str(json.dumps(subscription))
-                _LOGGER.debug(f"[FERRY] AIS subscription sent: {json.dumps(subscription, indent=2)}")
-                end_at = asyncio.get_running_loop().time() + AISSTREAM_SAMPLE_SECONDS
-                msg_count = 0
-
-                while asyncio.get_running_loop().time() < end_at:
-                    try:
-                        msg = await ws.receive(timeout=0.8)
-                    except asyncio.TimeoutError:
-                        continue
-
-                    msg_count += 1
-
-                    payload: dict[str, Any] | None = None
-                    if msg.type == aiohttp.WSMsgType.TEXT:
-                        payload = json.loads(msg.data)
-                    elif msg.type == aiohttp.WSMsgType.BINARY:
-                        payload = json.loads(msg.data.decode("utf-8", errors="ignore"))
-
-                    if payload is not None:
-                        if not isinstance(payload, dict):
-                            continue
-
-                        if payload.get("error"):
-                            _LOGGER.warning("AISStream server error payload: %s", payload.get("error"))
-                            continue
-
-                        msg_type = str(payload.get("MessageType", "")).strip()
-                        if msg_type not in {
-                            "PositionReport",
-                            "StandardClassBPositionReport",
-                            "ExtendedClassBPositionReport",
-                            "ShipStaticData",
-                            "StaticDataReport",
-                        }:
-                            continue
-
-                        metadata = payload.get("MetaData") or payload.get("Metadata") or {}
-                        mmsi = str(metadata.get("MMSI") or "").strip()
-                        ship_name = str(metadata.get("ShipName") or "").strip()
-
-                        body = (payload.get("Message") or {}).get(msg_type) or {}
-                        if not ship_name:
-                            if msg_type == "ShipStaticData":
-                                ship_name = str(body.get("Name") or "").strip()
-                            elif msg_type == "StaticDataReport":
-                                report_a = body.get("ReportA") if isinstance(body.get("ReportA"), dict) else {}
-                                ship_name = str(report_a.get("Name") or "").strip()
-                            elif msg_type == "ExtendedClassBPositionReport":
-                                ship_name = str(body.get("Name") or "").strip()
-
-                        lat = body.get("Latitude", metadata.get("latitude", metadata.get("Latitude")))
-                        lon = body.get("Longitude", metadata.get("longitude", metadata.get("Longitude")))
-                        cog = body.get("Cog")
-                        hdg = body.get("TrueHeading")
-                        sog = body.get("Sog")
-                        ts = metadata.get("time_utc")
-
-                        if not mmsi:
-                            continue
-
-                        # Keep name-only AIS messages so registry discovery can map MMSI by vessel name.
-                        if lat is None or lon is None:
-                            if not ship_name:
-                                continue
-                            report = {
-                                "mmsi": mmsi,
-                                "ship_name": ship_name,
-                                "latitude": None,
-                                "longitude": None,
-                                "bearing": None,
-                                "speed": None,
-                                "timestamp": ts,
-                            }
-                            reports.append(report)
-                            continue
-
-                        report = {
-                            "mmsi": mmsi,
-                            "ship_name": ship_name,
-                            "latitude": lat,
-                            "longitude": lon,
-                            "bearing": hdg if hdg not in (None, 511) else cog,
-                            "speed": sog,
-                            "timestamp": ts,
-                        }
-                        reports.append(report)
-
-                    elif msg.type in {aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.ERROR}:
-                        break
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.warning("AISStream fetch failed: %s", exc)
-            return []
-
-        _LOGGER.debug(f"[FERRY] AIS fetch complete: {msg_count} messages received, {len(reports)} position reports collected")
+        _LOGGER.debug("[FERRY] AIS snapshot read: %d live reports in last %ss", len(reports), AISSTREAM_SAMPLE_SECONDS)
 
         # Dynamic vessel refresh: keep known ferry vessel MMSI/name mapping current.
         if reports:

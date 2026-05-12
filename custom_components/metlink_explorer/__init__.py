@@ -316,6 +316,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        runtime = hass.data[DOMAIN].get(entry.entry_id, {})
+        api_client = runtime.get("api_client")
+        if api_client is not None:
+            try:
+                await api_client.async_shutdown()
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("Error while shutting down API client: %s", exc)
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
