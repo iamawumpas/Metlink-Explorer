@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.18] - 2026-05-12
+
+### Improvement - Debug logging for AIS websocket stream lifecycle
+
+- Added iteration-level debug logging to track AIS stream loop start, connect, subscribe, and reconnect events.
+- Added per-message debug logging showing MMSI position updates with lat/lon coordinates as they arrive.
+- Added periodic health check logging (every 60 seconds) reporting total messages and buffered position count.
+- Added iteration summary logging when websocket closes showing total messages and position updates for that connection.
+- Updated frontend build marker to `0.12.18`.
+
 ## [0.12.17] - 2026-05-12
 
 ### Fix - Maintain persistent AISStream websocket connection
