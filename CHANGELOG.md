@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.19] - 2026-05-12
+
+### Fix - Critical: AIS websocket position buffer not being populated
+
+- Fixed missing MMSI extraction from AIS report dict before use in logging (caused undefined variable error).
+- **Fixed critical bug**: Position reports were never being stored in `_ais_live_reports` buffer; loop processed and logged messages but never persisted them.
+- Added startup diagnostic logging to `_ensure_ais_stream_task()` to show whether AIS background task is created and running.
+- Updated frontend build marker to `0.12.19`.
+
 ## [0.12.18] - 2026-05-12
 
 ### Improvement - Debug logging for AIS websocket stream lifecycle

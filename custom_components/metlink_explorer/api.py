@@ -1016,11 +1016,14 @@ class MetlinkApiClient:
     async def _ensure_ais_stream_task(self) -> None:
         """Ensure the AIS stream background task is running."""
         if not self._ais_api_key:
+            _LOGGER.debug("[FERRY] AIS task not started: no API key configured")
             return
 
         async with self._ais_stream_lock:
             if self._ais_stream_task is not None and not self._ais_stream_task.done():
+                _LOGGER.debug("[FERRY] AIS task already running")
                 return
+            _LOGGER.info("[FERRY] Starting AIS persistent stream background task")
             self._ais_stream_task = asyncio.create_task(self._ais_stream_loop())
 
     async def async_shutdown(self) -> None:
@@ -1101,8 +1104,15 @@ class MetlinkApiClient:
                         if report is None:
                             continue
 
+                        mmsi = report.get("mmsi")
+                        if not mmsi:
+                            continue
+
                         position_count += 1
                         _LOGGER.debug("[FERRY] AIS position buffered for MMSI %s: (%s, %s)", mmsi, report.get("latitude"), report.get("longitude"))
+
+                        # Store the report in the live buffer using MMSI as key
+                        self._ais_live_reports[mmsi] = report
 
                         ship_name = str(report.get("ship_name") or "").strip().upper()
                         if mmsi in self._ais_vessel_registry and ship_name:
