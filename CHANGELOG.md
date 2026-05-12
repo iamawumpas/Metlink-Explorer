@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.11] - 2026-05-12
+
+### Fix - Layer menu outside-click close and live marker refresh freeze
+
+- Added global pointer-down handling so clicking outside the layer (hamburger) panel closes it immediately.
+- Fixed live vehicle render loop control flow so stationary vehicles no longer abort the entire update pass.
+- Corrected live marker update behavior where position updates could appear frozen after a short period.
+- Updated frontend build marker to `0.12.11`.
+
 ## [0.12.10] - 2026-05-12
 
 ### Fix - Ferry live badge icon-only rendering and MIF/QDF live aliasing

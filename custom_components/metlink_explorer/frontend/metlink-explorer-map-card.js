@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.10)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.11)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -69,6 +69,7 @@ class MetlinkExplorerCard extends LitElement {
     this._bubbleOpenSequence = 0;
     this._boundMapClick = (event) => this._onMapClick(event);
     this._boundMapMove = () => this._updateDepartureBubbleAnchor();
+    this._boundDocumentPointerDown = (event) => this._onDocumentPointerDown(event);
     // Layer visibility toggles: type -> mode -> boolean
     this._layerVisibility = {
       routes: { train: true, bus: true, ferry: true, cable: true },
@@ -83,6 +84,11 @@ class MetlinkExplorerCard extends LitElement {
     this._layerResetTimer   = null;
     this._isEditorPreview   = false;
     this._appliedHostHeight = "";
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener('pointerdown', this._boundDocumentPointerDown, true);
   }
 
   static async getConfigElement() {
@@ -766,6 +772,15 @@ class MetlinkExplorerCard extends LitElement {
     this._layerVisibility[type][mode] = !this._layerVisibility[type][mode];
     this._applyLayerVisibility(type, mode);
     this._scheduleLayerRevert();
+    this.requestUpdate();
+  }
+
+  _onDocumentPointerDown(event) {
+    if (!this._layerPanelOpen) return;
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    const clickedInsidePanel = path.some((node) => node?.classList?.contains?.('layer-panel-wrap'));
+    if (clickedInsidePanel) return;
+    this._layerPanelOpen = false;
     this.requestUpdate();
   }
 
@@ -1794,7 +1809,7 @@ class MetlinkExplorerCard extends LitElement {
           Math.abs(lon - last.lon) < 0.00001 &&
           Math.abs(bearing - last.bearing) < 0.5) {
         this._ensureLiveLayers(sourceId, mode);
-        return;
+        continue;
       }
 
       this._vehicleLastPositions.set(entityId, { lat, lon, bearing });
@@ -2207,6 +2222,7 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   disconnectedCallback() {
+    window.removeEventListener('pointerdown', this._boundDocumentPointerDown, true);
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
