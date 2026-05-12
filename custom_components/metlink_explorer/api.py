@@ -1066,10 +1066,6 @@ class MetlinkApiClient:
             ],
         }
 
-        # Use known vessel registry between daily discovery refreshes.
-        if self._ais_vessel_registry and not refresh_registry:
-            subscription["FiltersShipMMSI"] = list(self._ais_vessel_registry.keys())[:50]
-
         try:
             async with self._session.ws_connect(AISSTREAM_WS_URL, heartbeat=10) as ws:
                 _LOGGER.debug(f"[FERRY] AIS WebSocket connected")
@@ -1077,13 +1073,14 @@ class MetlinkApiClient:
                 _LOGGER.debug(f"[FERRY] AIS subscription sent: {json.dumps(subscription, indent=2)}")
                 end_at = asyncio.get_running_loop().time() + AISSTREAM_SAMPLE_SECONDS
                 msg_count = 0
-                filtered_count = 0
 
                 while asyncio.get_running_loop().time() < end_at:
                     try:
                         msg = await ws.receive(timeout=0.8)
                     except asyncio.TimeoutError:
                         continue
+
+                    msg_count += 1
 
                     payload: dict[str, Any] | None = None
                     if msg.type == aiohttp.WSMsgType.TEXT:
@@ -1093,6 +1090,10 @@ class MetlinkApiClient:
 
                     if payload is not None:
                         if not isinstance(payload, dict):
+                            continue
+
+                        if payload.get("error"):
+                            _LOGGER.warning("AISStream server error payload: %s", payload.get("error"))
                             continue
 
                         msg_type = str(payload.get("MessageType", "")).strip()
@@ -1240,7 +1241,29 @@ class MetlinkApiClient:
                 for report in filtered_reports[:3]:
                     _LOGGER.debug(f"[FERRY]   - MMSI {report.get('mmsi')}: {report.get('ship_name')} at ({report.get('latitude')}, {report.get('longitude')})")
             else:
-                _LOGGER.warning(f"[FERRY] All reports filtered out! Report MMSIs: {[str(r.get('mmsi')) for r in reports[:5]]}")
+                # If strict MMSI filtering yields nothing, keep a constrained fallback
+                # set so ferry tracking does not go completely dark when MMSIs shift.
+                unique_mmsi = {
+                    str(r.get("mmsi") or "").strip()
+                    for r in reports
+                    if str(r.get("mmsi") or "").strip()
+                }
+                _LOGGER.warning(
+                    "[FERRY] All reports filtered out! Report MMSIs: %s",
+                    [str(r.get("mmsi")) for r in reports[:5]],
+                )
+                if len(unique_mmsi) == 1:
+                    filtered_reports = reports
+                    only_mmsi = next(iter(unique_mmsi))
+                    if only_mmsi not in self._ais_vessel_registry:
+                        self._ais_vessel_registry[only_mmsi] = str(
+                            (reports[0] or {}).get("ship_name") or f"UNKNOWN FERRY {only_mmsi}"
+                        ).strip().upper()
+                    _LOGGER.warning(
+                        "[FERRY] Applying single-MMSI fallback for %s (%d reports)",
+                        only_mmsi,
+                        len(filtered_reports),
+                    )
         else:
             _LOGGER.warning(f"[FERRY] Vessel registry is EMPTY - no MMSIs configured!")
 

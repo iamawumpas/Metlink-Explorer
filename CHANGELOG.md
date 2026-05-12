@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.14] - 2026-05-12
+
+### Fix - AISStream ferry subscription resilience and fallback handling
+
+- Removed server-side `FiltersShipMMSI` from AIS websocket subscription to avoid upstream over-filtering when live MMSIs drift.
+- Increased AIS sampling window from 8 seconds to 20 seconds to reduce empty websocket sample windows.
+- Added AIS server error-payload logging and fixed receive-count diagnostics in websocket polling logs.
+- Kept local ferry normalization safeguards, including single-MMSI fallback when strict filtering yields no matches.
+- Updated frontend build marker to `0.12.14`.
+
 ## [0.12.13] - 2026-05-12
 
 ### Fix - Update ferry MMSI mapping to MarineTraffic values
