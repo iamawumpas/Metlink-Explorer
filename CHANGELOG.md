@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.26] - 2026-05-13
+
+### Enhancement - Smart ferry stop positioning toward harbor centers
+
+- Implemented mode-aware hub positioning logic that places ferry stops closest to harbor centers (e.g., Matiu Somes Island in Wellington Harbour).
+- Ferry stops now position at 60% radius toward the nearest harbor center when mixed with other mode stops (train/bus).
+- Other mode stops (train, bus, cable) arrange in a circular pattern further from the harbor center.
+- Harbor center coordinates configurable for different regions (currently hardcoded for Wellington).
+- Improves visual clarity by separating ferry badges from train/bus badges in multi-mode hubs.
+- Updated frontend build marker to `0.12.26`.
+
 ## [0.12.25] - 2026-05-13
 
 ### Fix - Badge collision logic continuous operation and resilience

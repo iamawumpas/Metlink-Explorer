@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.25)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.26)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -712,25 +712,77 @@ class MetlinkExplorerCard extends LitElement {
     }
 
     const offsets = {};
+    
+    // Define harbor center (Matiu Somes Island, Wellington Harbour)
+    const HARBOR_CENTERS = [
+      { lat: -41.258250, lon: 174.865389, modes: ['ferry'] },
+    ];
+
     for (const group of grouped.values()) {
       if (group.length === 1) {
         offsets[group[0].stop_id] = { dLon: 0, dLat: 0 };
         continue;
       }
 
-      const latRef = Number(group[0].stop_lat);
-      const latRad = (Number.isFinite(latRef) ? latRef : 0) * (Math.PI / 180);
+      const groupLat = Number(group[0].stop_lat);
+      const groupLon = Number(group[0].stop_lon);
+      const latRad = (Number.isFinite(groupLat) ? groupLat : 0) * (Math.PI / 180);
       const metersPerDegLat = 111320;
       const metersPerDegLon = Math.max(1, 111320 * Math.cos(latRad));
       const radiusMeters = Math.max(12, Number(separationMeters));
-      for (let i = 0; i < group.length; i++) {
-        const angle = (i / group.length) * Math.PI * 2;
-        const dLon = (Math.cos(angle) * radiusMeters) / metersPerDegLon;
-        const dLat = (Math.sin(angle) * radiusMeters) / metersPerDegLat;
-        offsets[group[i].stop_id] = {
-          dLon,
-          dLat,
-        };
+
+      // Check if this group has multiple modes (ferry + others)
+      const modes = new Set(group.map((h) => this._modeBucket(h.mode || '')));
+      const hasFerry = modes.has('ferry');
+      const hasNonFerry = modes.size > 1 || (modes.size === 1 && !hasFerry);
+
+      if (hasFerry && hasNonFerry && group.length >= 2) {
+        // Mode-aware positioning: ferries closest to harbor, others further away
+        const ferryStops = group.filter((h) => this._modeBucket(h.mode || '') === 'ferry');
+        const otherStops = group.filter((h) => this._modeBucket(h.mode || '') !== 'ferry');
+
+        // Find closest harbor center
+        let bestHarbor = HARBOR_CENTERS[0];
+        let minDistToHarbor = Infinity;
+        for (const harbor of HARBOR_CENTERS) {
+          if (!harbor.modes.includes('ferry')) continue;
+          const dist = this._haversineMeters(groupLat, groupLon, harbor.lat, harbor.lon);
+          if (dist < minDistToHarbor) {
+            minDistToHarbor = dist;
+            bestHarbor = harbor;
+          }
+        }
+
+        // Calculate bearing to harbor center for ferry placement
+        const ferryBearing = this._bearingBetweenPoints(groupLat, groupLon, bestHarbor.lat, bestHarbor.lon);
+
+        // Place ferries toward harbor center (innermost ring)
+        const ferryRadius = Math.max(8, radiusMeters * 0.6);
+        for (let i = 0; i < ferryStops.length; i++) {
+          const angle = ferryBearing * (Math.PI / 180);
+          const dLon = (Math.cos(angle) * ferryRadius) / metersPerDegLon;
+          const dLat = (Math.sin(angle) * ferryRadius) / metersPerDegLat;
+          offsets[ferryStops[i].stop_id] = { dLon, dLat };
+        }
+
+        // Place other modes in circular pattern around ferries (further out)
+        for (let i = 0; i < otherStops.length; i++) {
+          const angle = ((ferryBearing + 120 + (i / otherStops.length) * 240) % 360) * (Math.PI / 180);
+          const dLon = (Math.cos(angle) * radiusMeters) / metersPerDegLon;
+          const dLat = (Math.sin(angle) * radiusMeters) / metersPerDegLat;
+          offsets[otherStops[i].stop_id] = { dLon, dLat };
+        }
+      } else {
+        // Standard circular layout for groups without mixed ferry/non-ferry
+        for (let i = 0; i < group.length; i++) {
+          const angle = (i / group.length) * Math.PI * 2;
+          const dLon = (Math.cos(angle) * radiusMeters) / metersPerDegLon;
+          const dLat = (Math.sin(angle) * radiusMeters) / metersPerDegLat;
+          offsets[group[i].stop_id] = {
+            dLon,
+            dLat,
+          };
+        }
       }
     }
 
