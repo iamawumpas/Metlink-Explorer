@@ -48,7 +48,7 @@ After these changes, check Home Assistant logs for `[FERRY]` tagged messages. He
 
 ### Expected Behavior When Working:
 1. `[FERRY] AIS fetch complete: 50+ messages received, 3 position reports collected`
-2. `[FERRY] Final registry after update: {'210375740': 'CITY CAT', '210375730': 'COBAR CAT', '210375710': 'IKA RERE'}`
+2. `[FERRY] Final registry after update: {'512010273': 'IKA RERE', '512003410': 'COBAR CAT', '512003252': 'CITY CAT'}`
 3. `[FERRY] After MMSI filtering: 3/3 reports kept` (all 3 ferries found)
 
 ### Common Issues & Solutions:

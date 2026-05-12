@@ -30,6 +30,7 @@ from .const import (
     REQUEST_TIMEOUT,
     TRAIN_GTFS_CACHE_TTL_SECONDS,
     TRAIN_ROUTE_TYPE,
+    normalize_ais_ferry_vessel_map,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,12 +60,7 @@ class MetlinkApiClient:
         self._base_url = BASE_URL
         self._transportation_type = int(transportation_type) if transportation_type is not None else None
         self._ais_api_key = str(ais_api_key or "").strip()
-        configured_map = ais_vessel_map if isinstance(ais_vessel_map, dict) and ais_vessel_map else DEFAULT_AIS_FERRY_VESSELS
-        self._ais_configured_vessel_registry: dict[str, str] = {
-            str(mmsi).strip(): str(name or "").strip().upper()
-            for mmsi, name in configured_map.items()
-            if str(mmsi).strip() and str(mmsi).strip().isdigit()
-        }
+        self._ais_configured_vessel_registry = normalize_ais_ferry_vessel_map(ais_vessel_map)
         # Simple caches to reduce repeated static lookups
         self._route_short_name_cache = {}
         # TTL caches for static endpoints

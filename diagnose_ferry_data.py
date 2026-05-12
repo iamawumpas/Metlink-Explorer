@@ -44,9 +44,9 @@ async def diagnose():
             transportation_type=4,  # Ferry
             ais_api_key=ais_key or None,
             ais_vessel_map={
-                "210375740": "CITY CAT",
-                "210375730": "COBAR CAT", 
-                "210375710": "IKA RERE"
+                "512010273": "IKA RERE",
+                "512003410": "COBAR CAT",
+                "512003252": "CITY CAT"
             }
         )
         
@@ -79,9 +79,9 @@ async def diagnose():
             
             # Look for ferry-like vehicles
             ferries = [p for p in positions if 'ferry' in p.get('vehicle_label', '').lower() 
-                      or 'CITY CAT' in str(p.get('vehicle', {})).upper()
+                      or 'IKA RERE' in str(p.get('vehicle', {})).upper()
                       or 'COBAR CAT' in str(p.get('vehicle', {})).upper()
-                      or 'IKA RERE' in str(p.get('vehicle', {})).upper()]
+                      or 'CITY CAT' in str(p.get('vehicle', {})).upper()]
             
             if ferries:
                 print(f"\n   Found {len(ferries)} ferry-like entries:")

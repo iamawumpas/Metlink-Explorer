@@ -29,6 +29,7 @@ from .const import (
     TRAIN_GEOMETRY_SENSOR_KEY,
     TRAIN_ROUTE_TYPE,
     TRANSPORTATION_TYPES,
+    normalize_ais_ferry_vessel_map,
 )
 from .const import DOMAIN
 from .mode_registry import entry_routes, entry_routes_from_data, merged_routes, same_mode_entries
@@ -209,6 +210,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             routes = merged
 
     session = async_get_clientsession(hass)
+    stored_vessel_map = entry.data.get(CONF_AIS_VESSEL_MAP)
+    normalized_vessel_map = normalize_ais_ferry_vessel_map(stored_vessel_map)
+    if isinstance(stored_vessel_map, dict) and normalized_vessel_map != stored_vessel_map:
+        updated_data = dict(entry.data)
+        updated_data[CONF_AIS_VESSEL_MAP] = normalized_vessel_map
+        hass.config_entries.async_update_entry(entry, data=updated_data)
+
     effective_ais_api_key = entry.data.get(CONF_AIS_API_KEY)
     if not effective_ais_api_key:
         for candidate in hass.config_entries.async_entries(DOMAIN):
@@ -226,7 +234,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         session,
         transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
         ais_api_key=effective_ais_api_key,
-        ais_vessel_map=entry.data.get(CONF_AIS_VESSEL_MAP, DEFAULT_AIS_FERRY_VESSELS),
+        ais_vessel_map=normalized_vessel_map,
     )
 
     coordinators: dict[str, MetlinkDataUpdateCoordinator] = {}

@@ -64,7 +64,30 @@ AIS_FERRY_SEED_NAMES = [
     "CITY CAT",
 ]
 DEFAULT_AIS_FERRY_VESSELS = {
+    "512010273": "IKA RERE",
     "512003410": "COBAR CAT",
     "512003252": "CITY CAT",
-    "512010273": "IKA RERE",
 }
+
+LEGACY_AIS_FERRY_VESSELS = {
+    "210375740": "CITY CAT",
+    "210375730": "COBAR CAT",
+    "210375710": "IKA RERE",
+}
+
+
+def normalize_ais_ferry_vessel_map(vessel_map: dict[str, str] | None) -> dict[str, str]:
+    """Return a normalized ferry MMSI map, migrating known legacy defaults."""
+    if not isinstance(vessel_map, dict) or not vessel_map:
+        return dict(DEFAULT_AIS_FERRY_VESSELS)
+
+    normalized: dict[str, str] = {
+        str(mmsi).strip(): str(name or "").strip().upper()
+        for mmsi, name in vessel_map.items()
+        if str(mmsi).strip() and str(mmsi).strip().isdigit()
+    }
+
+    if normalized == LEGACY_AIS_FERRY_VESSELS:
+        return dict(DEFAULT_AIS_FERRY_VESSELS)
+
+    return normalized or dict(DEFAULT_AIS_FERRY_VESSELS)
