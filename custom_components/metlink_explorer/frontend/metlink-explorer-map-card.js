@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.7)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.8)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1555,7 +1555,17 @@ class MetlinkExplorerCard extends LitElement {
       this._closeDepartureBubble();
       return;
     }
-    this._openDepartureBubble(feature);
+    this._runAsyncTask(this._openDepartureBubble(feature), "open departure bubble");
+  }
+
+  _runAsyncTask(promise, label = "async task") {
+    Promise.resolve(promise).catch((err) => {
+      const msg = String(err?.message || "");
+      if (err?.name === "AbortError" || /Transition was skipped/i.test(msg)) {
+        return;
+      }
+      console.error(`[MetlinkExplorer] ${label} failed`, err);
+    });
   }
 
   _renderDepartureBubble() {
@@ -1723,7 +1733,10 @@ class MetlinkExplorerCard extends LitElement {
     if (!this.map.isStyleLoaded()) {
       if (!this._pendingLiveRender) {
         this._pendingLiveRender = true;
-        this.map.once('idle', () => { this._pendingLiveRender = false; this._renderLiveVehicles(); });
+        this.map.once('idle', () => {
+          this._pendingLiveRender = false;
+          this._runAsyncTask(this._renderLiveVehicles(), "render live vehicles (idle)");
+        });
       }
       return;
     }
@@ -2038,7 +2051,7 @@ class MetlinkExplorerCard extends LitElement {
     } catch (err) {
       console.error('[MetlinkExplorer] _renderRoutes error', err);
     }
-    this.map.once('idle', () => this._renderLiveVehicles());
+    this.map.once('idle', () => this._runAsyncTask(this._renderLiveVehicles(), "render live vehicles (post routes)"));
     console.log('[MetlinkExplorer] _renderRoutes end');
   }
 
@@ -2054,13 +2067,13 @@ class MetlinkExplorerCard extends LitElement {
           this._vehicleLastPositions.clear();
         }
         this._centerMap();
-        this._renderRoutes();
+        this._runAsyncTask(this._renderRoutes(), "render routes (config update)");
       }
       if (changedProps.has('hass')) {
         const snapshot = this._computeGpsSnapshot();
         if (snapshot !== this._liveGpsSnapshot) {
           this._liveGpsSnapshot = snapshot;
-          this._renderLiveVehicles();
+          this._runAsyncTask(this._renderLiveVehicles(), "render live vehicles (state update)");
         }
       }
     }
@@ -2113,7 +2126,7 @@ class MetlinkExplorerCard extends LitElement {
       this.map.resize();
       this._applyMapProjection(false);
       this._centerMap();
-      this._renderRoutes();
+      this._runAsyncTask(this._renderRoutes(), "render routes (map load)");
     });
 
     this.map.on('click', this._boundMapClick);
@@ -2175,7 +2188,7 @@ class MetlinkExplorerCard extends LitElement {
       tileSize: 256,
     });
     this.map.addLayer({ id: 'simple-tiles', type: 'raster', source: 'raster-tiles' });
-    this.map.once('idle', () => this._renderRoutes());
+    this.map.once('idle', () => this._runAsyncTask(this._renderRoutes(), "render routes (style update)"));
   }
 
   disconnectedCallback() {

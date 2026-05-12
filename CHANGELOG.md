@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.8] - 2026-05-12
+
+### Fix - Guard map card async flows against unhandled promise noise
+
+- Added defensive wrapper handling for fire-and-forget async map card tasks to prevent unhandled promise rejections.
+- Updated map click, route render, and live render trigger paths to run through guarded async execution.
+- Suppressed benign transition abort-style errors (`AbortError` / `Transition was skipped`) while still logging real failures.
+- Updated frontend build marker to `0.12.8`.
+
 ## [0.12.7] - 2026-05-12
 
 ### Improvement - Configurable canonical ferry MMSI map and AIS binary frame parsing
