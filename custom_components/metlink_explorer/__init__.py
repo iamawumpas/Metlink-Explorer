@@ -207,11 +207,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             routes = merged
 
     session = async_get_clientsession(hass)
+    effective_ais_api_key = entry.data.get(CONF_AIS_API_KEY)
+    if not effective_ais_api_key:
+        for candidate in hass.config_entries.async_entries(DOMAIN):
+            if candidate.entry_id == entry.entry_id:
+                continue
+            if candidate.data.get(CONF_API_KEY) != entry.data.get(CONF_API_KEY):
+                continue
+            candidate_ais = candidate.data.get(CONF_AIS_API_KEY)
+            if candidate_ais:
+                effective_ais_api_key = candidate_ais
+                break
+
     api_client = MetlinkApiClient(
         entry.data[CONF_API_KEY],
         session,
         transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
-        ais_api_key=entry.data.get(CONF_AIS_API_KEY),
+        ais_api_key=effective_ais_api_key,
     )
 
     coordinators: dict[str, MetlinkDataUpdateCoordinator] = {}

@@ -454,10 +454,17 @@ class MetlinkExplorerOptionsFlowHandler(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            updated_data = dict(self.config_entry.data)
-            updated_data[CONF_AIS_API_KEY] = str(user_input.get(CONF_AIS_API_KEY, "")).strip() or None
-            self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            new_ais_key = str(user_input.get(CONF_AIS_API_KEY, "")).strip() or None
+            shared_api_key = self.config_entry.data.get(CONF_API_KEY)
+
+            for entry in self.hass.config_entries.async_entries(DOMAIN):
+                if entry.data.get(CONF_API_KEY) != shared_api_key:
+                    continue
+                updated_data = dict(entry.data)
+                updated_data[CONF_AIS_API_KEY] = new_ais_key
+                self.hass.config_entries.async_update_entry(entry, data=updated_data)
+                await self.hass.config_entries.async_reload(entry.entry_id)
+
             return self.async_create_entry(title="", data={})
 
         return self.async_show_form(

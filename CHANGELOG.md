@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.5] - 2026-05-12
+
+### Fix - Improve ferry tracker discovery reliability
+
+- Increased AISStream sampling window to improve vessel capture reliability for Wellington Harbour polling cycles.
+- Added setup fallback to reuse an AIS API key from sibling Metlink Explorer entries sharing the same Metlink API key.
+- Updated options flow so changing AIS API key propagates to all entries for the same Metlink API key and reloads them.
+- Updated frontend build marker to `0.12.5`.
+
 ## [0.12.4] - 2026-05-12
 
 ### Fix - Save API keys without forcing route selection
