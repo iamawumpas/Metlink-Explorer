@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.12] - 2026-05-12
+
+### Improvement - Slow raster tile reveal timing
+
+- Set raster tile fade duration to 250000 ms (250 seconds) for map tile loading transitions.
+- Applied the fade duration consistently on initial map setup and style refresh updates.
+- Updated frontend build marker to `0.12.12`.
+
 ## [0.12.11] - 2026-05-12
 
 ### Fix - Layer menu outside-click close and live marker refresh freeze

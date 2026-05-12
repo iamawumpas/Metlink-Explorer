@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.11)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.12)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -49,6 +49,9 @@ const VEHICLE_COLORS = {
   bus: "#43a047",
   ferry: "#00acc1",
 };
+
+// Intentionally slow raster tile visual load/fade.
+const TILE_FADE_DURATION_MS = 250000;
 
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
@@ -2151,6 +2154,10 @@ class MetlinkExplorerCard extends LitElement {
       attributionControl: false
     });
 
+    if (this.map.getLayer('simple-tiles')) {
+      this.map.setPaintProperty('simple-tiles', 'raster-fade-duration', TILE_FADE_DURATION_MS);
+    }
+
     this.map.on('load', () => {
       console.log('[MetlinkExplorer] map load event');
       this.map.resize();
@@ -2217,7 +2224,14 @@ class MetlinkExplorerCard extends LitElement {
       tiles: [newUrl],
       tileSize: 256,
     });
-    this.map.addLayer({ id: 'simple-tiles', type: 'raster', source: 'raster-tiles' });
+    this.map.addLayer({
+      id: 'simple-tiles',
+      type: 'raster',
+      source: 'raster-tiles',
+      paint: {
+        'raster-fade-duration': TILE_FADE_DURATION_MS,
+      },
+    });
     this.map.once('idle', () => this._runAsyncTask(this._renderRoutes(), "render routes (style update)"));
   }
 
