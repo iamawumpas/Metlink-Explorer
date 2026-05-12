@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.21] - 2026-05-13
+
+### Improvement - Stop influence aggregation clarity in departure bubble
+
+- Added a bubble subtitle that appears when nearby-stop aggregation is active: `Aggregated from N nearby stops`.
+- Kept this as a map visualization-only change with no entity model changes.
+- Updated frontend build marker to `0.12.21`.
+
 ## [0.12.20] - 2026-05-13
 
 ### Fix - Ferry live tracking continuity and websocket resilience

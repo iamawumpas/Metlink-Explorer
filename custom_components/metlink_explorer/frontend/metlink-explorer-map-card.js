@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.20)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.21)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -749,6 +749,176 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
+  _modeBucket(mode) {
+    const raw = String(mode || "").trim().toLowerCase();
+    if (!raw) return "";
+    if (raw === "school_bus" || raw === "schoolbus" || raw === "school-bus" || raw === "school bus") return "bus";
+    if (raw === "bus") return "bus";
+    if (raw === "train" || raw === "ferry" || raw === "cable") return raw;
+    return raw;
+  }
+
+  _haversineMeters(lat1, lon1, lat2, lon2) {
+    const r = 6371000;
+    const toRad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * toRad;
+    const dLon = (lon2 - lon1) * toRad;
+    const a = (Math.sin(dLat / 2) ** 2)
+      + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * (Math.sin(dLon / 2) ** 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return r * c;
+  }
+
+  _bearingBetweenPoints(lat1, lon1, lat2, lon2) {
+    const toRad = Math.PI / 180;
+    const toDeg = 180 / Math.PI;
+    const phi1 = lat1 * toRad;
+    const phi2 = lat2 * toRad;
+    const lambda = (lon2 - lon1) * toRad;
+    const y = Math.sin(lambda) * Math.cos(phi2);
+    const x = Math.cos(phi1) * Math.sin(phi2)
+      - Math.sin(phi1) * Math.cos(phi2) * Math.cos(lambda);
+    const theta = Math.atan2(y, x) * toDeg;
+    return (theta + 360) % 360;
+  }
+
+  _angularDifferenceDegrees(a, b) {
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+    const diff = Math.abs(a - b) % 360;
+    return diff > 180 ? (360 - diff) : diff;
+  }
+
+  _routeTokenForFeature(feature) {
+    const props = feature?.properties || {};
+    const routeShort = String(props.route_short_name || "").trim();
+    const routeId = String(props.route_id || "").trim();
+    const serviceLabel = String(props.service_label || "").trim();
+    return (routeShort || routeId || serviceLabel || "").toUpperCase();
+  }
+
+  _buildSelectedStopContextIndex(configCategory, entry, features, indexByMode) {
+    const modeBucket = this._modeBucket(configCategory);
+    if (!modeBucket) return;
+
+    const selectedStopIds = new Set((entry?.selected_stops || []).map((id) => String(id)));
+    if (selectedStopIds.size === 0) return;
+    if (!Array.isArray(features) || features.length === 0) return;
+
+    if (!indexByMode.has(modeBucket)) indexByMode.set(modeBucket, new Map());
+    const modeMap = indexByMode.get(modeBucket);
+
+    const upsertContext = (stop, routeToken, directionToken, bearingValue) => {
+      const rawStopId = String(stop?.stop_id || "").trim();
+      const lon = Number(stop?.stop_lon);
+      const lat = Number(stop?.stop_lat);
+      if (!selectedStopIds.has(rawStopId) || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+      const normalizedStopId = modeBucket === "train"
+        ? (this._normalizeTrainStationStopId(rawStopId) || rawStopId)
+        : rawStopId;
+      const key = modeBucket === "train"
+        ? normalizedStopId.toUpperCase()
+        : `${normalizedStopId.toUpperCase()}:${lat.toFixed(6)}:${lon.toFixed(6)}`;
+
+      if (!modeMap.has(key)) {
+        modeMap.set(key, {
+          stopId: normalizedStopId,
+          stopName: String(stop?.stop_name || `Stop ${normalizedStopId}`),
+          lat,
+          lon,
+          routeSignatures: [],
+        });
+      }
+
+      const ctx = modeMap.get(key);
+      const signature = {
+        routeToken: String(routeToken || "").trim().toUpperCase(),
+        directionToken: String(directionToken || "").trim().toUpperCase(),
+        bearing: Number.isFinite(bearingValue) ? Number(bearingValue) : null,
+      };
+
+      if (!signature.routeToken) return;
+      const dedupeSignatureKey = `${signature.routeToken}|${signature.directionToken}|${signature.bearing === null ? "" : signature.bearing.toFixed(1)}`;
+      if (!ctx._sigKeys) ctx._sigKeys = new Set();
+      if (ctx._sigKeys.has(dedupeSignatureKey)) return;
+      ctx._sigKeys.add(dedupeSignatureKey);
+      ctx.routeSignatures.push(signature);
+    };
+
+    for (const feature of features) {
+      const routeToken = this._routeTokenForFeature(feature);
+      if (!routeToken) continue;
+      const timelineStops = feature?.properties?.timeline_stops || {};
+      for (const [directionToken, directionStops] of Object.entries(timelineStops)) {
+        if (!Array.isArray(directionStops)) continue;
+        for (let idx = 0; idx < directionStops.length; idx++) {
+          const stop = directionStops[idx];
+          const prev = idx > 0 ? directionStops[idx - 1] : null;
+          const next = idx < (directionStops.length - 1) ? directionStops[idx + 1] : null;
+
+          let bearing = null;
+          const stopLat = Number(stop?.stop_lat);
+          const stopLon = Number(stop?.stop_lon);
+          if (Number.isFinite(stopLat) && Number.isFinite(stopLon)) {
+            const prevLat = Number(prev?.stop_lat);
+            const prevLon = Number(prev?.stop_lon);
+            const nextLat = Number(next?.stop_lat);
+            const nextLon = Number(next?.stop_lon);
+            if (Number.isFinite(prevLat) && Number.isFinite(prevLon)) {
+              bearing = this._bearingBetweenPoints(prevLat, prevLon, stopLat, stopLon);
+            }
+            if (!Number.isFinite(bearing) && Number.isFinite(nextLat) && Number.isFinite(nextLon)) {
+              bearing = this._bearingBetweenPoints(stopLat, stopLon, nextLat, nextLon);
+            }
+          }
+
+          upsertContext(stop, routeToken, directionToken, bearing);
+        }
+      }
+    }
+  }
+
+  _stopsAreInfluenceCompatible(anchorCtx, candidateCtx) {
+    if (!anchorCtx || !candidateCtx) return false;
+    const distanceMeters = this._haversineMeters(anchorCtx.lat, anchorCtx.lon, candidateCtx.lat, candidateCtx.lon);
+    if (!Number.isFinite(distanceMeters) || distanceMeters > 200) return false;
+
+    const anchorRoutes = new Set((anchorCtx.routeSignatures || []).map((sig) => sig.routeToken).filter(Boolean));
+    const candidateRoutes = new Set((candidateCtx.routeSignatures || []).map((sig) => sig.routeToken).filter(Boolean));
+    const sharedRoutes = [...anchorRoutes].filter((routeToken) => candidateRoutes.has(routeToken));
+    if (sharedRoutes.length === 0) return false;
+
+    for (const routeToken of sharedRoutes) {
+      const aSigs = (anchorCtx.routeSignatures || []).filter((sig) => sig.routeToken === routeToken);
+      const bSigs = (candidateCtx.routeSignatures || []).filter((sig) => sig.routeToken === routeToken);
+      let minBearingDiff = null;
+      for (const aSig of aSigs) {
+        for (const bSig of bSigs) {
+          if (!Number.isFinite(aSig?.bearing) || !Number.isFinite(bSig?.bearing)) continue;
+          const diff = this._angularDifferenceDegrees(aSig.bearing, bSig.bearing);
+          if (minBearingDiff === null || diff < minBearingDiff) minBearingDiff = diff;
+        }
+      }
+      if (Number.isFinite(minBearingDiff) && minBearingDiff > 25 && distanceMeters > 100) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  _influenceStopIdsForContext(anchorCtx, modeIndex) {
+    if (!anchorCtx || !modeIndex) return [String(anchorCtx?.stopId || "")].filter(Boolean);
+
+    const stopIds = new Set([String(anchorCtx.stopId || "")]);
+    for (const candidateCtx of modeIndex.values()) {
+      if (!candidateCtx) continue;
+      if (!this._stopsAreInfluenceCompatible(anchorCtx, candidateCtx)) continue;
+      stopIds.add(String(candidateCtx.stopId || ""));
+    }
+    return [...stopIds].filter(Boolean).sort();
+  }
+
   _bringHubLayersToFront() {
     if (!this.map) return;
     for (let i = 0; i < 200; i++) {
@@ -1459,10 +1629,14 @@ class MetlinkExplorerCard extends LitElement {
     return Boolean(rowStationId && targetStationId && rowStationId === targetStationId);
   }
 
-  async _departuresForStop(stopId) {
+  async _departuresForStops(stopIds, modeBucket = "") {
     const now = Date.now();
     const maxFutureMs = 24 * 3600 * 1000;
     const maxPastMs = -60 * 1000;
+    const targetMode = this._modeBucket(modeBucket);
+    const rawStopIds = Array.isArray(stopIds) ? stopIds : [stopIds];
+    const normalizedStopIds = [...new Set(rawStopIds.map((id) => String(id || "").trim()).filter(Boolean))];
+    if (normalizedStopIds.length === 0) return [];
 
     const entities = this._boardEntitiesFromStates();
     if (entities.length === 0) return [];
@@ -1476,10 +1650,19 @@ class MetlinkExplorerCard extends LitElement {
     payloads.forEach((payload) => {
       const departures = payload?.departures;
       const payloadTransportationType = String(payload?.transportation_type || "").trim().toLowerCase();
+      const payloadModeBucket = this._modeBucket(payloadTransportationType);
+      if (targetMode && payloadModeBucket && payloadModeBucket !== targetMode) return;
       if (!Array.isArray(departures)) return;
 
       departures.forEach((row) => {
-        if (!this._stopIdMatchesBubbleStop(row, stopId, payloadTransportationType)) return;
+        const matchesStop = normalizedStopIds.some((candidateStopId) =>
+          this._stopIdMatchesBubbleStop(row, candidateStopId, payloadTransportationType)
+        );
+        if (!matchesStop) return;
+
+        const rowModeBucket = this._modeBucket(row?.route_type || payloadTransportationType);
+        if (targetMode && rowModeBucket && rowModeBucket !== targetMode) return;
+
         const depDate = this._parseDepartureDateTime(row?.service_date, row?.scheduled_departure_time || row?.departure_time);
         if (!depDate) return;
         const deltaMs = depDate.getTime() - now;
@@ -1526,6 +1709,13 @@ class MetlinkExplorerCard extends LitElement {
 
     const stopId = String(stopFeature?.properties?.stop_id || "");
     const stopName = String(stopFeature?.properties?.stop_name || `Stop ${stopId}`);
+    const modeBucket = this._modeBucket(stopFeature?.properties?.mode || "");
+    const influenceIdsRaw = String(stopFeature?.properties?.influence_stop_ids || "");
+    const influenceStopIds = influenceIdsRaw
+      .split("|")
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+    const stopScopeIds = [...new Set([stopId, ...influenceStopIds].filter(Boolean))];
 
     // Always close any existing bubble first so the next one can replay its entry animation.
     if (this._departureBubble) {
@@ -1546,6 +1736,7 @@ class MetlinkExplorerCard extends LitElement {
         id: stopId,
         name: stopName,
         coordinates: [lon, lat],
+        influenceStopIds: stopScopeIds,
       },
       departures: [],
       directionFilter: "all",
@@ -1558,7 +1749,7 @@ class MetlinkExplorerCard extends LitElement {
     this.requestUpdate();
     this._resetBubbleAutoCloseTimer();
 
-    const departures = await this._departuresForStop(stopId);
+    const departures = await this._departuresForStops(stopScopeIds, modeBucket);
     if (openSequence !== this._bubbleOpenSequence) return;
     if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
     this._departureBubble = {
@@ -1604,6 +1795,10 @@ class MetlinkExplorerCard extends LitElement {
     const visibleDepartures = this._filteredBubbleDepartures(bubble);
     const canFilterInbound = Boolean(bubble?.directionMeta?.inboundKey);
     const canFilterOutbound = Boolean(bubble?.directionMeta?.outboundKey);
+    const influenceCount = Array.isArray(bubble?.stop?.influenceStopIds)
+      ? bubble.stop.influenceStopIds.length
+      : 0;
+    const showInfluenceHint = influenceCount > 1;
 
     const cardWidth = 360;
     const offset = 30;
@@ -1623,6 +1818,9 @@ class MetlinkExplorerCard extends LitElement {
       >
         <div class="departure-head-shell">
           <div class="departure-heading">${bubble.stop?.id || ""} ${bubble.stop?.name || "Stop"}</div>
+          ${showInfluenceHint
+            ? html`<div class="departure-subheading">Aggregated from ${influenceCount} nearby stops</div>`
+            : null}
         </div>
         <div class="departure-body-shell">
           <div class="departure-filters" role="tablist" aria-label="Direction filter">
@@ -1877,6 +2075,7 @@ class MetlinkExplorerCard extends LitElement {
     try {
       const categories = ['ferry', 'bus', 'cable', 'train'];
       const hubCoordModes = new Map();
+      const selectedStopContextsByMode = new Map();
 
       // First pass: collect shared selected-stop coordinates across all route entries.
       categories.forEach((cat) => {
@@ -1886,6 +2085,8 @@ class MetlinkExplorerCard extends LitElement {
           if (selectedStopIds.size === 0) return;
           const features = this._parseRouteGeometry(entry.entity);
           if (!features) return;
+
+          this._buildSelectedStopContextIndex(cat, entry, features, selectedStopContextsByMode);
 
           for (const feature of features) {
             const timelineStops = feature?.properties?.timeline_stops || {};
@@ -1993,12 +2194,48 @@ class MetlinkExplorerCard extends LitElement {
                 }
               });
               const dedupedStops = [...uniqueStops.values()];
-              const offsets = this._computeHubCollisionOffsets(dedupedStops, 24);
-              const hubFeatures = dedupedStops.map((stop) => {
+              const modeBucket = this._modeBucket(cat);
+              const modeIndex = selectedStopContextsByMode.get(modeBucket) || new Map();
+
+              const groupedDisplayStops = new Map();
+              dedupedStops.forEach((stop) => {
                 const rawStopId = String(stop.stop_id || '').trim();
                 const stopId = cat === 'train'
                   ? (this._normalizeTrainStationStopId(rawStopId) || rawStopId)
                   : rawStopId;
+                const normalizedKey = modeBucket === 'train'
+                  ? stopId.toUpperCase()
+                  : `${stopId.toUpperCase()}:${Number(stop.stop_lat).toFixed(6)}:${Number(stop.stop_lon).toFixed(6)}`;
+                const ctx = modeIndex.get(normalizedKey);
+                const influenceStopIds = this._influenceStopIdsForContext(
+                  ctx || {
+                    stopId,
+                    stopName: String(stop.stop_name || 'Hub'),
+                    lat: Number(stop.stop_lat),
+                    lon: Number(stop.stop_lon),
+                    routeSignatures: [],
+                  },
+                  modeIndex
+                );
+                const groupKey = influenceStopIds.join('|') || stopId;
+                if (!groupedDisplayStops.has(groupKey)) {
+                  groupedDisplayStops.set(groupKey, {
+                    stop,
+                    stopId,
+                    influenceStopIds,
+                  });
+                }
+              });
+
+              const displayStops = [...groupedDisplayStops.values()];
+              const offsets = this._computeHubCollisionOffsets(displayStops.map((s) => ({
+                ...s.stop,
+                stop_id: s.stopId,
+              })), 24);
+              const hubFeatures = displayStops.map((entryStop) => {
+                const stop = entryStop.stop;
+                const stopId = entryStop.stopId;
+                const rawStopId = String(stop.stop_id || '').trim();
                 const offset = offsets[stopId] || { dLon: 0, dLat: 0 };
                 const baseLon = Number(stop.stop_lon);
                 const baseLat = Number(stop.stop_lat);
@@ -2016,6 +2253,7 @@ class MetlinkExplorerCard extends LitElement {
                     stop_id: stopId,
                     stop_name: String(stop.stop_name || 'Hub'),
                     mode: cat,
+                    influence_stop_ids: entryStop.influenceStopIds.join('|'),
                   },
                 };
               });
@@ -2441,6 +2679,12 @@ class MetlinkExplorerCard extends LitElement {
         line-height: 1.3;
         font-weight: 700;
         margin: 0;
+      }
+      .departure-subheading {
+        margin-top: 4px;
+        font-size: 12px;
+        line-height: 1.25;
+        color: rgba(255, 255, 255, 0.75);
       }
       .departure-item {
         padding: 10px 0;
