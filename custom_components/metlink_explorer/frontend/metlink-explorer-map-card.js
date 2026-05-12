@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.29)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.30)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1629,9 +1629,9 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
-  _deriveDirectionMetaForMode(rows, modeBucket = "") {
+  _deriveDirectionMetaForMode(rows, modeBucket = "", forceOutboundOnly = false) {
     const base = this._deriveDirectionMeta(rows);
-    if (this._modeBucket(modeBucket) !== "ferry") return base;
+    if (this._modeBucket(modeBucket) !== "ferry" && !forceOutboundOnly) return base;
 
     const fallbackKey = base.outboundKey
       || base.inboundKey
@@ -1645,13 +1645,79 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
+  _normalizeStopIdForMode(stopId, modeBucket = "") {
+    const mode = this._modeBucket(modeBucket);
+    const raw = String(stopId || "").trim();
+    if (!raw) return "";
+    if (mode === "train") {
+      return (this._normalizeTrainStationStopId(raw) || raw).toUpperCase();
+    }
+    return raw.toUpperCase();
+  }
+
+  _visibleRouteEntriesForMode(modeBucket = "") {
+    const mode = this._modeBucket(modeBucket);
+    if (!mode || this._layerVisibility?.routes?.[mode] === false) return [];
+    const entries = this.config?.[`${mode}_entities`] || [];
+    return Array.isArray(entries) ? entries : [];
+  }
+
+  _stopTerminalProfileForMode(stopId, modeBucket = "") {
+    const mode = this._modeBucket(modeBucket);
+    const target = this._normalizeStopIdForMode(stopId, mode);
+    if (!target) {
+      return { hasTerminal: false, hasPassThrough: false };
+    }
+
+    let hasTerminal = false;
+    let hasPassThrough = false;
+    const entries = this._visibleRouteEntriesForMode(mode);
+    entries.forEach((entry) => {
+      const features = this._parseRouteGeometry(entry?.entity);
+      if (!Array.isArray(features)) return;
+      features.forEach((feature) => {
+        const timelineStops = feature?.properties?.timeline_stops || {};
+        Object.values(timelineStops).forEach((directionStops) => {
+          if (!Array.isArray(directionStops) || directionStops.length === 0) return;
+          directionStops.forEach((stop, idx) => {
+            const current = this._normalizeStopIdForMode(stop?.stop_id, mode);
+            if (!current || current !== target) return;
+            const isTerminal = idx === 0 || idx === directionStops.length - 1;
+            if (isTerminal) hasTerminal = true;
+            else hasPassThrough = true;
+          });
+        });
+      });
+    });
+
+    return { hasTerminal, hasPassThrough };
+  }
+
+  _shouldForceOutboundOnlyForStop(stopId, modeBucket = "") {
+    const mode = this._modeBucket(modeBucket);
+    if (mode === "ferry") return true;
+    if (mode !== "train" && mode !== "bus") return false;
+
+    const profile = this._stopTerminalProfileForMode(stopId, mode);
+    if (mode === "train") {
+      return Boolean(profile.hasTerminal);
+    }
+
+    return Boolean(profile.hasTerminal && !profile.hasPassThrough);
+  }
+
   _isFerryBubble(bubble) {
     return this._modeBucket(bubble?.stop?.mode || "") === "ferry";
   }
 
+  _isOutboundOnlyBubble(bubble) {
+    if (this._isFerryBubble(bubble)) return true;
+    return Boolean(bubble?.stop?.forceOutboundOnly);
+  }
+
   _filteredBubbleDepartures(bubble) {
     const rows = Array.isArray(bubble?.departures) ? bubble.departures : [];
-    const filter = this._isFerryBubble(bubble)
+    const filter = this._isOutboundOnlyBubble(bubble)
       ? "outbound"
       : String(bubble?.directionFilter || "all");
     const inboundKey = bubble?.directionMeta?.inboundKey;
@@ -1677,7 +1743,7 @@ class MetlinkExplorerCard extends LitElement {
   _setBubbleDirectionFilter(filter) {
     if (!this._departureBubble) return;
     const next = String(filter || "all");
-    if (this._isFerryBubble(this._departureBubble) && next !== "outbound") return;
+    if (this._isOutboundOnlyBubble(this._departureBubble) && next !== "outbound") return;
     const inboundKey = this._departureBubble?.directionMeta?.inboundKey;
     const outboundKey = this._departureBubble?.directionMeta?.outboundKey;
     if (next === "inbound" && !inboundKey) return;
@@ -1797,6 +1863,7 @@ class MetlinkExplorerCard extends LitElement {
     const stopId = String(stopFeature?.properties?.stop_id || "");
     const stopName = String(stopFeature?.properties?.stop_name || `Stop ${stopId}`);
     const modeBucket = this._modeBucket(stopFeature?.properties?.mode || "");
+    const forceOutboundOnly = this._shouldForceOutboundOnlyForStop(stopId, modeBucket);
     const influenceIdsRaw = String(stopFeature?.properties?.influence_stop_ids || "");
     const influenceStopIds = influenceIdsRaw
       .split("|")
@@ -1823,11 +1890,12 @@ class MetlinkExplorerCard extends LitElement {
         id: stopId,
         name: stopName,
         mode: modeBucket,
+        forceOutboundOnly,
         coordinates: [lon, lat],
         influenceStopIds: stopScopeIds,
       },
       departures: [],
-      directionFilter: modeBucket === "ferry" ? "outbound" : "all",
+      directionFilter: forceOutboundOnly ? "outbound" : "all",
       directionMeta: {
         inboundKey: null,
         outboundKey: null,
@@ -1844,8 +1912,8 @@ class MetlinkExplorerCard extends LitElement {
       ...this._departureBubble,
       loading: false,
       departures,
-      directionFilter: modeBucket === "ferry" ? "outbound" : "all",
-      directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket),
+      directionFilter: forceOutboundOnly ? "outbound" : "all",
+      directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly),
     };
     this.requestUpdate();
   }
@@ -1880,7 +1948,7 @@ class MetlinkExplorerCard extends LitElement {
   _renderDepartureBubble() {
     const bubble = this._departureBubble;
     if (!bubble) return null;
-    const isFerryBubble = this._isFerryBubble(bubble);
+    const isOutboundOnlyBubble = this._isOutboundOnlyBubble(bubble);
     const visibleDepartures = this._filteredBubbleDepartures(bubble);
     const canFilterInbound = Boolean(bubble?.directionMeta?.inboundKey);
     const canFilterOutbound = Boolean(bubble?.directionMeta?.outboundKey);
@@ -1915,12 +1983,12 @@ class MetlinkExplorerCard extends LitElement {
           <div class="departure-filters" role="tablist" aria-label="Direction filter">
             <button
               class=${`departure-filter-btn ${bubble.directionFilter === "all" ? "active" : ""}`}
-              ?disabled=${isFerryBubble}
+              ?disabled=${isOutboundOnlyBubble}
               @click=${() => this._setBubbleDirectionFilter("all")}
             >All</button>
             <button
               class=${`departure-filter-btn ${bubble.directionFilter === "inbound" ? "active" : ""}`}
-              ?disabled=${isFerryBubble || !canFilterInbound}
+              ?disabled=${isOutboundOnlyBubble || !canFilterInbound}
               @click=${() => this._setBubbleDirectionFilter("inbound")}
             >Inbound</button>
             <button

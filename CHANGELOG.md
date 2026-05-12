@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.30] - 2026-05-13
+
+### Fix - Outbound-only terminal train and bus stop bubbles
+
+- Forced train stop bubbles to outbound-only when the stop is a route start/end terminal on visible train routes.
+- Forced bus stop bubbles to outbound-only only when the stop is terminal and no visible bus routes pass through it.
+- Kept pass-through bus hubs (for example Courtney Place with through-services) on normal direction filtering.
+- Applied terminal detection against visible route timeline stop sequences for consistency with map layer visibility.
+- Updated frontend build marker to `0.12.30`.
+
 ## [0.12.29] - 2026-05-13
 
 ### Fix - Ferry stop bubbles outbound-only departures
