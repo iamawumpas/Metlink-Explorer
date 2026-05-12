@@ -201,6 +201,10 @@ class MetlinkVehicleTrackerEntity(CoordinatorEntity, TrackerEntity):
             return current
 
         if self._last_seen_data is not None and self._last_seen_at is not None:
+            # Ferries can remain stationary at terminals for extended periods;
+            # keep their last known fix instead of expiring after 120 seconds.
+            if self._transportation_name == "Ferry":
+                return self._last_seen_data
             if (datetime.now() - self._last_seen_at).total_seconds() <= 120:
                 return self._last_seen_data
 

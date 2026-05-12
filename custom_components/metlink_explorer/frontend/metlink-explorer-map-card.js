@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.14)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.15)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -1098,6 +1098,7 @@ class MetlinkExplorerCard extends LitElement {
   _liveFeaturesForRoute(routeEntry, mode, routeMeta, routeFeatures) {
     if (!this.hass || !routeMeta) return [];
     const maxAge = Number(this.config.live_max_age_seconds || 120);
+    const skipAgeFilter = mode === "ferry";
     const nowEpoch = Date.now() / 1000;
     const markerColor = routeEntry.color || VEHICLE_COLORS[mode] || "#ff9800";
     const textColor = this._contrastTextColor(markerColor);
@@ -1113,6 +1114,8 @@ class MetlinkExplorerCard extends LitElement {
         const lat = Number(state.attributes.latitude);
         const lon = Number(state.attributes.longitude);
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+
+        if (skipAgeFilter) return true;
 
         const ts = this._parseTrackerTimestamp(state.attributes.timestamp);
         if (!ts) return false;

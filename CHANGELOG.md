@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.15] - 2026-05-12
+
+### Fix - Keep ferry trackers visible while stationary
+
+- Disabled 120-second stale-data expiry for ferries in backend tracker retention (indefinite keep-alive).
+- Disabled live_max_age_seconds freshness filtering for ferries on frontend map (ferry markers persist until removed from coordinator).
+- Other transport modes (Train, Bus, Cable Car, School Bus) retain existing 120-second timeout behavior.
+- Updated frontend build marker to `0.12.15`.
+
 ## [0.12.14] - 2026-05-12
 
 ### Fix - AISStream ferry subscription resilience and fallback handling
