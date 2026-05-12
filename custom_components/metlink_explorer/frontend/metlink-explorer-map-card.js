@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.21)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.22)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -52,6 +52,8 @@ const VEHICLE_COLORS = {
 
 // Intentionally slow raster tile visual load/fade.
 const TILE_FADE_DURATION_MS = 250000;
+const STARTUP_REDRAW_INTERVAL_MS = 10000;
+const STARTUP_STABLE_TICKS_REQUIRED = 2;
 
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
@@ -72,6 +74,7 @@ class MetlinkExplorerCard extends LitElement {
     this._bubbleOpenSequence = 0;
     this._boundMapClick = (event) => this._onMapClick(event);
     this._boundMapMove = () => this._updateDepartureBubbleAnchor();
+    this._boundStopLayoutChange = () => this._scheduleStopBadgeOverlapLayout();
     this._boundDocumentPointerDown = (event) => this._onDocumentPointerDown(event);
     // Layer visibility toggles: type -> mode -> boolean
     this._layerVisibility = {
@@ -87,6 +90,11 @@ class MetlinkExplorerCard extends LitElement {
     this._layerResetTimer   = null;
     this._isEditorPreview   = false;
     this._appliedHostHeight = "";
+    this._startupRedrawTimer = null;
+    this._startupStableTicks = 0;
+    this._startupSettled = false;
+    this._stopBadgeLayoutSources = new Map();
+    this._stopLayoutDebounceTimer = null;
   }
 
   connectedCallback() {
@@ -881,7 +889,7 @@ class MetlinkExplorerCard extends LitElement {
   _stopsAreInfluenceCompatible(anchorCtx, candidateCtx) {
     if (!anchorCtx || !candidateCtx) return false;
     const distanceMeters = this._haversineMeters(anchorCtx.lat, anchorCtx.lon, candidateCtx.lat, candidateCtx.lon);
-    if (!Number.isFinite(distanceMeters) || distanceMeters > 200) return false;
+    if (!Number.isFinite(distanceMeters) || distanceMeters > 75) return false;
 
     const anchorRoutes = new Set((anchorCtx.routeSignatures || []).map((sig) => sig.routeToken).filter(Boolean));
     const candidateRoutes = new Set((candidateCtx.routeSignatures || []).map((sig) => sig.routeToken).filter(Boolean));
@@ -944,6 +952,9 @@ class MetlinkExplorerCard extends LitElement {
     if (!this._layerVisibility[type]) return;
     this._layerVisibility[type][mode] = !this._layerVisibility[type][mode];
     this._applyLayerVisibility(type, mode);
+    if (type === 'stops') {
+      this._scheduleStopBadgeOverlapLayout();
+    }
     this._scheduleLayerRevert();
     this.requestUpdate();
   }
@@ -987,6 +998,7 @@ class MetlinkExplorerCard extends LitElement {
         this._applyLayerVisibility(type, mode);
       });
     });
+    this._scheduleStopBadgeOverlapLayout();
     this.requestUpdate();
   }
 
@@ -2076,6 +2088,7 @@ class MetlinkExplorerCard extends LitElement {
       const categories = ['ferry', 'bus', 'cable', 'train'];
       const hubCoordModes = new Map();
       const selectedStopContextsByMode = new Map();
+      this._stopBadgeLayoutSources = new Map();
 
       // First pass: collect shared selected-stop coordinates across all route entries.
       categories.forEach((cat) => {
@@ -2268,6 +2281,21 @@ class MetlinkExplorerCard extends LitElement {
                 this.map.getSource(hubSourceId).setData({ type: 'FeatureCollection', features: hubFeatures });
               }
 
+              this._stopBadgeLayoutSources.set(hubSourceId, {
+                markerDiameter,
+                mode: cat,
+                baseFeatures: hubFeatures.map((feature) => ({
+                  ...feature,
+                  geometry: {
+                    ...feature.geometry,
+                    coordinates: [...(feature.geometry?.coordinates || [])],
+                  },
+                  properties: {
+                    ...(feature.properties || {}),
+                  },
+                })),
+              });
+
               const hubImageId = `hub-marker-${cat}-${markerDiameter}`;
               if (cat === 'train') {
                 await this._ensureTrainHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
@@ -2322,11 +2350,183 @@ class MetlinkExplorerCard extends LitElement {
           }
         }
       });
+      this._scheduleStopBadgeOverlapLayout();
     } catch (err) {
       console.error('[MetlinkExplorer] _renderRoutes error', err);
     }
     this.map.once('idle', () => this._runAsyncTask(this._renderLiveVehicles(), "render live vehicles (post routes)"));
     console.log('[MetlinkExplorer] _renderRoutes end');
+  }
+
+  _stopBadgeCentersOverlapPx(a, b) {
+    const dx = Number(a?.x) - Number(b?.x);
+    const dy = Number(a?.y) - Number(b?.y);
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return false;
+    const distance = Math.sqrt((dx * dx) + (dy * dy));
+    const rA = Math.max(1, Number(a?.diameter || 0) / 2);
+    const rB = Math.max(1, Number(b?.diameter || 0) / 2);
+    return distance < (rA + rB);
+  }
+
+  _slotOffsets(count, spacingPx) {
+    const n = Math.max(0, Number(count) || 0);
+    const spacing = Math.max(1, Number(spacingPx) || 1);
+    if (n === 0) return [];
+    const mid = (n - 1) / 2;
+    const offsets = [];
+    for (let i = 0; i < n; i++) {
+      offsets.push((i - mid) * spacing);
+    }
+    return offsets;
+  }
+
+  _buildInlineLayoutForGroup(group, axis) {
+    if (!Array.isArray(group) || group.length === 0) return [];
+
+    const centerX = group.reduce((sum, item) => sum + item.x, 0) / group.length;
+    const centerY = group.reduce((sum, item) => sum + item.y, 0) / group.length;
+    const maxDiameter = Math.max(...group.map((item) => Math.max(1, Number(item.diameter) || 1)));
+    const spacing = maxDiameter + 3;
+    const offsets = this._slotOffsets(group.length, spacing);
+
+    const sorted = [...group].sort((a, b) => {
+      const keyA = axis === 'x' ? a.x : a.y;
+      const keyB = axis === 'x' ? b.x : b.y;
+      if (keyA !== keyB) return keyA - keyB;
+      const modeWeight = { ferry: 0, train: 1, bus: 2, cable: 3 };
+      const wA = modeWeight[String(a.mode || '').toLowerCase()] ?? 9;
+      const wB = modeWeight[String(b.mode || '').toLowerCase()] ?? 9;
+      return wA - wB;
+    });
+
+    return sorted.map((item, index) => {
+      const along = offsets[index];
+      const x = axis === 'x' ? (centerX + along) : centerX;
+      const y = axis === 'y' ? (centerY + along) : centerY;
+      return {
+        ...item,
+        layoutX: x,
+        layoutY: y,
+      };
+    });
+  }
+
+  _totalLayoutDisplacement(layoutItems) {
+    return (layoutItems || []).reduce((sum, item) => {
+      const dx = Number(item.layoutX) - Number(item.x);
+      const dy = Number(item.layoutY) - Number(item.y);
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return sum;
+      return sum + Math.sqrt((dx * dx) + (dy * dy));
+    }, 0);
+  }
+
+  _scheduleStopBadgeOverlapLayout() {
+    if (!this.map) return;
+    if (this._stopLayoutDebounceTimer) clearTimeout(this._stopLayoutDebounceTimer);
+    this._stopLayoutDebounceTimer = setTimeout(() => {
+      this._stopLayoutDebounceTimer = null;
+      this._applyStopBadgeOverlapLayout();
+    }, 80);
+  }
+
+  _applyStopBadgeOverlapLayout() {
+    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this._stopBadgeLayoutSources || this._stopBadgeLayoutSources.size === 0) return;
+
+    const markers = [];
+    this._stopBadgeLayoutSources.forEach((entry, hubSourceId) => {
+      const source = this.map.getSource(hubSourceId);
+      if (!source || !Array.isArray(entry?.baseFeatures)) return;
+      const mode = String(entry?.mode || '').toLowerCase();
+      if (mode && this._layerVisibility?.stops?.[mode] === false) return;
+      entry.baseFeatures.forEach((feature, featureIndex) => {
+        const coords = feature?.geometry?.coordinates || [];
+        const lon = Number(coords[0]);
+        const lat = Number(coords[1]);
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+        const projected = this.map.project([lon, lat]);
+        markers.push({
+          hubSourceId,
+          featureIndex,
+          mode: String(feature?.properties?.mode || ''),
+          diameter: Number(entry?.markerDiameter || 0),
+          x: projected.x,
+          y: projected.y,
+          lon,
+          lat,
+          feature,
+        });
+      });
+    });
+
+    if (markers.length === 0) return;
+
+    const parent = markers.map((_, i) => i);
+    const find = (i) => {
+      let p = i;
+      while (parent[p] !== p) {
+        parent[p] = parent[parent[p]];
+        p = parent[p];
+      }
+      return p;
+    };
+    const union = (a, b) => {
+      const pa = find(a);
+      const pb = find(b);
+      if (pa !== pb) parent[pb] = pa;
+    };
+
+    for (let i = 0; i < markers.length; i++) {
+      for (let j = i + 1; j < markers.length; j++) {
+        if (this._stopBadgeCentersOverlapPx(markers[i], markers[j])) {
+          union(i, j);
+        }
+      }
+    }
+
+    const groups = new Map();
+    markers.forEach((marker, index) => {
+      const root = find(index);
+      if (!groups.has(root)) groups.set(root, []);
+      groups.get(root).push(marker);
+    });
+
+    const perSourceFeatures = new Map();
+    this._stopBadgeLayoutSources.forEach((entry, hubSourceId) => {
+      perSourceFeatures.set(hubSourceId, entry.baseFeatures.map((f) => ({ ...f })));
+    });
+
+    groups.forEach((group) => {
+      if (!Array.isArray(group) || group.length <= 1) return;
+      const horizontal = this._buildInlineLayoutForGroup(group, 'x');
+      const vertical = this._buildInlineLayoutForGroup(group, 'y');
+      const best = this._totalLayoutDisplacement(horizontal) <= this._totalLayoutDisplacement(vertical)
+        ? horizontal
+        : vertical;
+
+      best.forEach((item) => {
+        const srcFeatures = perSourceFeatures.get(item.hubSourceId);
+        if (!Array.isArray(srcFeatures)) return;
+        const existing = srcFeatures[item.featureIndex];
+        if (!existing) return;
+        const nextLonLat = this.map.unproject([item.layoutX, item.layoutY]);
+        srcFeatures[item.featureIndex] = {
+          ...existing,
+          geometry: {
+            ...existing.geometry,
+            coordinates: [nextLonLat.lng, nextLonLat.lat],
+          },
+        };
+      });
+    });
+
+    perSourceFeatures.forEach((features, hubSourceId) => {
+      const source = this.map.getSource(hubSourceId);
+      if (!source || typeof source.setData !== 'function') return;
+      source.setData({ type: 'FeatureCollection', features });
+    });
+
+    this._bringHubLayersToFront();
   }
 
   updated(changedProps) {
@@ -2348,6 +2548,12 @@ class MetlinkExplorerCard extends LitElement {
         if (snapshot !== this._liveGpsSnapshot) {
           this._liveGpsSnapshot = snapshot;
           this._runAsyncTask(this._renderLiveVehicles(), "render live vehicles (state update)");
+        }
+
+        // If integration restarts while kiosk is open, re-arm forced overlay redraws.
+        if (this._startupSettled && !this._overlayStartupStable()) {
+          console.log('[MetlinkExplorer] startup stability lost; restarting forced overlay redraw loop');
+          this._restartStartupOverlayRedrawLoop();
         }
       }
     }
@@ -2405,11 +2611,15 @@ class MetlinkExplorerCard extends LitElement {
       this._applyMapProjection(false);
       this._centerMap();
       this._runAsyncTask(this._renderRoutes(), "render routes (map load)");
+      this._startStartupOverlayRedrawLoop();
     });
 
     this.map.on('click', this._boundMapClick);
     this.map.on('move', this._boundMapMove);
     this.map.on('zoom', this._boundMapMove);
+    this.map.on('moveend', this._boundStopLayoutChange);
+    this.map.on('zoomend', this._boundStopLayoutChange);
+    this.map.on('rotateend', this._boundStopLayoutChange);
 
     this.map.on('error', (event) => {
       console.error('[MetlinkExplorer] map error event', event?.error || event);
@@ -2453,6 +2663,85 @@ class MetlinkExplorerCard extends LitElement {
     }
   }
 
+  _configuredRouteEntries() {
+    const categories = ['train', 'bus', 'ferry', 'cable'];
+    return categories.reduce((total, cat) => total + (this.config?.[`${cat}_entities`] || []).length, 0);
+  }
+
+  _routeEntitiesReadyCount() {
+    const categories = ['train', 'bus', 'ferry', 'cable'];
+    let ready = 0;
+    categories.forEach((cat) => {
+      const entries = this.config?.[`${cat}_entities`] || [];
+      entries.forEach((entry) => {
+        const features = this._parseRouteGeometry(entry?.entity);
+        if (Array.isArray(features) && features.length > 0) ready += 1;
+      });
+    });
+    return ready;
+  }
+
+  _hasConfiguredSelectedStops() {
+    const categories = ['train', 'bus', 'ferry', 'cable'];
+    return categories.some((cat) => {
+      const entries = this.config?.[`${cat}_entities`] || [];
+      return entries.some((entry) => Array.isArray(entry?.selected_stops) && entry.selected_stops.length > 0);
+    });
+  }
+
+  _overlayStartupStable() {
+    const expectedRoutes = this._configuredRouteEntries();
+    const readyRoutes = this._routeEntitiesReadyCount();
+    const routesDrawn = this._routeLayersByMode.size > 0;
+    const stopsConfigured = this._hasConfiguredSelectedStops();
+    const stopsDrawn = !stopsConfigured || this._hubLayerIds.size > 0;
+    return expectedRoutes > 0 && readyRoutes >= expectedRoutes && routesDrawn && stopsDrawn;
+  }
+
+  _stopStartupOverlayRedrawLoop() {
+    if (this._startupRedrawTimer) {
+      clearInterval(this._startupRedrawTimer);
+      this._startupRedrawTimer = null;
+    }
+  }
+
+  _restartStartupOverlayRedrawLoop() {
+    this._startupSettled = false;
+    this._startupStableTicks = 0;
+    this._startStartupOverlayRedrawLoop();
+  }
+
+  _startStartupOverlayRedrawLoop() {
+    if (this._startupRedrawTimer) return;
+    this._startupSettled = false;
+    this._startupStableTicks = 0;
+    this._startupRedrawTimer = setInterval(() => {
+      this._runAsyncTask(this._forceStartupOverlayRedrawTick(), "startup overlay redraw tick");
+    }, STARTUP_REDRAW_INTERVAL_MS);
+    this._runAsyncTask(this._forceStartupOverlayRedrawTick(), "startup overlay redraw initial tick");
+  }
+
+  async _forceStartupOverlayRedrawTick() {
+    if (!this.map || !this.map.isStyleLoaded()) return;
+
+    // Force overlay refreshes only: routes/stops/live badges. Base raster map remains untouched.
+    this._vehicleLastPositions.clear();
+    await this._renderRoutes();
+    await this._renderLiveVehicles();
+
+    if (this._overlayStartupStable()) {
+      this._startupStableTicks += 1;
+      if (this._startupStableTicks >= STARTUP_STABLE_TICKS_REQUIRED) {
+        this._startupSettled = true;
+        this._stopStartupOverlayRedrawLoop();
+        console.log('[MetlinkExplorer] startup overlay redraw loop settled; stopping forced redraws');
+      }
+      return;
+    }
+
+    this._startupStableTicks = 0;
+  }
+
   _updateMapStyle() {
     if (!this.map) return;
     const newUrl = this._getStyleUrl(this.config.map_style);
@@ -2478,6 +2767,11 @@ class MetlinkExplorerCard extends LitElement {
 
   disconnectedCallback() {
     window.removeEventListener('pointerdown', this._boundDocumentPointerDown, true);
+    this._stopStartupOverlayRedrawLoop();
+    if (this._stopLayoutDebounceTimer) {
+      clearTimeout(this._stopLayoutDebounceTimer);
+      this._stopLayoutDebounceTimer = null;
+    }
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
@@ -2490,6 +2784,9 @@ class MetlinkExplorerCard extends LitElement {
       this.map.off('click', this._boundMapClick);
       this.map.off('move', this._boundMapMove);
       this.map.off('zoom', this._boundMapMove);
+      this.map.off('moveend', this._boundStopLayoutChange);
+      this.map.off('zoomend', this._boundStopLayoutChange);
+      this.map.off('rotateend', this._boundStopLayoutChange);
     }
     super.disconnectedCallback();
   }

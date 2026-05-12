@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.22] - 2026-05-13
+
+### Fix - Stop badge overlap realignment and kiosk startup redraw resilience
+
+- Added pixel-accurate stop badge overlap grouping and inline re-layout with a 3px gap centered on the overlap midpoint.
+- Applied overlap logic to stop badges only, with live vehicle markers excluded.
+- Added automatic stop badge re-alignment on zoom/rotate/move-end map changes.
+- Ensured stop visibility toggles immediately trigger redraw/re-alignment and hidden stop modes are excluded from overlap grouping.
+- Reduced nearby stop influence grouping radius from 200m to 75m to better match true hub/adjacent-stop behavior.
+- Added forced overlay redraw loop every 10 seconds during integration startup and auto-stop once stable, including automatic re-arm after restart.
+- Updated frontend build marker to `0.12.22`.
+
 ## [0.12.21] - 2026-05-13
 
 ### Improvement - Stop influence aggregation clarity in departure bubble
