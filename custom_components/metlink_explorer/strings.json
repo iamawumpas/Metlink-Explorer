@@ -11,11 +11,12 @@
       },
       "transportation_type": {
         "title": "Select Transportation Type",
-        "description": "Choose the type of transport you want to monitor. Only transportation types with available routes are shown. At the bottom, you can optionally enter your own API keys to overwrite the currently stored keys for this setup.",
+        "description": "Choose the type of transport you want to monitor. Only transportation types with available routes are shown. At the bottom, you can optionally enter your own API keys to overwrite the currently stored keys for this setup. Enable `Save API keys only` if you want to update keys without adding a route.",
         "data": {
           "transportation_type": "Transportation Type",
           "api_key": "Metlink API Key (Optional Override)",
-          "ais_api_key": "AISStream API Key (Optional Override)"
+          "ais_api_key": "AISStream API Key (Optional Override)",
+          "save_api_keys_only": "Save API keys only"
         }
       },
       "route_selection": {
@@ -35,7 +36,8 @@
     },
     "abort": {
       "already_configured": "This route is already configured.",
-      "route_added_to_existing": "Route added to existing transportation integration."
+      "route_added_to_existing": "Route added to existing transportation integration.",
+      "api_keys_updated": "API keys updated."
     }
   },
   "options": {

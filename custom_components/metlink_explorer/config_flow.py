@@ -31,6 +31,8 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+CONF_SAVE_API_KEYS_ONLY = "save_api_keys_only"
+
 
 class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Metlink Explorer."""
@@ -100,10 +102,13 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle transportation type selection."""
         errors: dict[str, str] = {}
+        existing_entries = self._async_current_entries()
+        allow_key_only_save = bool(existing_entries)
 
         if user_input is not None:
             override_api_key = str(user_input.get(CONF_API_KEY, "")).strip() or None
             override_ais_api_key = str(user_input.get(CONF_AIS_API_KEY, "")).strip() or None
+            save_api_keys_only = allow_key_only_save and bool(user_input.get(CONF_SAVE_API_KEYS_ONLY, False))
 
             if override_api_key:
                 session = async_get_clientsession(self.hass)
@@ -125,6 +130,17 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 session = async_get_clientsession(self.hass)
                 self._api_client = MetlinkApiClient(self._api_key, session, ais_api_key=self._ais_api_key)
 
+            if save_api_keys_only and not errors:
+                for entry in existing_entries:
+                    updated_data = dict(entry.data)
+                    if override_api_key:
+                        updated_data[CONF_API_KEY] = self._api_key
+                    if CONF_AIS_API_KEY in user_input:
+                        updated_data[CONF_AIS_API_KEY] = self._ais_api_key
+                    self.hass.config_entries.async_update_entry(entry, data=updated_data)
+                    await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="api_keys_updated")
+
             if errors:
                 available_transport_options = await self._get_available_transportation_types() if self._api_client else {}
                 if not available_transport_options:
@@ -142,6 +158,9 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         vol.Optional(CONF_AIS_API_KEY, default=""): selector.TextSelector(
                             selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
                         ),
+                        **({
+                            vol.Optional(CONF_SAVE_API_KEYS_ONLY, default=bool(user_input.get(CONF_SAVE_API_KEYS_ONLY, False))): bool,
+                        } if allow_key_only_save else {}),
                     }),
                     errors=errors,
                 )
@@ -186,6 +205,9 @@ class MetlinkExplorerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_AIS_API_KEY, default=""): selector.TextSelector(
                     selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
                 ),
+                **({
+                    vol.Optional(CONF_SAVE_API_KEYS_ONLY, default=False): bool,
+                } if allow_key_only_save else {}),
             }),
             errors=errors,
         )

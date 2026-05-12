@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.4] - 2026-05-12
+
+### Fix - Save API keys without forcing route selection
+
+- Added a `Save API keys only` toggle to the `Select Transportation Type` step so users can update stored keys without adding a route.
+- Fixed flow behavior where submitting API key changes could continue into route selection due to transport option preselection.
+- Updated config flow copy and abort messaging to clearly indicate successful key-only updates.
+- Updated frontend build marker to `0.12.4`.
+
 ## [0.12.3] - 2026-05-12
 
 ### Improvement - Masked API key override fields on transport selection
