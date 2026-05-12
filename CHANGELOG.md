@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.17] - 2026-05-12
+
+### Fix - Maintain persistent AISStream websocket connection
+
+- Replaced short-lived AIS websocket sampling with a persistent background websocket connection while the integration is running.
+- Send AIS subscription immediately on connect/reconnect and keep a live in-memory report buffer for ferry updates.
+- Added clean integration unload shutdown to cancel the AIS background task and close the stream lifecycle safely.
+- Updated frontend build marker to `0.12.17`.
+
 ## [0.12.16] - 2026-05-12
 
 ### Fix - Enforce strict configured ferry MMSI filtering
