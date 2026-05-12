@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.26)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.27)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -712,11 +712,7 @@ class MetlinkExplorerCard extends LitElement {
     }
 
     const offsets = {};
-    
-    // Define harbor center (Matiu Somes Island, Wellington Harbour)
-    const HARBOR_CENTERS = [
-      { lat: -41.258250, lon: 174.865389, modes: ['ferry'] },
-    ];
+    const harborCenter = this._harborCenterForMode('ferry');
 
     for (const group of grouped.values()) {
       if (group.length === 1) {
@@ -731,47 +727,37 @@ class MetlinkExplorerCard extends LitElement {
       const metersPerDegLon = Math.max(1, 111320 * Math.cos(latRad));
       const radiusMeters = Math.max(12, Number(separationMeters));
 
-      // Check if this group has multiple modes (ferry + others)
       const modes = new Set(group.map((h) => this._modeBucket(h.mode || '')));
       const hasFerry = modes.has('ferry');
-      const hasNonFerry = modes.size > 1 || (modes.size === 1 && !hasFerry);
+      const hasNonFerry = [...modes].some((mode) => mode && mode !== 'ferry');
 
-      if (hasFerry && hasNonFerry && group.length >= 2) {
-        // Mode-aware positioning: ferries closest to harbor, others further away
-        const ferryStops = group.filter((h) => this._modeBucket(h.mode || '') === 'ferry');
-        const otherStops = group.filter((h) => this._modeBucket(h.mode || '') !== 'ferry');
+      if (hasFerry && hasNonFerry && harborCenter) {
+        const centerLat = Number(harborCenter.lat);
+        const centerLon = Number(harborCenter.lon);
+        const harborBearing = this._bearingBetweenPoints(centerLat, centerLon, groupLat, groupLon);
+        const towardHarbor = (harborBearing + 180) % 360;
+        const towardHarborRad = towardHarbor * (Math.PI / 180);
+        const ferries = group.filter((h) => this._modeBucket(h.mode || '') === 'ferry');
+        const others = group.filter((h) => this._modeBucket(h.mode || '') !== 'ferry');
+        const ferryRadius = Math.max(8, Math.round(radiusMeters * 0.45));
 
-        // Find closest harbor center
-        let bestHarbor = HARBOR_CENTERS[0];
-        let minDistToHarbor = Infinity;
-        for (const harbor of HARBOR_CENTERS) {
-          if (!harbor.modes.includes('ferry')) continue;
-          const dist = this._haversineMeters(groupLat, groupLon, harbor.lat, harbor.lon);
-          if (dist < minDistToHarbor) {
-            minDistToHarbor = dist;
-            bestHarbor = harbor;
-          }
-        }
+        ferries.forEach((stop, index) => {
+          const spread = (index - ((ferries.length - 1) / 2)) * 4;
+          const distance = ferryRadius + spread;
+          const dLon = (Math.cos(towardHarborRad) * distance) / metersPerDegLon;
+          const dLat = (Math.sin(towardHarborRad) * distance) / metersPerDegLat;
+          offsets[stop.stop_id] = { dLon, dLat };
+        });
 
-        // Calculate bearing to harbor center for ferry placement
-        const ferryBearing = this._bearingBetweenPoints(groupLat, groupLon, bestHarbor.lat, bestHarbor.lon);
-
-        // Place ferries toward harbor center (innermost ring)
-        const ferryRadius = Math.max(8, radiusMeters * 0.6);
-        for (let i = 0; i < ferryStops.length; i++) {
-          const angle = ferryBearing * (Math.PI / 180);
-          const dLon = (Math.cos(angle) * ferryRadius) / metersPerDegLon;
-          const dLat = (Math.sin(angle) * ferryRadius) / metersPerDegLat;
-          offsets[ferryStops[i].stop_id] = { dLon, dLat };
-        }
-
-        // Place other modes in circular pattern around ferries (further out)
-        for (let i = 0; i < otherStops.length; i++) {
-          const angle = ((ferryBearing + 120 + (i / otherStops.length) * 240) % 360) * (Math.PI / 180);
-          const dLon = (Math.cos(angle) * radiusMeters) / metersPerDegLon;
-          const dLat = (Math.sin(angle) * radiusMeters) / metersPerDegLat;
-          offsets[otherStops[i].stop_id] = { dLon, dLat };
-        }
+        others.forEach((stop, index) => {
+          const radius = ferryRadius + radiusMeters + (index * Math.max(10, Math.round(radiusMeters * 0.35)));
+          const sideShift = (index % 2 === 0 ? -1 : 1) * Math.max(6, Math.round(radiusMeters * 0.18));
+          const awayRad = ((towardHarbor + 180) % 360) * (Math.PI / 180);
+          const perpRad = (towardHarbor + 90) * (Math.PI / 180);
+          const dLon = ((Math.cos(awayRad) * radius) + (Math.cos(perpRad) * sideShift)) / metersPerDegLon;
+          const dLat = ((Math.sin(awayRad) * radius) + (Math.sin(perpRad) * sideShift)) / metersPerDegLat;
+          offsets[stop.stop_id] = { dLon, dLat };
+        });
       } else {
         // Standard circular layout for groups without mixed ferry/non-ferry
         for (let i = 0; i < group.length; i++) {
@@ -808,6 +794,20 @@ class MetlinkExplorerCard extends LitElement {
       dLon: (dir * sideMeters) / metersPerDegLon,
       dLat: 0,
     };
+  }
+
+  _harborCenterForMode(mode) {
+    if (this._modeBucket(mode) !== 'ferry') return null;
+    return { lat: -41.258250, lon: 174.865389 };
+  }
+
+  _modePriorityRank(mode) {
+    const bucket = this._modeBucket(mode);
+    if (bucket === 'ferry') return 0;
+    if (bucket === 'train') return 1;
+    if (bucket === 'bus') return 2;
+    if (bucket === 'cable') return 3;
+    return 4;
   }
 
   _modeBucket(mode) {
@@ -2471,6 +2471,57 @@ class MetlinkExplorerCard extends LitElement {
     });
   }
 
+  _buildHarborAnchoredLayoutForGroup(group) {
+    if (!Array.isArray(group) || group.length === 0 || !this.map) return [];
+
+    const harborCenter = this._harborCenterForMode('ferry');
+    if (!harborCenter) return [];
+
+    const harborPoint = this.map.project([harborCenter.lon, harborCenter.lat]);
+    const ferries = group.filter((item) => this._modeBucket(item?.mode || item?.feature?.properties?.mode || '') === 'ferry');
+    if (ferries.length === 0) return [];
+
+    const primary = [...ferries].sort((a, b) => {
+      const da = this._haversineMeters(harborCenter.lat, harborCenter.lon, Number(a?.lat), Number(a?.lon));
+      const db = this._haversineMeters(harborCenter.lat, harborCenter.lon, Number(b?.lat), Number(b?.lon));
+      return da - db;
+    })[0];
+
+    const primaryDx = Number(primary?.x) - Number(harborPoint.x);
+    const primaryDy = Number(primary?.y) - Number(harborPoint.y);
+    const bearing = Math.atan2(primaryDy, primaryDx);
+    const baseDistance = Math.max(18, Math.max(...group.map((item) => Math.max(1, Number(item.diameter) || 1))) + 3);
+    const awayDx = Math.cos(bearing);
+    const awayDy = Math.sin(bearing);
+    const perpDx = Math.cos(bearing + (Math.PI / 2));
+    const perpDy = Math.sin(bearing + (Math.PI / 2));
+
+    const others = group
+      .filter((item) => item !== primary)
+      .sort((a, b) => {
+        const priority = this._modePriorityRank(a.mode) - this._modePriorityRank(b.mode);
+        if (priority !== 0) return priority;
+        const da = this._haversineMeters(harborCenter.lat, harborCenter.lon, Number(a?.lat), Number(a?.lon));
+        const db = this._haversineMeters(harborCenter.lat, harborCenter.lon, Number(b?.lat), Number(b?.lon));
+        return da - db;
+      });
+
+    const layout = [{ ...primary, layoutX: primary.x, layoutY: primary.y }];
+    others.forEach((item, index) => {
+      const ring = Math.floor(index / 2) + 1;
+      const side = index % 2 === 0 ? -1 : 1;
+      const radialDistance = baseDistance * ring;
+      const lateralDistance = baseDistance * 0.42 * ring * side;
+      layout.push({
+        ...item,
+        layoutX: primary.x + (awayDx * radialDistance) + (perpDx * lateralDistance),
+        layoutY: primary.y + (awayDy * radialDistance) + (perpDy * lateralDistance),
+      });
+    });
+
+    return layout;
+  }
+
   _totalLayoutDisplacement(layoutItems) {
     return (layoutItems || []).reduce((sum, item) => {
       const dx = Number(item.layoutX) - Number(item.x);
@@ -2634,11 +2685,16 @@ class MetlinkExplorerCard extends LitElement {
 
     groups.forEach((group) => {
       if (!Array.isArray(group) || group.length <= 1) return;
-      const horizontal = this._buildInlineLayoutForGroup(group, 'x');
-      const vertical = this._buildInlineLayoutForGroup(group, 'y');
-      const best = this._totalLayoutDisplacement(horizontal) <= this._totalLayoutDisplacement(vertical)
-        ? horizontal
-        : vertical;
+      const hasFerry = group.some((item) => this._modeBucket(item?.mode || item?.feature?.properties?.mode || '') === 'ferry');
+      const best = hasFerry
+        ? this._buildHarborAnchoredLayoutForGroup(group)
+        : (() => {
+            const horizontal = this._buildInlineLayoutForGroup(group, 'x');
+            const vertical = this._buildInlineLayoutForGroup(group, 'y');
+            return this._totalLayoutDisplacement(horizontal) <= this._totalLayoutDisplacement(vertical)
+              ? horizontal
+              : vertical;
+          })();
 
       best.forEach((item) => {
         const srcFeatures = perSourceFeatures.get(item.hubSourceId);

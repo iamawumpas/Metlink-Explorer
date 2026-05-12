@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.27] - 2026-05-13
+
+### Fix - Harbor-anchored ferry badge priority
+
+- Anchored ferry-containing badge groups to the Matiu Somes Island harbor center so ferry badges remain the primary visual anchor.
+- Placed non-ferry badges progressively farther from the harbor center instead of allowing generic overlap packing to reshuffle ferry priority.
+- Preserved ferry-first ordering inside the overlap solver so map redraws and resizes no longer move ferry badges behind train or bus badges.
+- Updated frontend build marker to `0.12.27`.
+
 ## [0.12.26] - 2026-05-13
 
 ### Enhancement - Smart ferry stop positioning toward harbor centers
