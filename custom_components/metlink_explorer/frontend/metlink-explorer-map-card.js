@@ -1882,7 +1882,14 @@ class MetlinkExplorerCard extends LitElement {
         if (deltaMs < maxPastMs || deltaMs > maxFutureMs) return;
 
         const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
-        const directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
+        let directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
+        if (this._modeBucket(targetMode) === "ferry") {
+          const originStop = String(row?.stop_name || "").trim();
+          const destinationStop = String(row?.destination || "").trim();
+          if (originStop && destinationStop) {
+            directionLabel = `${originStop} - ${destinationStop}`;
+          }
+        }
         const directionIdRaw = row?.direction_id;
         const directionId = directionIdRaw === undefined || directionIdRaw === null
           ? ""

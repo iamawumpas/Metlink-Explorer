@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.37] - 2026-05-13
+
+### Fix - Ferry bubble departure line shows stop-specific origin
+
+- Updated ferry departure row display text to render as `stop_name - destination`.
+- Corrected stop 9999 bubble lines to show departures originating from Days Bay Wharf instead of route-level Queens Wharf phrasing.
+- Applied this display change only to ferry rows; other modes remain unchanged.
+
 ## [0.12.36] - 2026-05-13
 
 ### Fix - Align ferry QDF/MIF service label mapping
