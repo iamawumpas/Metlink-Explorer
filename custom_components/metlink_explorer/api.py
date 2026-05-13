@@ -784,7 +784,8 @@ class MetlinkApiClient:
                 if not dep_time:
                     continue
                 # Exclude terminal-stop rows where service ends at this stop.
-                if self._transportation_type == TRAIN_ROUTE_TYPE and stop_id == destination_stop_id:
+                # This avoids treating destination arrivals as departures.
+                if stop_id == destination_stop_id:
                     continue
                 rows.append(
                     {

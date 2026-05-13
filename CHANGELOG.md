@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.33] - 2026-05-13
+
+### Fix - Ferry destination arrivals excluded from departures board
+
+- Excluded terminal-stop rows for all modes when building timetable departure rows.
+- Prevented destination arrivals from being surfaced as departures in stop bubbles and mode boards.
+- Fixed Queens Wharf (stop 9997) showing Days Bay arrivals as departures.
+
 ## [0.12.32] - 2026-05-13
 
 ### Fix - Citations and zoom-aware distance scale
