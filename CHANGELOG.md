@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.36] - 2026-05-13
+
+### Fix - Align ferry QDF/MIF service label mapping
+
+- Updated ferry trip service-label classification so Mātiu/Somes-linked patterns map to `QDF` and non-Mātiu counterparts map to `MIF`.
+- Corrected stop 9999 bubble departures to show `QDF` labels according to configured route semantics.
+- Kept strict ferry stop-only bubble filtering behavior introduced in `0.12.35`.
+
 ## [0.12.35] - 2026-05-13
 
 ### Fix - Ferry bubbles show departures for clicked stop only

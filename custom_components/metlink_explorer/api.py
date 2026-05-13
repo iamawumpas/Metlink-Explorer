@@ -875,18 +875,21 @@ class MetlinkApiClient:
         # Place-name hints are more reliable than intermediate stop membership
         # for shared ferry patterns where 9998 may appear in multiple services.
         route_text = " ".join(text_candidates).upper()
+        # Current operational mapping for this integration:
+        # - QDF includes Mātiu/Somes-linked patterns.
+        # - MIF is the non-Mātiu counterpart on the shared ferry service.
         if "MĀTIU" in route_text or "MATIU" in route_text or "SOMES" in route_text:
-            return "MIF"
-        if "DAYS BAY" in route_text or "QUEENS WHARF" in route_text:
             return "QDF"
+        if "DAYS BAY" in route_text or "QUEENS WHARF" in route_text:
+            return "MIF"
 
         # MIF services include Mātiu/Somes Island stop 9998.
         has_matiu_stop = any(str(st.get("stop_id", "")) == "9998" for st in stop_times)
         has_matiu_text = "MĀTIU" in route_text or "MATIU" in route_text or "SOMES" in route_text
 
         if has_matiu_stop or has_matiu_text:
-            return "MIF"
-        return "QDF"
+            return "QDF"
+        return "MIF"
 
     def _filter_trips_for_service_date(
         self,
