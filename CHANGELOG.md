@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.34] - 2026-05-13
+
+### Fix - Ferry service classification and stop dropdown completeness
+
+- Refined ferry MIF/QDF classification to prioritize destination/headsign place names (Days Bay/Queens Wharf vs Matiu/Somes) before stop-pattern fallback checks.
+- Fixed Days Bay departures being mislabeled as MIF in stop bubbles.
+- Changed route stop-pattern selection to choose the most complete trip pattern per direction instead of the first trip.
+- Restored intermittent ferry stop `9998` (Matiu/Somes Island Wharf) in timeline-derived editor stop dropdowns.
+
 ## [0.12.33] - 2026-05-13
 
 ### Fix - Ferry destination arrivals excluded from departures board

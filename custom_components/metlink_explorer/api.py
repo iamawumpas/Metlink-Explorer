@@ -267,18 +267,44 @@ class MetlinkApiClient:
                 _LOGGER.debug("Available trips for route %s: %s", route_id, [f"trip_id={t.get('trip_id')}, direction_id={t.get('direction_id')}" for t in trips[:5]])
                 return []
             
-            # Use the first trip to get the stop pattern
-            sample_trip = direction_trips[0]
-            trip_id = sample_trip["trip_id"]
-            _LOGGER.debug("Using sample trip %s for stop pattern", trip_id)
-            
-            # Get stop times for this trip
-            stop_times = await self.get_stop_times_for_trip(trip_id)
-            _LOGGER.debug("Found %d stop times for trip %s", len(stop_times), trip_id)
-            
-            if not stop_times:
-                _LOGGER.debug("No stop times found for trip %s (dated or exception trip — expected)", trip_id)
+            # Select the most complete trip pattern for this direction.
+            # Ferry services can mix short and extended patterns (for example
+            # with optional island stops), so using the first trip can omit
+            # valid stops from editor dropdowns and map timeline metadata.
+            selected_trip_id: str | None = None
+            selected_stop_times: list[dict[str, Any]] = []
+            selected_score = -1
+
+            for trip in direction_trips:
+                candidate_trip_id = str(trip.get("trip_id", "")).strip()
+                if not candidate_trip_id:
+                    continue
+                candidate_stop_times = await self.get_stop_times_for_trip(candidate_trip_id)
+                if not candidate_stop_times:
+                    continue
+                # Score by distinct stops first, then total rows as tie-breaker.
+                distinct_stop_count = len({str(st.get("stop_id", "")) for st in candidate_stop_times if st.get("stop_id") is not None})
+                score = distinct_stop_count * 1000 + len(candidate_stop_times)
+                if score > selected_score:
+                    selected_score = score
+                    selected_trip_id = candidate_trip_id
+                    selected_stop_times = candidate_stop_times
+
+            if not selected_stop_times or not selected_trip_id:
+                _LOGGER.debug(
+                    "No usable stop_times found for route %s direction %s",
+                    route_id,
+                    direction_id,
+                )
                 return []
+
+            _LOGGER.debug(
+                "Using trip %s for stop pattern (score=%d, stops=%d)",
+                selected_trip_id,
+                selected_score,
+                len(selected_stop_times),
+            )
+            stop_times = selected_stop_times
             
             # Get stop details
             all_stops = await self.get_stops()
@@ -846,10 +872,17 @@ class MetlinkApiClient:
             if "QDF" in upper:
                 return "QDF"
 
+        # Place-name hints are more reliable than intermediate stop membership
+        # for shared ferry patterns where 9998 may appear in multiple services.
+        route_text = " ".join(text_candidates).upper()
+        if "MĀTIU" in route_text or "MATIU" in route_text or "SOMES" in route_text:
+            return "MIF"
+        if "DAYS BAY" in route_text or "QUEENS WHARF" in route_text:
+            return "QDF"
+
         # MIF services include Mātiu/Somes Island stop 9998.
         has_matiu_stop = any(str(st.get("stop_id", "")) == "9998" for st in stop_times)
-        matiu_text = " ".join(text_candidates).upper()
-        has_matiu_text = "MĀTIU" in matiu_text or "MATIU" in matiu_text or "SOMES" in matiu_text
+        has_matiu_text = "MĀTIU" in route_text or "MATIU" in route_text or "SOMES" in route_text
 
         if has_matiu_stop or has_matiu_text:
             return "MIF"
