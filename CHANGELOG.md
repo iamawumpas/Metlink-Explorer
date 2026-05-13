@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.38] - 2026-05-13
+
+### Fix - Enforce strict inline mixed ferry badge alignment
+
+- Reworked mixed ferry/non-ferry hub offset placement to use a single harbor-axis inline sequence.
+- Kept ferry badges closest to harbor anchor and placed non-ferry badges progressively farther away on the same line.
+- Removed split-around-center behavior that could produce non-inline two-badge layouts.
+
 ## [0.12.37] - 2026-05-13
 
 ### Fix - Ferry bubble departure line shows stop-specific origin

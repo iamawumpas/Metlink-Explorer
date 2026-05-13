@@ -734,25 +734,31 @@ class MetlinkExplorerCard extends LitElement {
         const harborBearing = this._bearingBetweenPoints(centerLat, centerLon, groupLat, groupLon);
         const towardHarbor = (harborBearing + 180) % 360;
         const towardHarborRad = towardHarbor * (Math.PI / 180);
-        const ferries = group.filter((h) => this._modeBucket(h.mode || '') === 'ferry');
-        const others = group.filter((h) => this._modeBucket(h.mode || '') !== 'ferry');
-        const ferryRadius = Math.max(8, Math.round(radiusMeters * 0.45));
+        const towardX = Math.cos(towardHarborRad);
+        const towardY = Math.sin(towardHarborRad);
+        const ferryAnchor = Math.max(8, Math.round(radiusMeters * 0.45));
+        const inlineStep = Math.max(10, Math.round(radiusMeters * 0.7));
 
-        ferries.forEach((stop, index) => {
-          const spread = (index - ((ferries.length - 1) / 2)) * 4;
-          const distance = ferryRadius + spread;
-          const dLon = (Math.cos(towardHarborRad) * distance) / metersPerDegLon;
-          const dLat = (Math.sin(towardHarborRad) * distance) / metersPerDegLat;
-          offsets[stop.stop_id] = { dLon, dLat };
+        // Keep badges in one strict inline sequence on the harbor axis:
+        // ferry closest to harbor, then non-ferry progressively farther away.
+        const ordered = [...group].sort((a, b) => {
+          const aIsFerry = this._modeBucket(a.mode || '') === 'ferry' ? 0 : 1;
+          const bIsFerry = this._modeBucket(b.mode || '') === 'ferry' ? 0 : 1;
+          if (aIsFerry !== bIsFerry) return aIsFerry - bIsFerry;
+          return this._modePriorityRank(a.mode || '') - this._modePriorityRank(b.mode || '');
         });
 
-        others.forEach((stop, index) => {
-          const radius = ferryRadius + radiusMeters + (index * Math.max(10, Math.round(radiusMeters * 0.35)));
-          const awayRad = ((towardHarbor + 180) % 360) * (Math.PI / 180);
-          const dLon = (Math.cos(awayRad) * radius) / metersPerDegLon;
-          const dLat = (Math.sin(awayRad) * radius) / metersPerDegLat;
+        let ferryIndex = 0;
+        let nonFerryIndex = 0;
+        for (const stop of ordered) {
+          const isFerry = this._modeBucket(stop.mode || '') === 'ferry';
+          const signedDistance = isFerry
+            ? (ferryAnchor + (ferryIndex++ * Math.round(inlineStep * 0.5)))
+            : (ferryAnchor - ((++nonFerryIndex) * inlineStep));
+          const dLon = (towardX * signedDistance) / metersPerDegLon;
+          const dLat = (towardY * signedDistance) / metersPerDegLat;
           offsets[stop.stop_id] = { dLon, dLat };
-        });
+        }
       } else {
         // Standard circular layout for groups without mixed ferry/non-ferry
         for (let i = 0; i < group.length; i++) {
