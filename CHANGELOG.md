@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.35] - 2026-05-13
+
+### Fix - Ferry bubbles show departures for clicked stop only
+
+- Applied ferry-only strict stop filtering in departure bubbles so ferry stops no longer aggregate nearby/influence stop departures.
+- Limited ferry bubble departure queries to the exact clicked stop ID.
+- Removed direction filter chips from ferry bubbles and disabled ferry-specific outbound-only forcing.
+- Kept train, bus, and cable bubble behavior unchanged.
+
 ## [0.12.34] - 2026-05-13
 
 ### Fix - Ferry service classification and stop dropdown completeness

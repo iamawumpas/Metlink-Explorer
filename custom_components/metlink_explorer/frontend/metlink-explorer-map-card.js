@@ -988,6 +988,42 @@ class MetlinkExplorerCard extends LitElement {
     }
   }
 
+  _enforceOverlayLayerOrder() {
+    if (!this.map) return;
+
+    const liveLayerIds = [];
+    for (const layerSet of this._liveLayersByMode.values()) {
+      for (const layerId of layerSet) {
+        if (this.map.getLayer(layerId)) liveLayerIds.push(layerId);
+      }
+    }
+
+    const stopLayerIds = [];
+    for (const layerSet of this._stopLayersByMode.values()) {
+      for (const layerId of layerSet) {
+        if (this.map.getLayer(layerId)) stopLayerIds.push(layerId);
+      }
+    }
+
+    // Promote live markers above route layers.
+    liveLayerIds.forEach((layerId) => {
+      try {
+        this.map.moveLayer(layerId);
+      } catch (_) {
+        // Best effort when layers are created/removed during redraws.
+      }
+    });
+
+    // Keep stop badges above live markers.
+    stopLayerIds.forEach((layerId) => {
+      try {
+        this.map.moveLayer(layerId);
+      } catch (_) {
+        // Best effort when layers are created/removed during redraws.
+      }
+    });
+  }
+
   // ── Layer visibility toggle controls ───────────────────────────────────────
 
   /**
@@ -1719,7 +1755,7 @@ class MetlinkExplorerCard extends LitElement {
 
   _shouldForceOutboundOnlyForStop(stopId, modeBucket = "") {
     const mode = this._modeBucket(modeBucket);
-    if (mode === "ferry") return true;
+    if (mode === "ferry") return false;
     if (mode !== "train" && mode !== "bus") return false;
 
     const profile = this._stopTerminalProfileForMode(stopId, mode);
@@ -1735,12 +1771,12 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   _isOutboundOnlyBubble(bubble) {
-    if (this._isFerryBubble(bubble)) return true;
     return Boolean(bubble?.stop?.forceOutboundOnly);
   }
 
   _filteredBubbleDepartures(bubble) {
     const rows = Array.isArray(bubble?.departures) ? bubble.departures : [];
+    if (this._isFerryBubble(bubble)) return rows;
     const filter = this._isOutboundOnlyBubble(bubble)
       ? "outbound"
       : String(bubble?.directionFilter || "all");
@@ -1893,7 +1929,9 @@ class MetlinkExplorerCard extends LitElement {
       .split("|")
       .map((id) => String(id || "").trim())
       .filter(Boolean);
-    const stopScopeIds = [...new Set([stopId, ...influenceStopIds].filter(Boolean))];
+    const stopScopeIds = modeBucket === "ferry"
+      ? [stopId]
+      : [...new Set([stopId, ...influenceStopIds].filter(Boolean))];
 
     // Always close any existing bubble first so the next one can replay its entry animation.
     if (this._departureBubble) {
@@ -2004,23 +2042,25 @@ class MetlinkExplorerCard extends LitElement {
             : null}
         </div>
         <div class="departure-body-shell">
-          <div class="departure-filters" role="tablist" aria-label="Direction filter">
-            <button
-              class=${`departure-filter-btn ${bubble.directionFilter === "all" ? "active" : ""}`}
-              ?disabled=${isOutboundOnlyBubble}
-              @click=${() => this._setBubbleDirectionFilter("all")}
-            >All</button>
-            <button
-              class=${`departure-filter-btn ${bubble.directionFilter === "inbound" ? "active" : ""}`}
-              ?disabled=${isOutboundOnlyBubble || !canFilterInbound}
-              @click=${() => this._setBubbleDirectionFilter("inbound")}
-            >Inbound</button>
-            <button
-              class=${`departure-filter-btn ${bubble.directionFilter === "outbound" ? "active" : ""}`}
-              ?disabled=${!canFilterOutbound}
-              @click=${() => this._setBubbleDirectionFilter("outbound")}
-            >Outbound</button>
-          </div>
+          ${this._isFerryBubble(bubble) ? null : html`
+            <div class="departure-filters" role="tablist" aria-label="Direction filter">
+              <button
+                class=${`departure-filter-btn ${bubble.directionFilter === "all" ? "active" : ""}`}
+                ?disabled=${isOutboundOnlyBubble}
+                @click=${() => this._setBubbleDirectionFilter("all")}
+              >All</button>
+              <button
+                class=${`departure-filter-btn ${bubble.directionFilter === "inbound" ? "active" : ""}`}
+                ?disabled=${isOutboundOnlyBubble || !canFilterInbound}
+                @click=${() => this._setBubbleDirectionFilter("inbound")}
+              >Inbound</button>
+              <button
+                class=${`departure-filter-btn ${bubble.directionFilter === "outbound" ? "active" : ""}`}
+                ?disabled=${!canFilterOutbound}
+                @click=${() => this._setBubbleDirectionFilter("outbound")}
+              >Outbound</button>
+            </div>
+          `}
           <div class="departure-list">
             ${bubble.loading ? html`<div class="departure-empty">Loading departures...</div>` : null}
             ${!bubble.loading && visibleDepartures.length === 0 ? html`<div class="departure-empty">No departures for this direction in the next 24h.</div>` : null}
@@ -2244,6 +2284,7 @@ class MetlinkExplorerCard extends LitElement {
 
     // Hub layers must remain above vehicle badges.
     this._bringHubLayersToFront();
+    this._enforceOverlayLayerOrder();
 
     // Recalculate stop badge collision layout in case live vehicle positions changed (e.g., ferries moved).
     this._scheduleStopBadgeOverlapLayout();
@@ -2527,6 +2568,7 @@ class MetlinkExplorerCard extends LitElement {
           }
         }
       });
+      this._enforceOverlayLayerOrder();
       this._scheduleStopBadgeOverlapLayout();
     } catch (err) {
       console.error('[MetlinkExplorer] _renderRoutes error', err);
@@ -2835,6 +2877,7 @@ class MetlinkExplorerCard extends LitElement {
     });
 
     this._bringHubLayersToFront();
+    this._enforceOverlayLayerOrder();
   }
 
   updated(changedProps) {
