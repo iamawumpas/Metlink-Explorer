@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.32] - 2026-05-13
+
+### Fix - Citations and zoom-aware distance scale
+
+- Added map citation text along the bottom of the map.
+- Added Metlink API citation link.
+- Added AISStream API citation link.
+- Added a live metric distance scale control that updates with map zoom.
+- Updated frontend build marker to `0.12.32`.
+
 ## [0.12.31] - 2026-05-13
 
 ### Fix - Layer menu close behavior consistency

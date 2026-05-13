@@ -4,7 +4,7 @@ import {
   css,
 } from "https://unpkg.com/lit@2.0.0/index.js?module";
 
-console.log("[MetlinkExplorer] map card script loaded (build 0.12.31)");
+console.log("[MetlinkExplorer] map card script loaded (build 0.12.32)");
 
 const loadMapLibre = new Promise((resolve, reject) => {
   if (window.maplibregl) { resolve(); } else {
@@ -2909,6 +2909,8 @@ class MetlinkExplorerCard extends LitElement {
       attributionControl: false
     });
 
+    this.map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-left');
+
     if (this.map.getLayer('simple-tiles')) {
       this.map.setPaintProperty('simple-tiles', 'raster-fade-duration', TILE_FADE_DURATION_MS);
     }
@@ -3131,7 +3133,45 @@ class MetlinkExplorerCard extends LitElement {
         <div id="map"></div>
         ${this._renderLayerPanel()}
         ${this._renderDepartureBubble()}
+        ${this._renderMapFooterCitations()}
       </ha-card>
+    `;
+  }
+
+  _mapCitationLabel() {
+    const style = String(this.config?.map_style || 'voyager').toLowerCase();
+    if (style === 'voyager' || style === 'positron') {
+      return 'Map tiles: OpenStreetMap contributors, CARTO';
+    }
+    if (style === 'standard') {
+      return 'Map tiles: OpenStreetMap contributors';
+    }
+    if (style === 'satellite' || style === 'topo') {
+      return 'Map tiles: Esri';
+    }
+    return 'Map tiles: OpenStreetMap contributors';
+  }
+
+  _renderMapFooterCitations() {
+    const mapCitation = this._mapCitationLabel();
+    return html`
+      <div class="map-footer-citations" aria-label="Map and data source citations">
+        <span class="map-citation-item">${mapCitation}</span>
+        <span class="map-citation-sep">|</span>
+        <a
+          class="map-citation-link"
+          href="https://www.metlink.org.nz"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Metlink API data</a>
+        <span class="map-citation-sep">|</span>
+        <a
+          class="map-citation-link"
+          href="https://aisstream.io"
+          target="_blank"
+          rel="noopener noreferrer"
+        >AISStream API data</a>
+      </div>
     `;
   }
 
@@ -3194,6 +3234,53 @@ class MetlinkExplorerCard extends LitElement {
       :host { display: block; width: 100% !important; height: var(--metlink-card-height, calc(100vh - 64px)); grid-column: 1 / -1 !important; }
       ha-card { height: 100%; width: 100%; position: relative; overflow: hidden; background: #1c1c1c; border: none; }
       #map { position: absolute; inset: 0; height: 100%; width: 100%; }
+      .map-footer-citations {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 8px;
+        z-index: 860;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 4px 8px;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        backdrop-filter: blur(4px);
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 11px;
+        line-height: 1.25;
+        pointer-events: auto;
+      }
+      .map-citation-item {
+        color: rgba(255, 255, 255, 0.9);
+      }
+      .map-citation-sep {
+        color: rgba(255, 255, 255, 0.55);
+      }
+      .map-citation-link {
+        color: rgba(173, 216, 255, 0.95);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .map-citation-link:hover {
+        text-decoration: underline;
+      }
+      :host ::slotted(.maplibregl-ctrl-bottom-left) {
+        z-index: 870;
+      }
+      :host ::slotted(.maplibregl-ctrl-scale) {
+        background: rgba(0, 0, 0, 0.65);
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.55);
+      }
+      .maplibregl-ctrl-bottom-left,
+      .maplibregl-ctrl-bottom-right {
+        z-index: 870;
+      }
       .departure-bubble {
         position: absolute;
         z-index: 1000;
