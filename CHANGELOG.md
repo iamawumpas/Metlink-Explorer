@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-05-23
+
+### Changed - Map visual hierarchy refresh for stops vs live vehicles
+
+- Redesigned live vehicle badges to use flat circular markers (no map-pin tail), reducing bounding-box clutter and making moving assets scan faster.
+- Simplified selected stops into minimal semi-transparent dot markers with thin strokes instead of high-contrast icon badges.
+- Added zoom-scaled stop styling so stop dots are tiny or hidden at regional zoom and progressively appear as you zoom into suburbs.
+- Reordered overlay stacking so live vehicles draw above stop markers, reinforcing motion vs static context.
+- Reduced stop collision spacing to match the smaller stop-dot footprint and avoid excessive marker spreading.
+- Slightly desaturated and softened raster basemap contrast so route and vehicle colors stand out without oversized icon treatments.
+
 ## [0.13.5] - 2026-05-23
 
 ### Fix - Tune bubble route wash starting opacity
