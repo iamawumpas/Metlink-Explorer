@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.4] - 2026-05-23
+
+### Fix - Make bubble route wash fully opaque
+
+- Removed transparency from departure row route-colour gradient wash.
+- Updated gradient to fade from fully opaque route colour at the left edge to fully opaque black at 40% width.
+- Preserves improved white route text readability with black outline/glow on top of the stronger wash.
+
 ## [0.13.3] - 2026-05-23
 
 ### Fix - Bubble route text readability on bright colour washes

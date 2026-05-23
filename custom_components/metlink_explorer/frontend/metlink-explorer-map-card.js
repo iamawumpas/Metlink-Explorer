@@ -2117,7 +2117,7 @@ class MetlinkExplorerCard extends LitElement {
                 || this._routeColorForShortName(dep.serviceLabel)
                 || '#000000';
               return html`
-              <div class="departure-item" style=${rc ? `background: linear-gradient(to right, ${rc}4d 0%, ${rc}00 40%)` : ''}>
+              <div class="departure-item" style=${rc ? `background: linear-gradient(to right, ${rc} 0%, #000000 40%)` : ''}>
                 <div class="departure-route-line">
                   <div class="departure-route" style="color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 0 6px rgba(0,0,0,0.9);">${dep.routeShortName}</div>
                   ${this._departureDirectionTag(dep, bubble)
