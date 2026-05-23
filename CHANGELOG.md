@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] - 2026-05-23
+
+### Fix - Departure bubble gradient width and fallback coverage
+
+- Updated departure row gradient fade distance from 15% to 35% of bubble card width.
+- Fixed route colour wash application for non-train rows by carrying route identifiers (`route_id`, `service_label`) in bubble departure rows and resolving colours from those keys.
+- Set default fallback route wash colour to black (`#000000`) when no configured route colour can be resolved.
+- Kept light-colour route number contrast fallback logic so route labels switch to dark text on bright washes.
+
 ## [0.13.1] - 2026-05-23
 
 ### Fix - Route colour gradient rendering and contrast fallback

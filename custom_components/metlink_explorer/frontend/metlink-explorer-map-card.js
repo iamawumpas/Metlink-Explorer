@@ -1929,6 +1929,8 @@ class MetlinkExplorerCard extends LitElement {
         if (deltaMs < maxPastMs || deltaMs > maxFutureMs) return;
 
         const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
+        const routeId = String(row?.route_id || "").trim();
+        const serviceLabel = String(row?.service_label || "").trim();
         let directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
         if (this._modeBucket(targetMode) === "ferry") {
           const originStop = String(row?.stop_name || "").trim();
@@ -1953,8 +1955,11 @@ class MetlinkExplorerCard extends LitElement {
 
         rows.push({
           routeShortName,
+          routeId,
+          serviceLabel,
           directionLabel,
           directionKey,
+          modeBucket: rowModeBucket || targetMode || "",
           departureDate: depDate,
           departureText: this._formatDepartureLine(depDate, deltaMs),
           sortTime: depDate.getTime(),
@@ -2120,10 +2125,12 @@ class MetlinkExplorerCard extends LitElement {
             ${!bubble.loading && visibleDepartures.length === 0 ? html`<div class="departure-empty">No departures for this direction in the next 24h.</div>` : null}
             ${!bubble.loading ? visibleDepartures.map((dep) => {
               const rc = this._routeColorForShortName(dep.routeShortName)
-                || VEHICLE_COLORS[this._modeBucket(bubble.stop?.mode || '')] || null;
+                || this._routeColorForShortName(dep.routeId)
+                || this._routeColorForShortName(dep.serviceLabel)
+                || '#000000';
               const isLight = rc ? this._isLightColor(rc) : false;
               return html`
-              <div class="departure-item" style=${rc ? `background: linear-gradient(to right, ${rc}4d 0%, ${rc}00 15%)` : ''}>
+              <div class="departure-item" style=${rc ? `background: linear-gradient(to right, ${rc}4d 0%, ${rc}00 35%)` : ''}>
                 <div class="departure-route-line">
                   <div class="departure-route" style=${isLight ? 'color:#111;text-shadow:none' : ''}>${dep.routeShortName}</div>
                   ${this._departureDirectionTag(dep, bubble)
