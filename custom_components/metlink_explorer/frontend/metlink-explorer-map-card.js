@@ -55,8 +55,6 @@ const TILE_FADE_DURATION_MS = 250000;
 const STARTUP_REDRAW_INTERVAL_MS = 10000;
 const STARTUP_STABLE_TICKS_REQUIRED = 2;
 const LAYER_PANEL_INACTIVITY_CLOSE_MS = 30000;
-const BASEMAP_RASTER_SATURATION = -0.24;
-const BASEMAP_RASTER_CONTRAST = -0.06;
 
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
@@ -247,8 +245,9 @@ class MetlinkExplorerCard extends LitElement {
   _ensureBadgeShape(imageId, markerColor, diameter, borderWidth, dpr) {
     if (!this.map || this.map.hasImage(imageId)) return;
 
-    // Flat circular vehicle badge (no pointer, no border) to reduce visual noise.
-    const tailFactor = 1;
+    // Map-pin canvas: taller than wide so the pointed tail fits below the circle.
+    // Circle center sits at canvas center so icon-anchor:"center" = vehicle coordinate.
+    const tailFactor = 1.5;
     const pixelW = Math.max(1, Math.round(diameter * dpr));
     const pixelH = Math.max(1, Math.round(diameter * tailFactor * dpr));
     const canvas = document.createElement("canvas");
@@ -259,20 +258,25 @@ class MetlinkExplorerCard extends LitElement {
 
     ctx.scale(dpr, dpr);
 
+    const cssH = diameter * tailFactor;
     const cx = diameter / 2;
-    const cy = diameter / 2;
-    const r = Math.max(7, diameter / 2 - 1);
-
-    // Subtle shadow to keep the live badge readable across terrain.
-    ctx.beginPath();
-    ctx.arc(cx, cy + 0.8, r, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0,0,0,0.28)";
-    ctx.fill();
+    const cy = cssH / 2; // circle center at canvas center
+    const r = Math.max(8, diameter / 2 - borderWidth);
+    const tipY = cssH - borderWidth; // classic map-pin point at bottom
 
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.moveTo(cx, tipY);
+    ctx.quadraticCurveTo(cx - r * 0.35, cy + r * 1.05, cx - r, cy + r * 0.15);
+    ctx.bezierCurveTo(cx - r, cy - r * 0.65, cx - r * 0.45, cy - r, cx, cy - r);
+    ctx.bezierCurveTo(cx + r * 0.45, cy - r, cx + r, cy - r * 0.65, cx + r, cy + r * 0.15);
+    ctx.quadraticCurveTo(cx + r * 0.35, cy + r * 1.05, cx, tipY);
+    ctx.closePath();
+
     ctx.fillStyle = markerColor;
     ctx.fill();
+    ctx.lineWidth = borderWidth;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
 
     const imageData = ctx.getImageData(0, 0, pixelW, pixelH);
     this.map.addImage(imageId, imageData, { pixelRatio: dpr });
@@ -1007,8 +1011,8 @@ class MetlinkExplorerCard extends LitElement {
       }
     }
 
-    // Keep stop dots above route lines, but below live vehicles.
-    stopLayerIds.forEach((layerId) => {
+    // Promote live markers above route layers.
+    liveLayerIds.forEach((layerId) => {
       try {
         this.map.moveLayer(layerId);
       } catch (_) {
@@ -1016,8 +1020,8 @@ class MetlinkExplorerCard extends LitElement {
       }
     });
 
-    // Promote live markers to the top visual priority.
-    liveLayerIds.forEach((layerId) => {
+    // Keep stop badges above live markers.
+    stopLayerIds.forEach((layerId) => {
       try {
         this.map.moveLayer(layerId);
       } catch (_) {
@@ -2398,6 +2402,7 @@ class MetlinkExplorerCard extends LitElement {
       this._stopLayersByMode  = new Map();
 
       let layerIdx = 0;
+      const topHubLayerIds = [];
       for (const cat of categories) {
         const entries = this.config[`${cat}_entities`] || [];
         for (const entry of [...entries].reverse()) {
@@ -2451,7 +2456,7 @@ class MetlinkExplorerCard extends LitElement {
 
             if (selectedStops.length > 0) {
               const iconSize = this._clampIconSize(this.config.icon_size || 25);
-              const markerDiameter = Math.max(6, Math.round(iconSize * 0.36));
+              const markerDiameter = Math.max(24, Math.round(iconSize * 2));
               const uniqueStops = new Map();
               selectedStops.forEach((stop) => {
                 const rawStopId = String(stop.stop_id || "").trim();
@@ -2561,53 +2566,29 @@ class MetlinkExplorerCard extends LitElement {
                 })),
               });
 
+              const hubImageId = `hub-marker-${cat}-${markerDiameter}`;
+              if (cat === 'train') {
+                await this._ensureTrainHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
+              } else if (cat === 'bus') {
+                await this._ensureBusHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
+              } else if (cat === 'ferry') {
+                await this._ensureFerryHubImage(hubImageId, markerDiameter, Math.max(1, window.devicePixelRatio || 1));
+              } else {
+                this._ensureHubMarkerImage(hubImageId, markerDiameter, cat, Math.max(1, window.devicePixelRatio || 1));
+              }
+
               const hubLayerId = `hub-layer-${sourceId}`;
               if (this.map.getLayer(hubLayerId)) this.map.removeLayer(hubLayerId);
               this.map.addLayer({
                 id: hubLayerId,
-                type: 'circle',
+                type: 'symbol',
                 source: hubSourceId,
-                minzoom: 9,
-                paint: {
-                  'circle-radius': [
-                    'interpolate', ['linear'], ['zoom'],
-                    9, 0.4,
-                    10, 1.2,
-                    12, 2.2,
-                    14, 3.0,
-                    16, 4.0,
-                  ],
-                  'circle-color': [
-                    'match', ['get', 'mode'],
-                    'train', '#7aa7d8',
-                    'bus', '#8abf8e',
-                    'ferry', '#76b9c4',
-                    'cable', '#c7a7d9',
-                    '#b8b8b8',
-                  ],
-                  'circle-opacity': [
-                    'interpolate', ['linear'], ['zoom'],
-                    9, 0,
-                    10, 0.18,
-                    12, 0.34,
-                    14, 0.5,
-                    16, 0.66,
-                  ],
-                  'circle-stroke-width': [
-                    'interpolate', ['linear'], ['zoom'],
-                    9, 0,
-                    11, 0.4,
-                    14, 0.8,
-                    16, 1.0,
-                  ],
-                  'circle-stroke-color': '#ffffff',
-                  'circle-stroke-opacity': [
-                    'interpolate', ['linear'], ['zoom'],
-                    9, 0,
-                    12, 0.25,
-                    14, 0.42,
-                    16, 0.55,
-                  ],
+                layout: {
+                  'icon-image': hubImageId,
+                  'icon-anchor': 'center',
+                  'icon-allow-overlap': true,
+                  'icon-ignore-placement': true,
+                  ...(cat === 'train' ? { 'icon-rotate': 0, 'icon-rotation-alignment': 'viewport' } : {}),
                 },
               });
               this._hubLayerIds.add(hubLayerId);
@@ -2616,6 +2597,9 @@ class MetlinkExplorerCard extends LitElement {
               this._stopLayersByMode.get(cat).add(hubLayerId);
               if (!this._layerVisibility.stops[cat]) {
                 this.map.setLayoutProperty(hubLayerId, 'visibility', 'none');
+              }
+              if (cat === 'train' || cat === 'bus') {
+                topHubLayerIds.push(hubLayerId);
               }
             } else {
               console.log(`[MetlinkExplorer] No selected stops found for ${entry.entity} (${cat})`);
@@ -2626,6 +2610,16 @@ class MetlinkExplorerCard extends LitElement {
         }
       }
 
+      // Keep train and bus hub badges at the very top, above vehicle icons.
+      topHubLayerIds.forEach((layerId) => {
+        if (this.map.getLayer(layerId)) {
+          try {
+            this.map.moveLayer(layerId);
+          } catch (_) {
+            // Best effort.
+          }
+        }
+      });
       this._enforceOverlayLayerOrder();
       this._scheduleStopBadgeOverlapLayout();
     } catch (err) {
@@ -3014,8 +3008,6 @@ class MetlinkExplorerCard extends LitElement {
 
     if (this.map.getLayer('simple-tiles')) {
       this.map.setPaintProperty('simple-tiles', 'raster-fade-duration', TILE_FADE_DURATION_MS);
-      this.map.setPaintProperty('simple-tiles', 'raster-saturation', BASEMAP_RASTER_SATURATION);
-      this.map.setPaintProperty('simple-tiles', 'raster-contrast', BASEMAP_RASTER_CONTRAST);
     }
 
     this.map.on('load', () => {
@@ -3197,8 +3189,6 @@ class MetlinkExplorerCard extends LitElement {
       source: 'raster-tiles',
       paint: {
         'raster-fade-duration': TILE_FADE_DURATION_MS,
-        'raster-saturation': BASEMAP_RASTER_SATURATION,
-        'raster-contrast': BASEMAP_RASTER_CONTRAST,
       },
     });
     this.map.once('idle', () => this._runAsyncTask(this._renderRoutes(), "render routes (style update)"));
