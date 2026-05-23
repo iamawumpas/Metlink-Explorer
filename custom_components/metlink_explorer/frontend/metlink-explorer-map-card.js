@@ -1779,15 +1779,38 @@ class MetlinkExplorerCard extends LitElement {
     for (const mode of modes) {
       const entries = this.config?.[`${mode}_entities`] || [];
       for (const entry of entries) {
+        const state = this.hass?.states?.[entry?.entity];
+        const attrs = state?.attributes || {};
+        const entryKeys = new Set();
+        // Fast path: state attributes expose route_id / route_short_name directly
+        [attrs.route_id, attrs.route_short_name].forEach((v) => {
+          if (v) this._expandRouteKeyVariants(String(v)).forEach((k) => entryKeys.add(k));
+        });
+        // Geojson feature properties (route_id and route_short_name in properties)
         const features = this._parseRouteGeometry(entry?.entity);
-        const meta = this._routeMetaFromFeatures(features) || this._routeMetaFallback(entry);
-        if (!meta) continue;
-        const entryKeys = this._routeKeys(meta);
+        const featMeta = this._routeMetaFromFeatures(features);
+        if (featMeta) this._routeKeys(featMeta).forEach((k) => entryKeys.add(k));
+        // Entity ID pattern fallback (e.g. sensor.bus_83_route_geometry)
+        const idMeta = this._routeMetaFallback(entry);
+        if (idMeta) this._routeKeys(idMeta).forEach((k) => entryKeys.add(k));
+        if (entryKeys.size === 0) continue;
         const hasMatch = [...targetKeys].some((k) => entryKeys.has(k));
         if (hasMatch) return entry.color || VEHICLE_COLORS[mode] || null;
       }
     }
     return null;
+  }
+
+  _isLightColor(hex) {
+    if (!hex || typeof hex !== 'string') return false;
+    const clean = hex.replace(/^#/, '');
+    if (clean.length < 6) return false;
+    const r = parseInt(clean.slice(0, 2), 16) / 255;
+    const g = parseInt(clean.slice(2, 4), 16) / 255;
+    const b = parseInt(clean.slice(4, 6), 16) / 255;
+    const toLinear = (c) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const L = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+    return L > 0.35;
   }
 
   _isFerryBubble(bubble) {
@@ -1930,7 +1953,6 @@ class MetlinkExplorerCard extends LitElement {
 
         rows.push({
           routeShortName,
-          routeColor: this._routeColorForShortName(routeShortName),
           directionLabel,
           directionKey,
           departureDate: depDate,
@@ -2096,10 +2118,14 @@ class MetlinkExplorerCard extends LitElement {
           <div class="departure-list">
             ${bubble.loading ? html`<div class="departure-empty">Loading departures...</div>` : null}
             ${!bubble.loading && visibleDepartures.length === 0 ? html`<div class="departure-empty">No departures for this direction in the next 24h.</div>` : null}
-            ${!bubble.loading ? visibleDepartures.map((dep) => html`
-              <div class="departure-item" style=${dep.routeColor ? `background: linear-gradient(to right, ${dep.routeColor}40 0%, ${dep.routeColor}00 15%)` : ''}>
+            ${!bubble.loading ? visibleDepartures.map((dep) => {
+              const rc = this._routeColorForShortName(dep.routeShortName)
+                || VEHICLE_COLORS[this._modeBucket(bubble.stop?.mode || '')] || null;
+              const isLight = rc ? this._isLightColor(rc) : false;
+              return html`
+              <div class="departure-item" style=${rc ? `background: linear-gradient(to right, ${rc}4d 0%, ${rc}00 15%)` : ''}>
                 <div class="departure-route-line">
-                  <div class="departure-route">${dep.routeShortName}</div>
+                  <div class="departure-route" style=${isLight ? 'color:#111;text-shadow:none' : ''}>${dep.routeShortName}</div>
                   ${this._departureDirectionTag(dep, bubble)
                     ? html`<div class="departure-direction-chip">${this._departureDirectionTag(dep, bubble)}</div>`
                     : null}
@@ -2107,7 +2133,7 @@ class MetlinkExplorerCard extends LitElement {
                 <div class="departure-destination">${dep.directionLabel}</div>
                 <div class="departure-time">${dep.departureText}</div>
               </div>
-            `) : null}
+            `; }) : null}
           </div>
         </div>
       </div>

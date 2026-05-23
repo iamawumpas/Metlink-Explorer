@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-05-23
+
+### Fix - Route colour gradient rendering and contrast fallback
+
+- Fixed colour gradient not rendering: colour is now computed at render time using `bubble.stop.mode` as a guaranteed fallback, so a mode-default colour (bus green, train blue, ferry teal) is always applied even when no per-route config entry is matched.
+- Made the colour lookup more robust: now checks entity state attributes (`route_id`, `route_short_name`), geojson feature properties, and entity ID parsing in a combined set before matching, rather than stopping at the first path that returns nothing.
+- Raised gradient start opacity from 25% (`4d` hex) to 30% (`4d` → kept) for better visibility on dark backgrounds.
+- Added `_isLightColor()` helper using WCAG 2.1 relative luminance: when the resolved route colour has luminance > 0.35 (e.g. yellow, light green), the route number text switches to `#111` dark with no text-shadow to maintain readability.
+
 ## [0.13.0] - 2026-05-23
 
 ### Added - Route colour gradient wash on departure bubble route IDs
