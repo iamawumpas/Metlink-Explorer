@@ -1801,18 +1801,6 @@ class MetlinkExplorerCard extends LitElement {
     return null;
   }
 
-  _isLightColor(hex) {
-    if (!hex || typeof hex !== 'string') return false;
-    const clean = hex.replace(/^#/, '');
-    if (clean.length < 6) return false;
-    const r = parseInt(clean.slice(0, 2), 16) / 255;
-    const g = parseInt(clean.slice(2, 4), 16) / 255;
-    const b = parseInt(clean.slice(4, 6), 16) / 255;
-    const toLinear = (c) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    const L = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
-    return L > 0.35;
-  }
-
   _isFerryBubble(bubble) {
     return this._modeBucket(bubble?.stop?.mode || "") === "ferry";
   }
@@ -2128,11 +2116,10 @@ class MetlinkExplorerCard extends LitElement {
                 || this._routeColorForShortName(dep.routeId)
                 || this._routeColorForShortName(dep.serviceLabel)
                 || '#000000';
-              const isLight = rc ? this._isLightColor(rc) : false;
               return html`
-              <div class="departure-item" style=${rc ? `background: linear-gradient(to right, ${rc}4d 0%, ${rc}00 35%)` : ''}>
+              <div class="departure-item" style=${rc ? `background: linear-gradient(to right, ${rc}4d 0%, ${rc}00 40%)` : ''}>
                 <div class="departure-route-line">
-                  <div class="departure-route" style=${isLight ? 'color:#111;text-shadow:none' : ''}>${dep.routeShortName}</div>
+                  <div class="departure-route" style="color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 0 6px rgba(0,0,0,0.9);">${dep.routeShortName}</div>
                   ${this._departureDirectionTag(dep, bubble)
                     ? html`<div class="departure-direction-chip">${this._departureDirectionTag(dep, bubble)}</div>`
                     : null}
