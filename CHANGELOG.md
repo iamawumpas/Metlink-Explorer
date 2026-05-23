@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-05-23
+
+### Added - Route colour gradient wash on departure bubble route IDs
+
+- Stop bubble departure items now display a subtle colour gradient wash behind the route number (e.g. "1", "83").
+- The gradient starts with the configured route colour at the left edge and fades to transparent over approximately 15% of the card width.
+- Colour is resolved from the matching configured route entry for the departure's route short name across all transport modes (bus, train, ferry, cable car).
+- Falls back to the mode default colour (bus green, train blue, ferry teal) when no per-route colour is configured.
+- Applied to all bubble pop-out cards including bus, train, ferry, and cable car stops.
+
 ## [0.12.38] - 2026-05-13
 
 ### Fix - Enforce strict inline mixed ferry badge alignment

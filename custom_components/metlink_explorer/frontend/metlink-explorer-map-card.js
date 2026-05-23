@@ -1772,6 +1772,24 @@ class MetlinkExplorerCard extends LitElement {
     return Boolean(profile.hasTerminal && !profile.hasPassThrough);
   }
 
+  _routeColorForShortName(routeShortName) {
+    if (!routeShortName) return null;
+    const targetKeys = this._expandRouteKeyVariants(routeShortName);
+    const modes = ['train', 'bus', 'ferry', 'cable'];
+    for (const mode of modes) {
+      const entries = this.config?.[`${mode}_entities`] || [];
+      for (const entry of entries) {
+        const features = this._parseRouteGeometry(entry?.entity);
+        const meta = this._routeMetaFromFeatures(features) || this._routeMetaFallback(entry);
+        if (!meta) continue;
+        const entryKeys = this._routeKeys(meta);
+        const hasMatch = [...targetKeys].some((k) => entryKeys.has(k));
+        if (hasMatch) return entry.color || VEHICLE_COLORS[mode] || null;
+      }
+    }
+    return null;
+  }
+
   _isFerryBubble(bubble) {
     return this._modeBucket(bubble?.stop?.mode || "") === "ferry";
   }
@@ -1912,6 +1930,7 @@ class MetlinkExplorerCard extends LitElement {
 
         rows.push({
           routeShortName,
+          routeColor: this._routeColorForShortName(routeShortName),
           directionLabel,
           directionKey,
           departureDate: depDate,
@@ -2078,7 +2097,7 @@ class MetlinkExplorerCard extends LitElement {
             ${bubble.loading ? html`<div class="departure-empty">Loading departures...</div>` : null}
             ${!bubble.loading && visibleDepartures.length === 0 ? html`<div class="departure-empty">No departures for this direction in the next 24h.</div>` : null}
             ${!bubble.loading ? visibleDepartures.map((dep) => html`
-              <div class="departure-item">
+              <div class="departure-item" style=${dep.routeColor ? `background: linear-gradient(to right, ${dep.routeColor}40 0%, ${dep.routeColor}00 15%)` : ''}>
                 <div class="departure-route-line">
                   <div class="departure-route">${dep.routeShortName}</div>
                   ${this._departureDirectionTag(dep, bubble)
