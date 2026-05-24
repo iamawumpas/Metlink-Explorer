@@ -1976,9 +1976,8 @@ class MetlinkExplorerCard extends LitElement {
       .split("|")
       .map((id) => String(id || "").trim())
       .filter(Boolean);
-    const stopScopeIds = modeBucket === "ferry"
-      ? [stopId]
-      : [...new Set([stopId, ...influenceStopIds].filter(Boolean))];
+    // Always scope departures to the clicked stop only.
+    const stopScopeIds = [stopId].filter(Boolean);
 
     // Always close any existing bubble first so the next one can replay its entry animation.
     if (this._departureBubble) {
@@ -2000,6 +1999,7 @@ class MetlinkExplorerCard extends LitElement {
         name: stopName,
         mode: modeBucket,
         forceOutboundOnly,
+        strictStopOnly: true,
         coordinates: [lon, lat],
         influenceStopIds: stopScopeIds,
       },
@@ -2064,7 +2064,7 @@ class MetlinkExplorerCard extends LitElement {
     const influenceCount = Array.isArray(bubble?.stop?.influenceStopIds)
       ? bubble.stop.influenceStopIds.length
       : 0;
-    const showInfluenceHint = influenceCount > 1;
+    const showInfluenceHint = !bubble?.stop?.strictStopOnly && influenceCount > 1;
 
     const cardWidth = 360;
     const offset = 30;

@@ -728,11 +728,21 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return board summary; full departures list is written to the JSON file."""
+        alerts_by_mode = self.coordinator.data.get("alerts_by_mode", {}) if isinstance(self.coordinator.data, dict) else {}
+        train_alert = str(alerts_by_mode.get("train") or "").strip()
+        bus_alert = str(alerts_by_mode.get("bus") or "").strip()
+        ferry_alert = str(alerts_by_mode.get("ferry") or "").strip()
         return {
             "transportation_type": self._transportation_name,
             "transportation_type_id": self._transportation_type,
             "departure_count": self._cached_departure_count,
             "data_url": self._payload_file_url,
+            "train_alert": train_alert,
+            "bus_alert": bus_alert,
+            "ferry_alert": ferry_alert,
+            "train_alert_status": bool(train_alert),
+            "bus_alert_status": bool(bus_alert),
+            "ferry_alert_status": bool(ferry_alert),
         }
 
     @property

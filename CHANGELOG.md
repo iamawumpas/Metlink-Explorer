@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.1] - 2026-05-24
+
+### Fix - Stop-only departure bubbles and full service alert attributes
+
+- Tightened departure row construction to use only true `departure_time` events (no arrival-time fallback), improving board accuracy.
+- Changed map bubble stop scoping to strict clicked-stop-only filtering so each bubble shows departures for that stop only.
+- Kept past departures excluded via existing ETA/upcoming filtering behavior.
+- Added GTFS-RT service alert download and mode grouping in the API client.
+- Added mode alert attributes for conditional cards: `train_alert`, `bus_alert`, `ferry_alert`.
+- Added explicit alert status booleans: `train_alert_status`, `bus_alert_status`, `ferry_alert_status`.
+- Expanded alert parsing to capture full message content (all translation entries plus description/cause/effect/url text).
+
 ## [0.13.5] - 2026-05-23
 
 ### Fix - Tune bubble route wash starting opacity

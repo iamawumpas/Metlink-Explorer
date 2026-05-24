@@ -87,6 +87,7 @@ class MetlinkApiClient:
         # download serves every route in the same polling cycle.
         self._vehicle_positions_cache: tuple[datetime, Any] | None = None
         self._trip_updates_cache: tuple[datetime, Any] | None = None
+        self._service_alerts_cache: tuple[datetime, Any] | None = None
         self._live_cache_ttl_seconds = 30
         self._ais_positions_cache: tuple[datetime, list[dict[str, Any]]] | None = None
         self._ais_position_cache_seconds = AISSTREAM_POSITION_CACHE_SECONDS
@@ -804,9 +805,6 @@ class MetlinkApiClient:
                 stop_id = str(st.get("stop_id"))
                 # Departure boards should only include true departure events.
                 dep_time = st.get("departure_time")
-                # Some non-train feeds only populate arrival_time at stops.
-                if not dep_time and self._transportation_type != TRAIN_ROUTE_TYPE:
-                    dep_time = st.get("arrival_time")
                 if not dep_time:
                     continue
                 # Exclude terminal-stop rows where service ends at this stop.
@@ -1457,6 +1455,7 @@ class MetlinkApiClient:
         """Clear live GTFS-RT caches so next request forces a fresh download."""
         self._vehicle_positions_cache = None
         self._trip_updates_cache = None
+        self._service_alerts_cache = None
         self._ais_positions_cache = None
 
     def vehicle_positions_fetched_at(self) -> datetime | None:
@@ -1480,6 +1479,175 @@ class MetlinkApiClient:
         except MetlinkApiError as exc:
             _LOGGER.error("Failed to fetch trip updates: %s", exc)
             raise
+
+    async def get_service_alerts(self) -> list[dict[str, Any]]:
+        """Get GTFS-RT service alerts, shared across all routes (30s TTL)."""
+        now = datetime.now()
+        if (
+            self._service_alerts_cache is not None
+            and (now - self._service_alerts_cache[0]).total_seconds() < self._live_cache_ttl_seconds
+        ):
+            return self._service_alerts_cache[1]
+        try:
+            data = await self._request(API_ENDPOINTS["service_alerts"])
+            self._service_alerts_cache = (now, data)
+            return data
+        except MetlinkApiError as exc:
+            _LOGGER.error("Failed to fetch service alerts: %s", exc)
+            raise
+
+    def _clean_alert_text(self, text: str) -> str:
+        """Normalize alert text for HA attributes while preserving full content."""
+        if not text:
+            return ""
+        value = html.unescape(str(text))
+        value = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
+        value = re.sub(r"</p\s*>", "\n\n", value, flags=re.IGNORECASE)
+        value = re.sub(r"<[^>]+>", "", value)
+        # Collapse excessive whitespace but keep paragraph breaks.
+        value = re.sub(r"[\t\r ]+", " ", value)
+        value = re.sub(r"\n\s+", "\n", value)
+        value = re.sub(r"\n{3,}", "\n\n", value)
+        return value.strip()
+
+    def _alert_text_from_translations(self, value: Any) -> str:
+        """Extract full text from GTFS-RT translation payloads (all segments)."""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return self._clean_alert_text(value)
+        if isinstance(value, dict):
+            parts: list[str] = []
+            # GTFS-RT JSON commonly uses {"translation": [{"text": "..."}, ...]}
+            translations = value.get("translation")
+            if isinstance(translations, list):
+                for item in translations:
+                    if not isinstance(item, dict):
+                        continue
+                    text = self._clean_alert_text(str(item.get("text") or ""))
+                    if text and text not in parts:
+                        parts.append(text)
+            # Fallbacks for non-standard flattening.
+            fallback = self._clean_alert_text(str(value.get("text") or value.get("value") or ""))
+            if fallback and fallback not in parts:
+                parts.append(fallback)
+            return "\n\n".join(parts).strip()
+        return self._clean_alert_text(str(value))
+
+    def _build_full_alert_message(self, alert: dict[str, Any]) -> str:
+        """Build a complete alert message block from all relevant fields."""
+        header_text = self._alert_text_from_translations(alert.get("header_text"))
+        description_text = self._alert_text_from_translations(alert.get("description_text"))
+        url_text = self._alert_text_from_translations(alert.get("url"))
+        cause = self._clean_alert_text(str(alert.get("cause") or ""))
+        effect = self._clean_alert_text(str(alert.get("effect") or ""))
+
+        sections: list[str] = []
+        if header_text:
+            sections.append(header_text)
+        if description_text:
+            sections.append(description_text)
+        if cause:
+            sections.append(f"Cause: {cause}")
+        if effect:
+            sections.append(f"Effect: {effect}")
+        if url_text:
+            sections.append(f"More info: {url_text}")
+
+        return "\n\n".join([s for s in sections if s]).strip()
+
+    async def get_alert_messages_by_mode(self) -> dict[str, str]:
+        """Return concatenated alert text by mode for conditional-card usage."""
+        mode_messages: dict[str, list[str]] = {
+            "train": [],
+            "bus": [],
+            "ferry": [],
+        }
+        try:
+            payload = await self.get_service_alerts()
+        except MetlinkApiError:
+            return {"train": "", "bus": "", "ferry": ""}
+
+        if isinstance(payload, dict):
+            entities = payload.get("entity", [])
+        elif isinstance(payload, list):
+            entities = payload
+        else:
+            entities = []
+
+        try:
+            routes = await self.get_routes()
+        except MetlinkApiError:
+            routes = []
+        route_type_by_id: dict[str, int] = {}
+        for route in routes if isinstance(routes, list) else []:
+            if not isinstance(route, dict):
+                continue
+            route_id = str(route.get("route_id", "")).strip()
+            if not route_id:
+                continue
+            try:
+                route_type_by_id[route_id] = int(route.get("route_type"))
+            except (TypeError, ValueError):
+                continue
+
+        def route_type_to_mode(route_type: Any) -> str | None:
+            try:
+                rt = int(route_type)
+            except (TypeError, ValueError):
+                return None
+            if rt == 2:
+                return "train"
+            if rt in (3, 712):
+                return "bus"
+            if rt == 4:
+                return "ferry"
+            return None
+
+        try:
+            for entity in entities if isinstance(entities, list) else []:
+                if not isinstance(entity, dict):
+                    continue
+                alert = entity.get("alert")
+                if not isinstance(alert, dict):
+                    continue
+
+                message = self._build_full_alert_message(alert)
+                if not message:
+                    continue
+
+                informed = alert.get("informed_entity")
+                modes_for_alert: set[str] = set()
+                if isinstance(informed, list):
+                    for item in informed:
+                        if not isinstance(item, dict):
+                            continue
+                        mode = route_type_to_mode(item.get("route_type"))
+                        if mode:
+                            modes_for_alert.add(mode)
+                            continue
+                        route_id = str(item.get("route_id", "")).strip()
+                        if route_id and route_id in route_type_by_id:
+                            mode = route_type_to_mode(route_type_by_id.get(route_id))
+                            if mode:
+                                modes_for_alert.add(mode)
+
+                # Network-wide alert fallback: expose on all user-facing transit modes.
+                if not modes_for_alert:
+                    modes_for_alert = {"train", "bus", "ferry"}
+
+                for mode in modes_for_alert:
+                    if mode in mode_messages and message not in mode_messages[mode]:
+                        mode_messages[mode].append(message)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Failed to parse service alerts payload: %s", exc)
+            return {"train": "", "bus": "", "ferry": ""}
+
+        return {
+            "train": "\n\n---\n\n".join(mode_messages["train"]),
+            "bus": "\n\n---\n\n".join(mode_messages["bus"]),
+            "ferry": "\n\n---\n\n".join(mode_messages["ferry"]),
+        }
 
     async def get_stop_predictions(self, stop_id: str | None = None) -> list[dict[str, Any]]:
         """Get stop departure predictions for a specific stop.

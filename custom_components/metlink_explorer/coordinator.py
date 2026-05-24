@@ -59,6 +59,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 vehicle_positions = await self.api_client.get_vehicle_positions()
             vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
             trip_updates = await self.api_client.get_trip_updates()
+            alerts_by_mode = await self.api_client.get_alert_messages_by_mode()
             today_str = datetime.now().strftime("%Y%m%d")
             tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
@@ -116,6 +117,7 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     else None
                 ),
                 "trip_updates": trip_updates,
+                "alerts_by_mode": alerts_by_mode,
                 "timetable_rows": timetable_rows,
                 "timeline_by_direction": timeline_by_direction,
             }
