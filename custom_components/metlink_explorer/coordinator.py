@@ -10,6 +10,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import MetlinkApiClient, MetlinkApiError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, FERRY_ROUTE_TYPE, TRAIN_GTFS_CACHE_TTL_SECONDS
+from .const import DB_VEHICLES_FILENAME_TEMPLATE
+from .db_manager import async_update_meta, async_write_db_file, mode_slug_for_type
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +60,30 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 vehicle_positions = await self.api_client.get_vehicle_positions()
             vehicle_positions_fetched_at = self.api_client.vehicle_positions_fetched_at()
+
+            # Persist mode-level live vehicle snapshot for frontend DB consumers.
+            mode_slug = mode_slug_for_type(self.transportation_type)
+            if mode_slug != "unknown":
+                vehicles_payload = {
+                    "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                    "mode": mode_slug,
+                    "route_id": self.route_id,
+                    "fetched_at": (
+                        vehicle_positions_fetched_at.isoformat()
+                        if vehicle_positions_fetched_at
+                        else None
+                    ),
+                    "vehicles": vehicle_positions if isinstance(vehicle_positions, list) else [],
+                }
+                vehicles_filename = DB_VEHICLES_FILENAME_TEMPLATE.format(mode=mode_slug)
+                await async_write_db_file(self.hass, vehicles_filename, vehicles_payload)
+                await async_update_meta(
+                    self.hass,
+                    {
+                        f"{mode_slug}_vehicles_ts": vehicles_payload["generated_at"],
+                    },
+                )
+
             trip_updates = await self.api_client.get_trip_updates()
             alerts_by_mode = await self.api_client.get_alert_messages_by_mode()
             today_str = datetime.now().strftime("%Y%m%d")

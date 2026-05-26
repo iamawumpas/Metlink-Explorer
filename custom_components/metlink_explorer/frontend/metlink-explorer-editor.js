@@ -19,9 +19,29 @@ const DASH_MAP = {
   "long-dash": [8, 4]
 };
 
+const DB_META_URL = "/local/metlink_explorer/db/meta.json";
+const DB_META_POLL_MS = 5 * 60 * 1000;
+
 class MetlinkExplorerEditor extends LitElement {
   static get properties() {
     return { hass: {}, _config: {} };
+  }
+
+  constructor() {
+    super();
+    this._dbCache = new Map();
+    this._dbMetaPollTimer = null;
+    this._dbMetaFingerprint = "";
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this._startDbPolling();
+  }
+
+  disconnectedCallback() {
+    this._stopDbPolling();
+    super.disconnectedCallback();
   }
 
   setConfig(config) {
@@ -34,6 +54,86 @@ class MetlinkExplorerEditor extends LitElement {
       map_projection: "normal",
       ...config
     };
+  }
+
+  async _fetchDbJson(url) {
+    try {
+      const res = await fetch(String(url || ""), { cache: "no-store" });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _dbFingerprint(meta) {
+    if (!meta || typeof meta !== "object") return "";
+    return Object.keys(meta).sort().map((k) => `${k}:${JSON.stringify(meta[k])}`).join("|");
+  }
+
+  async _refreshDbCache(force = false) {
+    const meta = await this._fetchDbJson(DB_META_URL);
+    if (!meta || typeof meta !== "object") return;
+    const nextFingerprint = this._dbFingerprint(meta);
+    if (!force && nextFingerprint === this._dbMetaFingerprint) return;
+    this._dbMetaFingerprint = nextFingerprint;
+
+    const modes = ["train", "bus", "ferry", "cable_car"];
+    await Promise.all(modes.map(async (mode) => {
+      const payload = await this._fetchDbJson(`/local/metlink_explorer/db/${mode}_route_geometry.json`);
+      if (payload) this._dbCache.set(`${mode}_route_geometry`, payload);
+    }));
+    this.requestUpdate();
+  }
+
+  _startDbPolling() {
+    if (this._dbMetaPollTimer) return;
+    this._refreshDbCache(true);
+    this._dbMetaPollTimer = window.setInterval(() => this._refreshDbCache(false), DB_META_POLL_MS);
+  }
+
+  _stopDbPolling() {
+    if (!this._dbMetaPollTimer) return;
+    window.clearInterval(this._dbMetaPollTimer);
+    this._dbMetaPollTimer = null;
+  }
+
+  _dbModeFromEntityState(entityId, stateObj) {
+    const attrs = stateObj?.attributes || {};
+    const dataUrl = String(attrs.data_url || "").toLowerCase();
+    if (dataUrl.includes("/geometry/train_")) return "train";
+    if (dataUrl.includes("/geometry/bus_") || dataUrl.includes("/geometry/school_bus_")) return "bus";
+    if (dataUrl.includes("/geometry/ferry_")) return "ferry";
+    if (dataUrl.includes("/geometry/cable_")) return "cable_car";
+
+    const objectId = String(entityId || "").split(".")[1] || "";
+    if (/^train_/i.test(objectId)) return "train";
+    if (/^(bus_|school_bus_)/i.test(objectId)) return "bus";
+    if (/^ferry_/i.test(objectId)) return "ferry";
+    if (/^cable_/i.test(objectId)) return "cable_car";
+    return null;
+  }
+
+  _dbRouteIdFromEntity(entityId, stateObj) {
+    const attrs = stateObj?.attributes || {};
+    const explicit = String(attrs.route_id || "").trim();
+    if (explicit) return explicit;
+
+    const objectId = String(entityId).split(".")[1] || "";
+    const match = objectId.match(/^(?:train|bus|ferry|cable|school_bus)_(.+?)_(?:route_)?geometry$/i);
+    return match && match[1] ? String(match[1]).trim() : null;
+  }
+
+  _featuresFromDb(entityId, stateObj) {
+    const mode = this._dbModeFromEntityState(entityId, stateObj);
+    if (!mode) return [];
+    const payload = this._dbCache.get(`${mode}_route_geometry`);
+    const features = payload?.features;
+    if (!Array.isArray(features)) return [];
+
+    const routeId = this._dbRouteIdFromEntity(entityId, stateObj);
+    if (!routeId) return features;
+    return features.filter((f) => String(f?.properties?.route_id || "") === routeId);
   }
 
   _updateConfig(changes) {
@@ -149,7 +249,12 @@ class MetlinkExplorerEditor extends LitElement {
 
   _parseFeatures(entityId) {
     if (!entityId || !this.hass?.states?.[entityId]) return [];
-    let geojson = this.hass.states[entityId].attributes?.geojson;
+    const stateObj = this.hass.states[entityId];
+
+    const dbFeatures = this._featuresFromDb(entityId, stateObj);
+    if (Array.isArray(dbFeatures) && dbFeatures.length > 0) return dbFeatures;
+
+    let geojson = stateObj.attributes?.geojson;
     if (!geojson) return [];
     if (typeof geojson === "string") {
       try {

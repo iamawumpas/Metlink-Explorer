@@ -52,6 +52,9 @@ class MetlinkDepartureBoardCard extends HTMLElement {
       this._timer = window.setInterval(() => this._render(), 30000);
     }
 
+    if (!this._dbCache) this._dbCache = new Map();
+    if (!this._dbCacheMs) this._dbCacheMs = 0;
+
     this._render();
   }
 
@@ -77,6 +80,9 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     }
 
     const routeLabelMap = this._buildRouteLabelMap();
+    if (!this._dbCacheMs || (Date.now() - this._dbCacheMs) > 60000) {
+      this._refreshDbSchedulesCache();
+    }
     const rows = this._buildRows(routeLabelMap);
     const sorted = this._sortRows(rows);
     const limited = sorted.slice(0, this._config.limit);
@@ -171,6 +177,98 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     `;
   }
 
+  _modeSlugFromBoardState(state) {
+    const attrs = state?.attributes || {};
+    const typeText = String(attrs.transportation_type || "").trim().toLowerCase();
+    if (typeText.includes("train")) return "train";
+    if (typeText.includes("ferry")) return "ferry";
+    if (typeText.includes("bus")) return "bus";
+
+    const typeId = Number(attrs.transportation_type_id);
+    if (typeId === 2) return "train";
+    if (typeId === 4) return "ferry";
+    if (typeId === 3 || typeId === 712) return "bus";
+
+    return null;
+  }
+
+  async _refreshDbSchedulesCache() {
+    if (!this._hass || !this._config) return;
+    const states = this._hass.states || {};
+    const modes = new Set();
+    for (const entityId of this._config.entities || []) {
+      const state = states[entityId];
+      const mode = this._modeSlugFromBoardState(state);
+      if (mode) modes.add(mode);
+    }
+
+    const loads = [...modes].map(async (mode) => {
+      try {
+        const url = `/local/metlink_explorer/db/${mode}_schedules.json`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) return;
+        const payload = await res.json();
+        this._dbCache.set(`${mode}_schedules`, payload);
+      } catch (_) {
+        // Fallback to legacy state attributes if DB fetch fails.
+      }
+    });
+
+    await Promise.all(loads);
+    this._dbCacheMs = Date.now();
+    this._render();
+  }
+
+  _rowsFromDbSchedules(payload, routeLabelMap, stopFilter) {
+    const rows = [];
+    const byStop = payload?.by_stop;
+    if (!byStop || typeof byStop !== "object") return rows;
+
+    Object.values(byStop).forEach((stopRows) => {
+      if (!Array.isArray(stopRows)) return;
+      stopRows.forEach((dep) => {
+        const stopName = String(dep?.stop_name || "");
+        if (stopFilter && !stopName.toLowerCase().includes(stopFilter)) return;
+
+        const depIso = dep?.departure_iso ? new Date(String(dep.departure_iso)) : null;
+        const depTs = depIso && !Number.isNaN(depIso.getTime()) ? depIso.getTime() : null;
+        if (!depTs) return;
+
+        const now = Date.now();
+        const etaSec = Math.floor((depTs - now) / 1000);
+        if (etaSec < 0 || etaSec > 24 * 3600) return;
+
+        const route = String(dep?.route_short_name || dep?.service_label || dep?.route_id || "?");
+        const directionId = Number.isInteger(dep?.direction_id)
+          ? dep.direction_id
+          : parseInt(dep?.direction_id || "0", 10) || 0;
+
+        const mapped = routeLabelMap.get(`${route}|${directionId}`);
+        const description = String(mapped?.label || dep?.direction_label || dep?.destination || "Unknown destination");
+
+        const depDate = new Date(depTs);
+        const hh = String(depDate.getHours()).padStart(2, "0");
+        const mm = String(depDate.getMinutes()).padStart(2, "0");
+        const ss = String(depDate.getSeconds()).padStart(2, "0");
+        const parsed = this._parseTime(`${hh}:${mm}:${ss}`);
+        if (!parsed) return;
+
+        rows.push({
+          route,
+          direction_id: directionId,
+          description,
+          stop_name: stopName,
+          scheduled_hhmm: `${hh}:${mm}`,
+          scheduled_sort_seconds: parsed.seconds,
+          eta_seconds: etaSec,
+          countdown: this._formatCountdown(etaSec),
+        });
+      });
+    });
+
+    return rows;
+  }
+
   _buildRouteLabelMap() {
     const map = new Map();
     const states = this._hass.states;
@@ -202,10 +300,19 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     const rows = [];
     const stopFilter = this._config.stop_filter;
     const states = this._hass.states;
+    const dbModesAdded = new Set();
 
     for (const boardEntity of this._config.entities) {
       const state = states[boardEntity];
       if (!state || state.state === "unavailable" || state.state === "unknown") {
+        continue;
+      }
+
+      const modeSlug = this._modeSlugFromBoardState(state);
+      const dbPayload = modeSlug ? this._dbCache?.get(`${modeSlug}_schedules`) : null;
+      if (dbPayload && !dbModesAdded.has(modeSlug)) {
+        rows.push(...this._rowsFromDbSchedules(dbPayload, routeLabelMap, stopFilter));
+        dbModesAdded.add(modeSlug);
         continue;
       }
 

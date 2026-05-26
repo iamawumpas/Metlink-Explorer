@@ -15,6 +15,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import MetlinkApiClient
 from .coordinator import MetlinkDataUpdateCoordinator, MetlinkRouteGeometryCoordinator
+from .db_coordinator import (
+    MetlinkAlertCoordinator,
+    MetlinkScheduleCoordinator,
+    MetlinkStaticDataCoordinator,
+)
+from .db_manager import mode_slug_for_type
 from .const import (
     CONF_AIS_API_KEY,
     CONF_AIS_VESSEL_MAP,
@@ -177,6 +183,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Metlink Explorer from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault("_db_alert_by_api_key", {})
     routes = entry_routes(entry)
 
     # Consolidate legacy duplicate entries for the same API key + transportation type.
@@ -308,6 +315,66 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         await geometry_coordinator.async_config_entry_first_refresh()
         hass.data[DOMAIN][entry.entry_id]["geometry_coordinator"] = geometry_coordinator
+
+    # Build local DB coordinators using DB mode slug grouping.
+    # This intentionally merges bus (3) and school bus (712) into one "bus" DB dataset.
+    db_mode_slug = mode_slug_for_type(transport_type_int)
+    if db_mode_slug != "unknown":
+        db_mode_entries = sorted(
+            [
+                candidate
+                for candidate in hass.config_entries.async_entries(DOMAIN)
+                if candidate.data.get(CONF_API_KEY) == entry.data.get(CONF_API_KEY)
+                and mode_slug_for_type(candidate.data.get(CONF_TRANSPORTATION_TYPE)) == db_mode_slug
+            ],
+            key=lambda candidate: candidate.entry_id,
+        )
+        is_db_mode_leader = bool(db_mode_entries) and db_mode_entries[0].entry_id == entry.entry_id
+
+        if is_db_mode_leader:
+            db_route_ids: list[str] = []
+            seen_db_routes: set[str] = set()
+            for source_entry in db_mode_entries:
+                for route in entry_routes(source_entry):
+                    route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
+                    if not route_id or route_id in seen_db_routes:
+                        continue
+                    seen_db_routes.add(route_id)
+                    db_route_ids.append(route_id)
+
+            if db_route_ids:
+                static_db_coordinator = MetlinkStaticDataCoordinator(
+                    hass,
+                    api_client,
+                    db_mode_slug,
+                    db_route_ids,
+                )
+                await static_db_coordinator.async_config_entry_first_refresh()
+
+                schedule_db_coordinator = MetlinkScheduleCoordinator(
+                    hass,
+                    api_client,
+                    db_mode_slug,
+                    db_route_ids,
+                )
+                await schedule_db_coordinator.async_config_entry_first_refresh()
+
+                alert_registry: dict[str, MetlinkAlertCoordinator] = hass.data[DOMAIN].setdefault(
+                    "_db_alert_by_api_key",
+                    {},
+                )
+                api_key = str(entry.data.get(CONF_API_KEY) or "")
+                alert_db_coordinator = alert_registry.get(api_key)
+                if alert_db_coordinator is None:
+                    alert_db_coordinator = MetlinkAlertCoordinator(hass, api_client)
+                    await alert_db_coordinator.async_config_entry_first_refresh()
+                    alert_registry[api_key] = alert_db_coordinator
+
+                alert_db_coordinator.register_schedule_coordinator(schedule_db_coordinator)
+
+                hass.data[DOMAIN][entry.entry_id]["static_db_coordinator"] = static_db_coordinator
+                hass.data[DOMAIN][entry.entry_id]["schedule_db_coordinator"] = schedule_db_coordinator
+                hass.data[DOMAIN][entry.entry_id]["alert_db_coordinator"] = alert_db_coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

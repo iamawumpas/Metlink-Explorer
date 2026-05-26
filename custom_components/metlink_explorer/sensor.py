@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-import json
 import re
-from pathlib import Path
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
@@ -14,6 +12,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    DB_ROUTE_GEOMETRY_FILENAME_TEMPLATE,
+    DB_ROUTES_FILENAME_TEMPLATE,
+    DB_SCHEDULES_FILENAME_TEMPLATE,
     CONF_ACTIVE_DIRECTION,
     CONF_API_KEY,
     CONF_ROUTE_DESC,
@@ -26,6 +27,7 @@ from .const import (
     DOMAIN,
     TRANSPORTATION_TYPES,
 )
+from .db_manager import db_url, mode_slug_for_type
 from .mode_registry import entry_routes, is_mode_leader, normalize_transportation_type, same_mode_entries
 
 
@@ -240,33 +242,6 @@ def _train_line_default_color(route_short_name: str | None) -> str:
     return known.get(key, "#00bcd4")
 
 
-def _type_slug(name: str) -> str:
-    """Return a filesystem-safe slug from a transportation type name."""
-    return name.lower().replace(" ", "_").replace("/", "_")
-
-
-async def _write_payload_json(
-    hass: HomeAssistant,
-    subdir: str,
-    filename: str,
-    data: Any,
-) -> str:
-    """Write a JSON payload to /config/www/metlink_explorer/<subdir>/<filename>.
-
-    File I/O runs in an executor so the event loop is not blocked.
-    Returns the /local/ URL for use in sensor attributes.
-    """
-    out_dir = Path(hass.config.path("www", "metlink_explorer", subdir))
-    content = json.dumps(data, default=str)
-
-    def _write() -> None:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / filename).write_text(content, encoding="utf-8")
-
-    await hass.async_add_executor_job(_write)
-    return f"/local/metlink_explorer/{subdir}/{filename}"
-
-
 class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
     """Primary route sensor representing both directions."""
 
@@ -293,7 +268,17 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_{route_id}_route"
         self._attr_native_unit_of_measurement = "trips"
         self._attr_entity_registry_enabled_default = True
-        self._payload_file_url: str | None = None
+        mode_slug = mode_slug_for_type(config_entry.data.get(CONF_TRANSPORTATION_TYPE))
+        self._db_route_file_url = (
+            db_url(DB_ROUTES_FILENAME_TEMPLATE.format(mode=mode_slug))
+            if mode_slug != "unknown"
+            else None
+        )
+        self._db_schedule_file_url = (
+            db_url(DB_SCHEDULES_FILENAME_TEMPLATE.format(mode=mode_slug))
+            if mode_slug != "unknown"
+            else None
+        )
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{route_id}")},
             "name": f"{transportation_name} Route {route_short_name}",
@@ -314,36 +299,6 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Return if entity is available."""
         return self.coordinator.last_update_success
-
-    async def async_added_to_hass(self) -> None:
-        """Register coordinator listener and write initial JSON payload."""
-        await super().async_added_to_hass()
-        if self.coordinator.data:
-            await self._async_write_payload()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Schedule JSON file write then update HA state."""
-        self.hass.async_create_task(self._async_write_payload())
-        super()._handle_coordinator_update()
-
-    async def _async_write_payload(self) -> None:
-        """Write full route timeline data to a JSON file under /config/www/."""
-        if not self.coordinator.data:
-            return
-        payload = {
-            "route_id": self._route_id,
-            "route_short_name": self._route_short_name,
-            "transportation_type": self._transportation_name,
-            "timetable_rows": self.coordinator.data.get("timetable_rows", []),
-            "timeline_by_direction": self.coordinator.data.get("timeline_by_direction", {}),
-        }
-        self._payload_file_url = await _write_payload_json(
-            self.hass,
-            "routes",
-            f"{self._route_id}_timeline.json",
-            payload,
-        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -371,7 +326,9 @@ class MetlinkRouteSensor(CoordinatorEntity, SensorEntity):
             "total_stops": active.get("total_stops", 0) if isinstance(active, dict) else 0,
             "real_time_stops": active.get("real_time_stops", 0) if isinstance(active, dict) else 0,
             "current_time": active.get("current_time") if isinstance(active, dict) else None,
-            "data_url": self._payload_file_url,
+            "data_url": self._db_schedule_file_url,
+            "db_route_url": self._db_route_file_url,
+            "db_schedule_url": self._db_schedule_file_url,
         }
 
     @property
@@ -503,36 +460,39 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = "departures"
         self._attr_entity_registry_enabled_default = True
         self._cached_departure_count: int = 0
-        self._payload_file_url: str | None = None
+        self._mode_slug = mode_slug_for_type(transportation_type)
+        self._db_schedule_file_url = (
+            db_url(DB_SCHEDULES_FILENAME_TEMPLATE.format(mode=self._mode_slug))
+            if self._mode_slug != "unknown"
+            else None
+        )
 
     async def async_added_to_hass(self) -> None:
-        """Register coordinator listener and write initial JSON payload."""
+        """Initialize cached summary from DB schedule coordinator data."""
         await super().async_added_to_hass()
-        await self._async_write_payload()
+        self._refresh_cached_departure_count()
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Schedule JSON file write then update HA state."""
-        self.hass.async_create_task(self._async_write_payload())
+        """Refresh cached summary and propagate coordinator update."""
+        self._refresh_cached_departure_count()
         super()._handle_coordinator_update()
 
-    async def _async_write_payload(self) -> None:
-        """Build departures, cache count, and write full list to a JSON file."""
-        departures, route_count = self._build_departures()
-        self._cached_departure_count = len(departures)
-        slug = _type_slug(self._transportation_name)
-        payload = {
-            "transportation_type": self._transportation_name,
-            "configured_route_count": route_count,
-            "departure_count": len(departures),
-            "departures": departures,
-        }
-        self._payload_file_url = await _write_payload_json(
-            self.hass,
-            "board",
-            f"{slug}_departures.json",
-            payload,
-        )
+    def _refresh_cached_departure_count(self) -> None:
+        """Cache departure row count from DB-backed schedule coordinator when available."""
+        if self._mode_slug == "unknown":
+            return
+        entries = same_mode_entries(self._hass, self._api_key, self._transportation_type)
+        for entry in entries:
+            runtime = self._hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+            schedule_db = runtime.get("schedule_db_coordinator")
+            data = schedule_db.data if schedule_db is not None else None
+            if isinstance(data, dict) and data.get("row_count") is not None:
+                try:
+                    self._cached_departure_count = int(data.get("row_count") or 0)
+                    return
+                except (TypeError, ValueError):
+                    continue
 
     def _build_departures(self) -> tuple[list[dict[str, Any]], int]:
         """Collect and normalize timetable departures across all routes in this mode."""
@@ -736,7 +696,8 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
             "transportation_type": self._transportation_name,
             "transportation_type_id": self._transportation_type,
             "departure_count": self._cached_departure_count,
-            "data_url": self._payload_file_url,
+            "data_url": self._db_schedule_file_url,
+            "db_schedule_url": self._db_schedule_file_url,
             "train_alert": train_alert,
             "bus_alert": bus_alert,
             "ferry_alert": ferry_alert,
@@ -772,7 +733,12 @@ class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = "routes"
         self._attr_entity_registry_enabled_default = True
         self._attr_icon = "mdi:map-marker-path"
-        self._payload_file_url: str | None = None
+        mode_slug = mode_slug_for_type({"Train": 2, "Bus": 3, "Ferry": 4, "Cable Car": 5, "School Bus": 712}.get(transportation_name, -1))
+        self._payload_file_url: str | None = (
+            db_url(DB_ROUTE_GEOMETRY_FILENAME_TEMPLATE.format(mode=mode_slug))
+            if mode_slug != "unknown"
+            else None
+        )
 
     @property
     def native_value(self) -> int | None:
@@ -784,35 +750,6 @@ class MetlinkTrainRouteGeometrySensor(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Return if geometry payload is available."""
         return self.coordinator.last_update_success
-
-    async def async_added_to_hass(self) -> None:
-        """Register coordinator listener and write initial JSON payload."""
-        await super().async_added_to_hass()
-        if self.coordinator.data:
-            await self._async_write_payload()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Schedule JSON file write then update HA state."""
-        self.hass.async_create_task(self._async_write_payload())
-        super()._handle_coordinator_update()
-
-    async def _async_write_payload(self) -> None:
-        """Write full GeoJSON feature collection to a JSON file."""
-        if not self.coordinator.data:
-            return
-        data = self.coordinator.data if isinstance(self.coordinator.data, dict) else {}
-        payload = {
-            "type": data.get("type", "FeatureCollection"),
-            "features": data.get("features", []),
-        }
-        slug = _type_slug(self._transportation_name)
-        self._payload_file_url = await _write_payload_json(
-            self.hass,
-            "geometry",
-            f"{slug}_routes.json",
-            payload,
-        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -838,13 +775,19 @@ class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
         self._route_id = str(route_id)
         self._route_short_name = route_short_name
         self._transportation_name = transportation_name
-        slug = _type_slug(transportation_name)
+        mode_slug = mode_slug_for_type({"Train": 2, "Bus": 3, "Ferry": 4, "Cable Car": 5, "School Bus": 712}.get(transportation_name, -1))
+        slug = transportation_name.lower().replace(" ", "_").replace("/", "_")
         self._attr_name = f"{transportation_name} :: {self._route_short_name} Geometry"
         self._attr_unique_id = f"{DOMAIN}_{slug}_route_geometry_{self._route_id}"
         self._attr_native_unit_of_measurement = "features"
         self._attr_entity_registry_enabled_default = True
         self._attr_icon = "mdi:transit-connection-horizontal"
-        self._payload_file_url: str | None = None
+        # Keep legacy per-route URL shape for route-id discovery in editor/map code.
+        self._payload_file_url: str | None = (
+            f"/local/metlink_explorer/geometry/{mode_slug}_{self._route_id}.json"
+            if mode_slug != "unknown"
+            else None
+        )
 
     def _feature(self) -> dict[str, Any] | None:
         """Return this route's feature from the mode geometry payload."""
@@ -871,34 +814,6 @@ class MetlinkTrainLineGeometrySensor(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Return if geometry payload is available."""
         return self.coordinator.last_update_success
-
-    async def async_added_to_hass(self) -> None:
-        """Register coordinator listener and write initial JSON payload."""
-        await super().async_added_to_hass()
-        if self.coordinator.data:
-            await self._async_write_payload()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Schedule JSON file write then update HA state."""
-        self.hass.async_create_task(self._async_write_payload())
-        super()._handle_coordinator_update()
-
-    async def _async_write_payload(self) -> None:
-        """Write this route's GeoJSON feature to a JSON file."""
-        feature = self._feature()
-        features = [feature] if feature else []
-        payload = {
-            "type": "FeatureCollection",
-            "features": features,
-        }
-        slug = _type_slug(self._transportation_name)
-        self._payload_file_url = await _write_payload_json(
-            self.hass,
-            "geometry",
-            f"{slug}_{self._route_id}.json",
-            payload,
-        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

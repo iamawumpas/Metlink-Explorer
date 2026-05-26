@@ -5,6 +5,20 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-05-26
+
+### Major - Local JSON database architecture and performance refactor
+
+- Introduced a local DB pipeline under `/local/metlink_explorer/db/` with mode-scoped files and `meta.json` timestamp tracking.
+- Added DB manager helpers and DB coordinators for static route/stops/geometry snapshots, hourly schedules, and 5-minute alerts.
+- Merged Bus and School Bus into a single Bus database mode so route/schedule payloads are unified.
+- Added backend schedule-window builder in the API client to generate next-24h departures grouped by stop.
+- Added vehicle snapshot writes to DB from the 30-second live coordinator path.
+- Updated map card to poll DB metadata, cache DB files in-memory, and prefer DB geometry/schedules with legacy fallbacks retained.
+- Updated departure board card to read DB schedules first with compatibility fallback to legacy sensor-derived payloads.
+- Updated editor to read DB route geometry for stop pickers when available, with fallback retained.
+- Simplified sensor layer into thin DB URL wrappers to reduce duplicate payload file writes.
+
 ## [0.14.5] - 2026-05-26
 
 ### Fix - Correct inbound/outbound direction detection for all routes

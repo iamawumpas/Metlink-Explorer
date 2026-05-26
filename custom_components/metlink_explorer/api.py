@@ -892,6 +892,68 @@ class MetlinkApiClient:
 
         return self._overlay_realtime_on_rows(base_rows, trip_updates_payload)
 
+    async def get_mode_schedule_window_by_stop(
+        self,
+        route_ids: list[str],
+        hours_ahead: int = 24,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Build upcoming schedule rows grouped by stop_id for selected routes.
+
+        Returns stop_id -> list[rows], limited to the requested forward window.
+        """
+        now = datetime.now()
+        window_end = now + timedelta(hours=max(1, int(hours_ahead or 24)))
+        today_str = now.strftime("%Y%m%d")
+        tomorrow_str = (now + timedelta(days=1)).strftime("%Y%m%d")
+
+        trip_updates = await self.get_trip_updates()
+        by_stop: dict[str, list[dict[str, Any]]] = {}
+
+        for route_id in [str(rid).strip() for rid in route_ids if str(rid).strip()]:
+            rows_today = await self.get_route_timetable_rows(
+                route_id,
+                service_date=today_str,
+                trip_updates_payload=trip_updates,
+            )
+            rows_tomorrow = await self.get_route_timetable_rows(
+                route_id,
+                service_date=tomorrow_str,
+                trip_updates_payload=None,
+            )
+
+            for row in (rows_today or []) + (rows_tomorrow or []):
+                if not isinstance(row, dict):
+                    continue
+
+                dep_time = row.get("departure_time") or row.get("scheduled_departure_time")
+                service_date = str(row.get("service_date") or "")
+                if not dep_time or len(service_date) != 8 or not service_date.isdigit():
+                    continue
+
+                try:
+                    base = datetime.strptime(service_date, "%Y%m%d")
+                    hh, mm, *rest = str(dep_time).replace("Scheduled:", "").strip().split(":")
+                    ss = rest[0] if rest else "0"
+                    dep_dt = base + timedelta(hours=int(hh), minutes=int(mm), seconds=int(ss))
+                except (TypeError, ValueError):
+                    continue
+
+                if dep_dt < now or dep_dt > window_end:
+                    continue
+
+                stop_id = str(row.get("stop_id") or "").strip()
+                if not stop_id:
+                    continue
+
+                out_row = dict(row)
+                out_row["departure_iso"] = dep_dt.isoformat()
+                by_stop.setdefault(stop_id, []).append(out_row)
+
+        for stop_rows in by_stop.values():
+            stop_rows.sort(key=lambda r: str(r.get("departure_iso") or ""))
+
+        return by_stop
+
     async def _build_route_timetable_base_rows(self, route_id: str, date_str: str) -> list[dict[str, Any]]:
         """Build scheduled route timetable rows for the given service date."""
         trips = await self.get_trips_for_route(route_id)

@@ -50,6 +50,33 @@ DEFAULT_GTFS_CACHE_TTL_SECONDS = 300
 TRAIN_GTFS_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 TRAIN_GEOMETRY_SENSOR_KEY = "train_route_geometry"
 
+# Local DB pipeline (v1.0.0)
+DB_SUBDIR = "db"
+DB_META_FILENAME = "meta.json"
+DB_ALERTS_FILENAME = "alerts.json"
+
+DB_REFRESH_ROUTES_SECONDS = 24 * 60 * 60
+DB_REFRESH_SCHEDULES_SECONDS = 60 * 60
+DB_REFRESH_ALERTS_SECONDS = 5 * 60
+DB_REFRESH_VEHICLES_SECONDS = DEFAULT_SCAN_INTERVAL
+DB_ROUTES_REFRESH_HOUR_LOCAL = 5
+
+DB_ROUTES_FILENAME_TEMPLATE = "{mode}_route.json"
+DB_ROUTE_GEOMETRY_FILENAME_TEMPLATE = "{mode}_route_geometry.json"
+DB_STOPS_FILENAME_TEMPLATE = "{mode}_stops.json"
+DB_SCHEDULES_FILENAME_TEMPLATE = "{mode}_schedules.json"
+DB_VEHICLES_FILENAME_TEMPLATE = "{mode}_vehicles.json"
+
+# Map GTFS transport type ids to file slugs.
+DB_MODE_SLUG_BY_TYPE = {
+    2: "train",
+    3: "bus",
+    4: "ferry",
+    5: "cable_car",
+    # Metlink school bus (712) is merged into the main bus DB payloads.
+    712: "bus",
+}
+
 # AIS ferry live tracking
 FERRY_ROUTE_TYPE = 4
 EAST_BY_WEST_FLEET_URL = "https://eastbywest.co.nz/about-us/our-fleet/"

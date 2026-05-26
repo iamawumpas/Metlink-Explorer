@@ -55,6 +55,8 @@ const TILE_FADE_DURATION_MS = 250000;
 const STARTUP_REDRAW_INTERVAL_MS = 10000;
 const STARTUP_STABLE_TICKS_REQUIRED = 2;
 const LAYER_PANEL_INACTIVITY_CLOSE_MS = 30000;
+const DB_META_URL = '/local/metlink_explorer/db/meta.json';
+const DB_META_POLL_MS = 5 * 60 * 1000;
 
 class MetlinkExplorerCard extends LitElement {
   static get properties() {
@@ -98,6 +100,82 @@ class MetlinkExplorerCard extends LitElement {
     this._liveUpdateBadgeLayoutTimer = null;
     this._stopBadgeLayoutSources = new Map();
     this._stopLayoutDebounceTimer = null;
+    this._dbCache = new Map();
+    this._dbMeta = null;
+    this._dbMetaPollTimer = null;
+  }
+
+  _dbFileUrl(fileName) {
+    return `/local/metlink_explorer/db/${fileName}`;
+  }
+
+  _configuredDbModes() {
+    const modes = new Set();
+    if ((this.config?.train_entities || []).length > 0) modes.add('train');
+    if ((this.config?.bus_entities || []).length > 0) modes.add('bus');
+    if ((this.config?.ferry_entities || []).length > 0) modes.add('ferry');
+    if ((this.config?.cable_entities || []).length > 0) modes.add('cable_car');
+    return [...modes];
+  }
+
+  async _fetchDbJson(url) {
+    try {
+      const res = await fetch(String(url || ''), { cache: 'no-store' });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async _loadDbFile(cacheKey, fileName) {
+    const payload = await this._fetchDbJson(this._dbFileUrl(fileName));
+    if (payload !== null) {
+      this._dbCache.set(cacheKey, payload);
+    }
+    return payload;
+  }
+
+  _dbMetaFingerprint(meta) {
+    if (!meta || typeof meta !== 'object') return '';
+    const keys = Object.keys(meta).sort();
+    return keys.map((k) => `${k}:${JSON.stringify(meta[k])}`).join('|');
+  }
+
+  async _refreshDbCacheFromMeta(force = false) {
+    const meta = await this._fetchDbJson(DB_META_URL);
+    if (!meta || typeof meta !== 'object') return;
+
+    const previousMeta = this._dbMeta;
+    this._dbMeta = meta;
+    const changed = force || this._dbMetaFingerprint(previousMeta) !== this._dbMetaFingerprint(meta);
+    if (!changed) return;
+
+    const modes = this._configuredDbModes();
+    const jobs = [this._loadDbFile('alerts', 'alerts.json')];
+    for (const mode of modes) {
+      jobs.push(this._loadDbFile(`${mode}_route`, `${mode}_route.json`));
+      jobs.push(this._loadDbFile(`${mode}_route_geometry`, `${mode}_route_geometry.json`));
+      jobs.push(this._loadDbFile(`${mode}_stops`, `${mode}_stops.json`));
+      jobs.push(this._loadDbFile(`${mode}_schedules`, `${mode}_schedules.json`));
+      jobs.push(this._loadDbFile(`${mode}_vehicles`, `${mode}_vehicles.json`));
+    }
+    await Promise.all(jobs);
+    this.requestUpdate();
+  }
+
+  _startDbMetaPolling() {
+    if (this._dbMetaPollTimer) return;
+    this._runAsyncTask(this._refreshDbCacheFromMeta(true), 'initial DB cache refresh');
+    this._dbMetaPollTimer = setInterval(() => {
+      this._runAsyncTask(this._refreshDbCacheFromMeta(false), 'DB cache meta poll refresh');
+    }, DB_META_POLL_MS);
+  }
+
+  _stopDbMetaPolling() {
+    if (!this._dbMetaPollTimer) return;
+    clearInterval(this._dbMetaPollTimer);
+    this._dbMetaPollTimer = null;
   }
 
   static async getConfigElement() {
@@ -2175,6 +2253,84 @@ class MetlinkExplorerCard extends LitElement {
     return Boolean(rowStationId && targetStationId && rowStationId === targetStationId);
   }
 
+  _dbModeSlugFromModeBucket(modeBucket = "") {
+    const mode = this._modeBucket(modeBucket);
+    if (mode === 'cable') return 'cable_car';
+    return mode;
+  }
+
+  _departureRowsFromSchedulePayload(payload, stopIds, targetMode, now, maxPastMs, maxFutureMs) {
+    const byStop = payload?.by_stop;
+    if (!byStop || typeof byStop !== 'object') return [];
+
+    const rows = [];
+    const seenKeys = new Set();
+
+    for (const stopId of stopIds) {
+      const stopRows = byStop[String(stopId)];
+      if (!Array.isArray(stopRows)) continue;
+
+      for (const row of stopRows) {
+        if (!row || typeof row !== 'object') continue;
+
+        const matchesStop = stopIds.some((candidateStopId) =>
+          this._stopIdMatchesBubbleStop(row, candidateStopId, targetMode)
+        );
+        if (!matchesStop) continue;
+
+        const rowModeBucket = this._modeBucket(row?.route_type || targetMode);
+        if (targetMode && rowModeBucket && rowModeBucket !== targetMode) continue;
+
+        const depDate = row?.departure_iso
+          ? new Date(String(row.departure_iso))
+          : this._parseDepartureDateTime(row?.service_date, row?.scheduled_departure_time || row?.departure_time);
+        if (!depDate || Number.isNaN(depDate.getTime())) continue;
+        const deltaMs = depDate.getTime() - now;
+        if (deltaMs < maxPastMs || deltaMs > maxFutureMs) continue;
+
+        const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
+        const routeId = String(row?.route_id || "").trim();
+        const serviceLabel = String(row?.service_label || "").trim();
+        let directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
+        if (this._modeBucket(targetMode) === "ferry") {
+          const originStop = String(row?.stop_name || "").trim();
+          const destinationStop = String(row?.destination || "").trim();
+          if (originStop && destinationStop) {
+            directionLabel = `${originStop} - ${destinationStop}`;
+          }
+        }
+        const directionIdRaw = row?.direction_id;
+        const directionId = directionIdRaw === undefined || directionIdRaw === null
+          ? ""
+          : String(directionIdRaw).trim();
+        const directionKey = directionId || directionLabel;
+        const routeCanonical = routeShortName.trim().toUpperCase();
+        const directionCanonical = directionLabel.trim().toUpperCase();
+        const stopCanonical = this._isTrainDepartureRow(row, targetMode)
+          ? (this._normalizeTrainStationStopId(row?.stop_id) || String(row?.stop_id || "").trim().toUpperCase())
+          : String(row?.stop_id || "").trim().toUpperCase();
+        const dedupeKey = `row:${stopCanonical}:${routeCanonical}:${directionCanonical}:${depDate.getTime()}`;
+        if (seenKeys.has(dedupeKey)) continue;
+        seenKeys.add(dedupeKey);
+
+        rows.push({
+          routeShortName,
+          routeId,
+          serviceLabel,
+          directionLabel,
+          directionKey,
+          modeBucket: rowModeBucket || targetMode || "",
+          departureDate: depDate,
+          departureText: this._formatDepartureLine(depDate, deltaMs),
+          sortTime: depDate.getTime(),
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.sortTime - b.sortTime);
+    return rows;
+  }
+
   async _departuresForStops(stopIds, modeBucket = "") {
     const now = Date.now();
     const maxFutureMs = 24 * 3600 * 1000;
@@ -2184,6 +2340,21 @@ class MetlinkExplorerCard extends LitElement {
     const normalizedStopIds = [...new Set(rawStopIds.map((id) => String(id || "").trim()).filter(Boolean))];
     if (normalizedStopIds.length === 0) return [];
 
+    // Preferred path: local DB schedules cache.
+    const dbModeSlug = this._dbModeSlugFromModeBucket(targetMode || modeBucket);
+    const schedulePayload = dbModeSlug ? this._dbCache.get(`${dbModeSlug}_schedules`) : null;
+    if (schedulePayload && typeof schedulePayload === 'object') {
+      return this._departureRowsFromSchedulePayload(
+        schedulePayload,
+        normalizedStopIds,
+        targetMode,
+        now,
+        maxPastMs,
+        maxFutureMs
+      );
+    }
+
+    // Fallback path: legacy board payload files.
     const entities = this._boardEntitiesFromStates();
     if (entities.length === 0) return [];
 
@@ -2479,6 +2650,7 @@ class MetlinkExplorerCard extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener('pointerdown', this._boundDocumentPointerDown, true);
+    this._startDbMetaPolling();
     setTimeout(() => this._forceSectionBreakout(), 500);
   }
 
@@ -2546,12 +2718,69 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
+  _dbModeSlugFromGeometryUrl(dataUrl) {
+    const url = String(dataUrl || '');
+    const lineMatch = url.match(/\/local\/metlink_explorer\/geometry\/([a-z_]+)_[^/]+\.json$/i);
+    if (lineMatch && lineMatch[1]) {
+      const mode = String(lineMatch[1]).toLowerCase();
+      return mode === 'school_bus' ? 'bus' : mode;
+    }
+    const modeMatch = url.match(/\/local\/metlink_explorer\/geometry\/([a-z_]+)_routes\.json$/i);
+    if (modeMatch && modeMatch[1]) {
+      const mode = String(modeMatch[1]).toLowerCase();
+      return mode === 'school_bus' ? 'bus' : mode;
+    }
+    return null;
+  }
+
+  _routeIdFromGeometryUrl(dataUrl) {
+    const url = String(dataUrl || '');
+    const lineMatch = url.match(/\/local\/metlink_explorer\/geometry\/[a-z_]+_([^/]+)\.json$/i);
+    if (!lineMatch || !lineMatch[1]) return null;
+    const candidate = String(lineMatch[1]).trim();
+    if (!candidate || candidate.toLowerCase() === 'routes') return null;
+    return candidate;
+  }
+
+  _dbRouteGeometryForEntity(entityId, state) {
+    const attrs = state?.attributes || {};
+    const dataUrl = String(attrs.data_url || '');
+    const modeSlug = this._dbModeSlugFromGeometryUrl(dataUrl);
+    if (!modeSlug) return null;
+
+    const payload = this._dbCache.get(`${modeSlug}_route_geometry`);
+    const features = payload?.features;
+    if (!Array.isArray(features) || features.length === 0) return null;
+
+    const hintedRouteId = this._routeIdFromGeometryUrl(dataUrl);
+    const filtered = hintedRouteId
+      ? features.filter((f) => String(f?.properties?.route_id || '') === String(hintedRouteId))
+      : features;
+
+    if (!Array.isArray(filtered) || filtered.length === 0) return null;
+    return filtered
+      .filter((f) => f?.geometry && (f.geometry.type === 'MultiLineString' || f.geometry.type === 'LineString'))
+      .map((f) => ({
+        type: 'Feature',
+        geometry: this._normalizeRouteGeometry(f.geometry),
+        properties: {
+          ...(f.properties || {}),
+          entity_id: entityId,
+        },
+      }));
+  }
+
   _parseRouteGeometry(entityId) {
     const states = this.hass?.states;
     if (!states) return null;
 
     const state = states[entityId];
-    if (!state || !state.attributes || !state.attributes.geojson) return null;
+    if (!state || !state.attributes) return null;
+
+    const dbFeatures = this._dbRouteGeometryForEntity(entityId, state);
+    if (Array.isArray(dbFeatures) && dbFeatures.length > 0) return dbFeatures;
+
+    if (!state.attributes.geojson) return null;
 
     let geojson = state.attributes.geojson;
     if (typeof geojson === 'string') {
@@ -3558,6 +3787,7 @@ class MetlinkExplorerCard extends LitElement {
 
   disconnectedCallback() {
     window.removeEventListener('pointerdown', this._boundDocumentPointerDown, true);
+    this._stopDbMetaPolling();
     this._clearLayerPanelAutoClose();
     this._stopStartupOverlayRedrawLoop();
     this._stopLiveUpdateBadgeLayoutTimer();
