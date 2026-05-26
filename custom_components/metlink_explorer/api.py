@@ -525,26 +525,34 @@ class MetlinkApiClient:
             pair_distance_m     – haversine distance to the pair (or None)
             inbound_direction_id – which direction_id is "towards Wellington Central"
         """
-        # Determine inbound direction via Wellington Central proximity.
+        # Determine inbound direction via net-displacement method.
+        # For each direction, compare distance of the first stop vs last stop to Wellington Central.
+        # The direction whose last stop is CLOSER to Wellington Central is travelling TOWARDS it → inbound.
+        # This is more reliable than proximity of any stop, which fails at city terminus stops
+        # where both directions pass through the CBD.
         inbound_direction_id: int | None = None
+        best_net_displacement: float = 0.0  # positive = last stop closer to WC (inbound candidate)
         for dir_id, stops in timeline_stops_by_direction.items():
-            for stop in stops:
-                s_lat = stop.get("stop_lat")
-                s_lon = stop.get("stop_lon")
-                if s_lat is None or s_lon is None:
-                    continue
-                try:
-                    dist = self._haversine_meters(
-                        self._WELLINGTON_CENTRAL_LAT, self._WELLINGTON_CENTRAL_LON,
-                        float(s_lat), float(s_lon),
-                    )
-                except (TypeError, ValueError):
-                    continue
-                if dist <= self._INBOUND_PROXIMITY_METERS:
-                    inbound_direction_id = int(dir_id)
-                    break
-            if inbound_direction_id is not None:
-                break
+            if len(stops) < 2:
+                continue
+            first_stop = stops[0]
+            last_stop = stops[-1]
+            try:
+                dist_first = self._haversine_meters(
+                    self._WELLINGTON_CENTRAL_LAT, self._WELLINGTON_CENTRAL_LON,
+                    float(first_stop["stop_lat"]), float(first_stop["stop_lon"]),
+                )
+                dist_last = self._haversine_meters(
+                    self._WELLINGTON_CENTRAL_LAT, self._WELLINGTON_CENTRAL_LON,
+                    float(last_stop["stop_lat"]), float(last_stop["stop_lon"]),
+                )
+            except (TypeError, ValueError, KeyError):
+                continue
+            # Net displacement towards WC: positive means approaching the city.
+            net = dist_first - dist_last
+            if net > best_net_displacement:
+                best_net_displacement = net
+                inbound_direction_id = int(dir_id)
         if inbound_direction_id is None:
             inbound_direction_id = 1  # GTFS default
 

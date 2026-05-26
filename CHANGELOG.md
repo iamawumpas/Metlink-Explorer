@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.5] - 2026-05-26
+
+### Fix - Correct inbound/outbound direction detection for all routes
+
+- Replaced the Wellington Central stop-proximity heuristic with a **net-displacement method**: the direction whose last stop is closer to Wellington Central than its first stop is classified as inbound. This correctly identifies the travel direction even for routes whose entire path lies near the CBD (e.g. Courtenay Place termini where both direction stops are within 500 m of the city).
+- Backend `_build_stop_pair_index` (api.py) and frontend fallback `_inboundDirectionIdForRoute` both updated to use net-displacement.
+- Added `_buildRouteInboundMap` and `_normalizeRowDirectionKeys` to the map card: departure rows now have their raw GTFS `direction_id` ("0"/"1") rewritten to stable semantic labels ("inbound"/"outbound") per route before being stored in the bubble state. This means each route's departures are classified independently, so mixed-route stop bubbles (e.g. a shared terminus serving multiple routes) label directions correctly even when Metlink uses `direction_id` inconsistently across routes.
+- `_deriveDirectionMeta` detects pre-normalised "inbound"/"outbound" keys and uses them directly, bypassing the numeric-key path entirely for normalised rows.
+- Filter tabs ("Inbound", "Outbound") and per-row direction badges now reflect actual travel direction rather than arbitrary `direction_id` values.
+
 ## [0.14.4] - 2026-05-27
 
 ### Improvement - Backend stop pairing table for faster map bubble lookups

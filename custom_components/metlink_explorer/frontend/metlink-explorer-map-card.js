@@ -862,25 +862,33 @@ class MetlinkExplorerCard extends LitElement {
    * Returns 1 as the default if no determination can be made (GTFS convention).
    */
   _inboundDirectionIdForRoute(features) {
+    // Net-displacement method: the direction whose last stop is closer to Wellington Central
+    // than its first stop is travelling TOWARDS the city → inbound.
+    // This avoids false matches from routes that simply pass through the CBD.
     const wc = this.constructor?.WELLINGTON_CENTRAL || { lat: -41.2790, lon: 174.7802 };
-    const THRESHOLD_METERS = 500;
+    let bestNet = 0;
+    let inboundDirId = 1; // GTFS default
 
     for (const feature of (features || [])) {
       const timelineStops = feature?.properties?.timeline_stops || {};
       for (const [dirKey, stops] of Object.entries(timelineStops)) {
-        if (!Array.isArray(stops)) continue;
-        for (const stop of stops) {
-          const sLat = Number(stop?.stop_lat);
-          const sLon = Number(stop?.stop_lon);
-          if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) continue;
-          const dist = this._haversineMeters(wc.lat, wc.lon, sLat, sLon);
-          if (dist <= THRESHOLD_METERS) {
-            return Number(dirKey); // direction containing WLN-proximity stop = inbound
-          }
+        if (!Array.isArray(stops) || stops.length < 2) continue;
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        const fLat = Number(first?.stop_lat), fLon = Number(first?.stop_lon);
+        const lLat = Number(last?.stop_lat), lLon = Number(last?.stop_lon);
+        if (!Number.isFinite(fLat) || !Number.isFinite(lLat)) continue;
+        const distFirst = this._haversineMeters(wc.lat, wc.lon, fLat, fLon);
+        const distLast = this._haversineMeters(wc.lat, wc.lon, lLat, lLon);
+        // Positive net means last stop is closer to WC → approaching → inbound.
+        const net = distFirst - distLast;
+        if (net > bestNet) {
+          bestNet = net;
+          inboundDirId = Number(dirKey);
         }
       }
     }
-    return 1; // GTFS default: direction_id 1 = inbound
+    return inboundDirId;
   }
 
   /**
@@ -1833,8 +1841,61 @@ class MetlinkExplorerCard extends LitElement {
     return `Departs ${timeFmt.format(departureDate)} on ${dayFmt.format(departureDate)}, in ${this._formatCountdown(deltaMs)}.`;
   }
 
+  /**
+   * Build a Map<routeId, inboundDirectionId> by reading inbound_direction_id out of
+   * each feature's stop_pair_index.  Used to normalise departure rows before display.
+   */
+  _buildRouteInboundMap(features) {
+    const map = new Map();
+    for (const feature of (features || [])) {
+      const index = feature?.properties?.stop_pair_index;
+      if (!index || typeof index !== "object") continue;
+      for (const entry of Object.values(index)) {
+        const rid = String(entry?.route_id || "").trim();
+        const iid = entry?.inbound_direction_id;
+        if (rid && iid !== null && iid !== undefined && !map.has(rid)) {
+          map.set(rid, Number(iid));
+        }
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Rewrite numeric directionKey ("0"/"1") on each departure row to the stable
+   * semantic labels "inbound" or "outbound" using per-route knowledge from the
+   * backend stop_pair_index.  Rows whose route is not in the map are left unchanged.
+   */
+  _normalizeRowDirectionKeys(rows, routeInboundMap) {
+    if (!routeInboundMap || routeInboundMap.size === 0) return rows;
+    return (rows || []).map((row) => {
+      const rid = String(row?.routeId || "").trim();
+      const dirKey = String(row?.directionKey || "").trim();
+      // Only rewrite pure numeric keys (raw direction_id values).
+      if (!/^\d+$/.test(dirKey)) return row;
+      const inboundDirId = routeInboundMap.get(rid);
+      if (inboundDirId === undefined) return row;
+      return { ...row, directionKey: Number(dirKey) === inboundDirId ? "inbound" : "outbound" };
+    });
+  }
+
   _deriveDirectionMeta(rows, inboundDirectionId = null) {
-    // If we know which direction_id is inbound (from Wellington Central proximity),
+    // Fast path: rows have already been normalised to "inbound"/"outbound" keys
+    // by _normalizeRowDirectionKeys — use them directly.
+    const hasNormalized = (rows || []).some(
+      (r) => r?.directionKey === "inbound" || r?.directionKey === "outbound"
+    );
+    if (hasNormalized) {
+      const hasInbound = (rows || []).some((r) => r?.directionKey === "inbound");
+      const hasOutbound = (rows || []).some((r) => r?.directionKey === "outbound");
+      return {
+        inboundKey: hasInbound ? "inbound" : null,
+        outboundKey: hasOutbound ? "outbound" : null,
+        hasBoth: hasInbound && hasOutbound,
+      };
+    }
+
+    // If we know which direction_id is inbound (from Wellington Central net-displacement),
     // use that directly rather than relying on first-seen order.
     if (inboundDirectionId !== null && Number.isFinite(Number(inboundDirectionId))) {
       const inboundKey = String(inboundDirectionId);
@@ -1871,6 +1932,7 @@ class MetlinkExplorerCard extends LitElement {
     // For ferry or terminal-only stops, collapse to outbound-only display.
     if (this._modeBucket(modeBucket) === "ferry" || forceOutboundOnly) {
       const base = this._deriveDirectionMeta(rows);
+      // Prefer the outbound key; if rows were normalised, outboundKey is "outbound".
       const fallbackKey = base.outboundKey
         || base.inboundKey
         || String((rows || [])[0]?.directionKey || "").trim()
@@ -1882,8 +1944,10 @@ class MetlinkExplorerCard extends LitElement {
       };
     }
 
-    // Use explicitly provided inbound direction id (from backend pair index) when available,
-    // otherwise fall back to Wellington Central proximity scan over route features.
+    // If rows have already been normalised by _normalizeRowDirectionKeys, _deriveDirectionMeta
+    // detects the "inbound"/"outbound" keys automatically — no extra hint needed.
+    // The explicit inboundDirectionId / routeFeatures fallbacks are kept for old cached
+    // features that pre-date the stop_pair_index field.
     const resolvedInboundDirId = inboundDirectionId !== null
       ? inboundDirectionId
       : (routeFeatures ? this._inboundDirectionIdForRoute(routeFeatures) : null);
@@ -2237,8 +2301,11 @@ class MetlinkExplorerCard extends LitElement {
     }
     const stopScopeIds = [stopId, pairedStop?.stopId].filter(Boolean);
 
-    // Gather route features for inbound direction detection (used as fallback in _deriveDirectionMetaForMode).
-    const routeFeatures = originFeatures.length > 0 ? originFeatures : [];
+    // Build per-route inbound direction map from backend stop_pair_index.
+    // This lets _normalizeRowDirectionKeys rewrite numeric direction_id keys to
+    // stable "inbound"/"outbound" labels, handling routes that use 0=inbound, 1=outbound
+    // inconsistently.
+    const routeInboundMap = this._buildRouteInboundMap(originFeatures);
 
     // Always close any existing bubble first so the next one can replay its entry animation.
     if (this._departureBubble) {
@@ -2277,15 +2344,19 @@ class MetlinkExplorerCard extends LitElement {
     this._resetBubbleAutoCloseTimer();
 
     try {
-      const departures = await this._departuresForStops(stopScopeIds, modeBucket);
+      const rawDepartures = await this._departuresForStops(stopScopeIds, modeBucket);
       if (openSequence !== this._bubbleOpenSequence) return;
       if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
+      // Normalise per-route direction keys ("0"/"1" → "inbound"/"outbound") so the
+      // direction meta and filter tabs are correct even when Metlink uses direction_id
+      // inconsistently across routes.
+      const departures = this._normalizeRowDirectionKeys(rawDepartures, routeInboundMap);
       this._departureBubble = {
         ...this._departureBubble,
         loading: false,
         departures,
         directionFilter: forceOutboundOnly ? "outbound" : "all",
-        directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly, routeFeatures, inboundDirectionId),
+        directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly),
       };
       this.requestUpdate();
     } catch (_) {
