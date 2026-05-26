@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-05-27
+
+### Fix - Bus shared-stop bubbles now show mixed routes
+
+- Removed route-level scoping for bus stop bubbles so shared bus stops show departures from all bus routes serving that stop, not just the clicked route.
+- Keeps route scoping for other non-train/non-bus modes to avoid cross-route leakage where stop sharing is not desired.
+
 ## [1.0.6] - 2026-05-27
 
 ### Fix - Train station bubbles now show mixed routes

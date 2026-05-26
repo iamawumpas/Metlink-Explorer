@@ -2615,7 +2615,7 @@ class MetlinkExplorerCard extends LitElement {
     this._resetBubbleAutoCloseTimer();
 
     try {
-      const allowedRouteIds = modeBucket === 'train'
+      const allowedRouteIds = (modeBucket === 'train' || modeBucket === 'bus')
         ? new Set()
         : new Set(
           (originFeatures || [])
