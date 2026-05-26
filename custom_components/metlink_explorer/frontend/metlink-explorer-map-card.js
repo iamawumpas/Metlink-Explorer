@@ -1991,36 +1991,23 @@ class MetlinkExplorerCard extends LitElement {
   _buildRouteInboundMap(features) {
     const map = new Map();
     for (const feature of (features || [])) {
+      const index = feature?.properties?.stop_pair_index;
+      if (!index || typeof index !== "object") continue;
       const featureRouteId = String(feature?.properties?.route_id || "").trim();
       const featureRouteShortName = String(feature?.properties?.route_short_name || "").trim();
-      const index = feature?.properties?.stop_pair_index;
-      
-      // If stop_pair_index exists, use it as the authoritative source for inbound_direction_id.
-      if (index && typeof index === "object") {
-        for (const entry of Object.values(index)) {
-          const rid = String(entry?.route_id || featureRouteId || "").trim();
-          const iid = entry?.inbound_direction_id;
-          if (iid === null || iid === undefined) continue;
-          const inboundDirId = Number(iid);
-          if (!Number.isFinite(inboundDirId)) continue;
-          if (rid && !map.has(rid)) {
-            map.set(rid, inboundDirId);
-          }
-          // Some schedule rows identify route via short name/service label instead of route_id.
-          if (featureRouteShortName && !map.has(featureRouteShortName)) {
-            map.set(featureRouteShortName, inboundDirId);
-          }
+      for (const entry of Object.values(index)) {
+        const rid = String(entry?.route_id || featureRouteId || "").trim();
+        const iid = entry?.inbound_direction_id;
+        if (iid === null || iid === undefined) continue;
+        const inboundDirId = Number(iid);
+        if (!Number.isFinite(inboundDirId)) continue;
+        if (rid && !map.has(rid)) {
+          map.set(rid, inboundDirId);
         }
-      }
-      
-      // Fallback: if stop_pair_index is missing or empty (e.g. route has no timeline_stops),
-      // use GTFS default (inbound = direction_id 1).  This ensures all routes are in the map,
-      // so that at a mixed bus+school bus stop, inbound/outbound tabs work for both.
-      if (!map.has(featureRouteId) && featureRouteId) {
-        map.set(featureRouteId, 1);
-      }
-      if (!map.has(featureRouteShortName) && featureRouteShortName) {
-        map.set(featureRouteShortName, 1);
+        // Some schedule rows identify route via short name/service label instead of route_id.
+        if (featureRouteShortName && !map.has(featureRouteShortName)) {
+          map.set(featureRouteShortName, inboundDirId);
+        }
       }
     }
     return map;
