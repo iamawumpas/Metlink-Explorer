@@ -2204,7 +2204,6 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   _departureDirectionTag(dep, bubble) {
-    if (!bubble?.directionMeta?.hasBoth) return "";
     const key = String(dep?.directionKey || "");
     if (key && key === bubble.directionMeta.inboundKey) return "Inbound";
     if (key && key === bubble.directionMeta.outboundKey) return "Outbound";
@@ -2259,7 +2258,7 @@ class MetlinkExplorerCard extends LitElement {
     return mode;
   }
 
-  _departureRowsFromSchedulePayload(payload, stopIds, targetMode, now, maxPastMs, maxFutureMs) {
+  _departureRowsFromSchedulePayload(payload, stopIds, targetMode, now, maxPastMs, maxFutureMs, allowedRouteIds = null) {
     const byStop = payload?.by_stop;
     if (!byStop || typeof byStop !== 'object') return [];
 
@@ -2272,6 +2271,11 @@ class MetlinkExplorerCard extends LitElement {
 
       for (const row of stopRows) {
         if (!row || typeof row !== 'object') continue;
+
+        const rowRouteId = String(row?.route_id || '').trim();
+        if (allowedRouteIds && allowedRouteIds.size > 0 && rowRouteId && !allowedRouteIds.has(rowRouteId)) {
+          continue;
+        }
 
         const matchesStop = stopIds.some((candidateStopId) =>
           this._stopIdMatchesBubbleStop(row, candidateStopId, targetMode)
@@ -2331,7 +2335,7 @@ class MetlinkExplorerCard extends LitElement {
     return rows;
   }
 
-  async _departuresForStops(stopIds, modeBucket = "") {
+  async _departuresForStops(stopIds, modeBucket = "", allowedRouteIds = null) {
     const now = Date.now();
     const maxFutureMs = 24 * 3600 * 1000;
     const maxPastMs = -60 * 1000;
@@ -2339,6 +2343,9 @@ class MetlinkExplorerCard extends LitElement {
     const rawStopIds = Array.isArray(stopIds) ? stopIds : [stopIds];
     const normalizedStopIds = [...new Set(rawStopIds.map((id) => String(id || "").trim()).filter(Boolean))];
     if (normalizedStopIds.length === 0) return [];
+    const routeScope = allowedRouteIds instanceof Set
+      ? allowedRouteIds
+      : new Set((Array.isArray(allowedRouteIds) ? allowedRouteIds : []).map((id) => String(id || '').trim()).filter(Boolean));
 
     // Preferred path: local DB schedules cache.
     const dbModeSlug = this._dbModeSlugFromModeBucket(targetMode || modeBucket);
@@ -2350,7 +2357,8 @@ class MetlinkExplorerCard extends LitElement {
         targetMode,
         now,
         maxPastMs,
-        maxFutureMs
+        maxFutureMs,
+        routeScope
       );
     }
 
@@ -2376,6 +2384,9 @@ class MetlinkExplorerCard extends LitElement {
           this._stopIdMatchesBubbleStop(row, candidateStopId, payloadTransportationType)
         );
         if (!matchesStop) return;
+
+        const rowRouteIdText = String(row?.route_id || '').trim();
+        if (routeScope.size > 0 && rowRouteIdText && !routeScope.has(rowRouteIdText)) return;
 
         const rowModeBucket = this._modeBucket(row?.route_type || payloadTransportationType);
         if (targetMode && rowModeBucket && rowModeBucket !== targetMode) return;
@@ -2515,7 +2526,12 @@ class MetlinkExplorerCard extends LitElement {
     this._resetBubbleAutoCloseTimer();
 
     try {
-      const rawDepartures = await this._departuresForStops(stopScopeIds, modeBucket);
+      const allowedRouteIds = new Set(
+        (originFeatures || [])
+          .map((f) => String(f?.properties?.route_id || '').trim())
+          .filter(Boolean)
+      );
+      const rawDepartures = await this._departuresForStops(stopScopeIds, modeBucket, allowedRouteIds);
       if (openSequence !== this._bubbleOpenSequence) return;
       if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
       // Normalise per-route direction keys ("0"/"1" → "inbound"/"outbound") so the
