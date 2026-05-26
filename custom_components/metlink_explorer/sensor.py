@@ -229,6 +229,14 @@ def _direction_from_entry(entry: ConfigEntry, direction_id: int) -> str:
     return _direction_label(route_long_name, route_desc, direction_id)
 
 
+def _truncate_attr_text(value: str | None, max_len: int = 1200) -> str:
+    """Bound large text attributes to keep recorder payload sizes manageable."""
+    text = str(value or "").strip()
+    if len(text) <= max_len:
+        return text
+    return f"{text[:max_len].rstrip()}..."
+
+
 def _train_line_default_color(route_short_name: str | None) -> str:
     """Return a default color for known train line abbreviations."""
     key = (route_short_name or "").strip().upper()
@@ -689,9 +697,9 @@ class MetlinkModeBoardSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return board summary; full departures list is written to the JSON file."""
         alerts_by_mode = self.coordinator.data.get("alerts_by_mode", {}) if isinstance(self.coordinator.data, dict) else {}
-        train_alert = str(alerts_by_mode.get("train") or "").strip()
-        bus_alert = str(alerts_by_mode.get("bus") or "").strip()
-        ferry_alert = str(alerts_by_mode.get("ferry") or "").strip()
+        train_alert = _truncate_attr_text(alerts_by_mode.get("train"))
+        bus_alert = _truncate_attr_text(alerts_by_mode.get("bus"))
+        ferry_alert = _truncate_attr_text(alerts_by_mode.get("ferry"))
         return {
             "transportation_type": self._transportation_name,
             "transportation_type_id": self._transportation_type,

@@ -64,25 +64,33 @@ class MetlinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Persist mode-level live vehicle snapshot for frontend DB consumers.
             mode_slug = mode_slug_for_type(self.transportation_type)
             if mode_slug != "unknown":
-                vehicles_payload = {
-                    "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
-                    "mode": mode_slug,
-                    "route_id": self.route_id,
-                    "fetched_at": (
-                        vehicle_positions_fetched_at.isoformat()
-                        if vehicle_positions_fetched_at
-                        else None
-                    ),
-                    "vehicles": vehicle_positions if isinstance(vehicle_positions, list) else [],
-                }
-                vehicles_filename = DB_VEHICLES_FILENAME_TEMPLATE.format(mode=mode_slug)
-                await async_write_db_file(self.hass, vehicles_filename, vehicles_payload)
-                await async_update_meta(
-                    self.hass,
-                    {
-                        f"{mode_slug}_vehicles_ts": vehicles_payload["generated_at"],
-                    },
-                )
+                try:
+                    vehicles_payload = {
+                        "generated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+                        "mode": mode_slug,
+                        "route_id": self.route_id,
+                        "fetched_at": (
+                            vehicle_positions_fetched_at.isoformat()
+                            if vehicle_positions_fetched_at
+                            else None
+                        ),
+                        "vehicles": vehicle_positions if isinstance(vehicle_positions, list) else [],
+                    }
+                    vehicles_filename = DB_VEHICLES_FILENAME_TEMPLATE.format(mode=mode_slug)
+                    await async_write_db_file(self.hass, vehicles_filename, vehicles_payload)
+                    await async_update_meta(
+                        self.hass,
+                        {
+                            f"{mode_slug}_vehicles_ts": vehicles_payload["generated_at"],
+                        },
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "Failed to persist %s vehicles DB snapshot for route %s: %s",
+                        mode_slug,
+                        self.route_id,
+                        exc,
+                    )
 
             trip_updates = await self.api_client.get_trip_updates()
             alerts_by_mode = await self.api_client.get_alert_messages_by_mode()

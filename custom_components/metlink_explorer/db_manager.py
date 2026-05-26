@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -54,13 +56,26 @@ async def async_write_db_file(
     Returns the public /local URL for the file.
     """
     out_path = _db_file_path(hass, filename)
-    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
     content = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), default=str)
 
     def _write() -> None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path.write_text(content, encoding="utf-8")
-        tmp_path.replace(out_path)
+        # Use a unique temp file per write to avoid concurrent writer collisions.
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f"{out_path.name}.",
+            suffix=".tmp",
+            dir=str(out_path.parent),
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(content)
+            os.replace(tmp_name, out_path)
+        finally:
+            try:
+                if os.path.exists(tmp_name):
+                    os.remove(tmp_name)
+            except OSError:
+                pass
 
     await hass.async_add_executor_job(_write)
     return db_url(filename)

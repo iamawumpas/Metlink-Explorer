@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-05-26
+
+### Fix - Recorder attribute size and DB write race resilience
+
+- Prevented DB write race failures in `db_manager.async_write_db_file` by switching to unique temp files per write and atomic `os.replace`.
+- Added best-effort error handling around coordinator vehicle DB persistence so transient file-write issues no longer break route coordinator refresh cycles.
+- Reduced Recorder payload pressure by truncating large service alert text attributes on mode departure-board sensors, preventing attribute blobs from exceeding Home Assistant's 16KB recorder storage threshold.
+
 ## [1.0.0] - 2026-05-26
 
 ### Major - Local JSON database architecture and performance refactor
