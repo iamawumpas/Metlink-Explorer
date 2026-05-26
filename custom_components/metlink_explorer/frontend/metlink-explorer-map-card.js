@@ -1930,15 +1930,45 @@ class MetlinkExplorerCard extends LitElement {
     for (const feature of (features || [])) {
       const index = feature?.properties?.stop_pair_index;
       if (!index || typeof index !== "object") continue;
+      const featureRouteId = String(feature?.properties?.route_id || "").trim();
+      const featureRouteShortName = String(feature?.properties?.route_short_name || "").trim();
       for (const entry of Object.values(index)) {
-        const rid = String(entry?.route_id || "").trim();
+        const rid = String(entry?.route_id || featureRouteId || "").trim();
         const iid = entry?.inbound_direction_id;
-        if (rid && iid !== null && iid !== undefined && !map.has(rid)) {
-          map.set(rid, Number(iid));
+        if (iid === null || iid === undefined) continue;
+        const inboundDirId = Number(iid);
+        if (!Number.isFinite(inboundDirId)) continue;
+        if (rid && !map.has(rid)) {
+          map.set(rid, inboundDirId);
+        }
+        // Some schedule rows identify route via short name/service label instead of route_id.
+        if (featureRouteShortName && !map.has(featureRouteShortName)) {
+          map.set(featureRouteShortName, inboundDirId);
         }
       }
     }
     return map;
+  }
+
+  _normalizedDirectionKeyForRow(row, routeInboundMap) {
+    const dirKey = String(row?.directionKey || "").trim();
+    if (!dirKey) return "";
+    if (dirKey === "inbound" || dirKey === "outbound") return dirKey;
+    if (!/^\d+$/.test(dirKey)) return dirKey;
+
+    const routeLookupKeys = [
+      String(row?.routeId || "").trim(),
+      String(row?.routeShortName || "").trim(),
+      String(row?.serviceLabel || "").trim(),
+    ].filter(Boolean);
+
+    for (const routeKey of routeLookupKeys) {
+      const inboundDirId = routeInboundMap?.get(routeKey);
+      if (inboundDirId === undefined) continue;
+      return Number(dirKey) === inboundDirId ? "inbound" : "outbound";
+    }
+
+    return dirKey;
   }
 
   /**
@@ -1949,13 +1979,9 @@ class MetlinkExplorerCard extends LitElement {
   _normalizeRowDirectionKeys(rows, routeInboundMap) {
     if (!routeInboundMap || routeInboundMap.size === 0) return rows;
     return (rows || []).map((row) => {
-      const rid = String(row?.routeId || "").trim();
-      const dirKey = String(row?.directionKey || "").trim();
-      // Only rewrite pure numeric keys (raw direction_id values).
-      if (!/^\d+$/.test(dirKey)) return row;
-      const inboundDirId = routeInboundMap.get(rid);
-      if (inboundDirId === undefined) return row;
-      return { ...row, directionKey: Number(dirKey) === inboundDirId ? "inbound" : "outbound" };
+      const normalizedKey = this._normalizedDirectionKeyForRow(row, routeInboundMap);
+      if (!normalizedKey || normalizedKey === row?.directionKey) return row;
+      return { ...row, directionKey: normalizedKey };
     });
   }
 
@@ -2206,16 +2232,22 @@ class MetlinkExplorerCard extends LitElement {
     const outboundKey = bubble?.directionMeta?.outboundKey;
 
     if (filter === "inbound" && inboundKey) {
-      return rows.filter((row) => String(row?.directionKey || "") === inboundKey);
+      return rows.filter((row) => {
+        const rowKey = this._normalizedDirectionKeyForRow(row, bubble?.routeInboundMap);
+        return String(rowKey || "") === inboundKey;
+      });
     }
     if (filter === "outbound" && outboundKey) {
-      return rows.filter((row) => String(row?.directionKey || "") === outboundKey);
+      return rows.filter((row) => {
+        const rowKey = this._normalizedDirectionKeyForRow(row, bubble?.routeInboundMap);
+        return String(rowKey || "") === outboundKey;
+      });
     }
     return rows;
   }
 
   _departureDirectionTag(dep, bubble) {
-    const key = String(dep?.directionKey || "");
+    const key = String(this._normalizedDirectionKeyForRow(dep, bubble?.routeInboundMap) || "");
     if (key && key === bubble.directionMeta.inboundKey) return "Inbound";
     if (key && key === bubble.directionMeta.outboundKey) return "Outbound";
     return "";
@@ -2633,6 +2665,7 @@ class MetlinkExplorerCard extends LitElement {
         outboundKey: null,
         hasBoth: false,
       },
+      routeInboundMap,
     };
     this.requestUpdate();
     this._resetBubbleAutoCloseTimer();

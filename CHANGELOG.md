@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2026-05-27
+
+### Fix - Bus shared-stop inbound/outbound filtering now includes all routes correctly
+
+- Fixed mixed shared-stop direction filtering where bus departures from some routes could disappear under Inbound/Outbound tabs.
+- Expanded route inbound-direction lookup to support route ID and route short name keys when normalizing row direction keys.
+- Added per-row direction key normalization during filter and badge evaluation, so rows that arrive with numeric keys (`0`/`1`) still match semantic Inbound/Outbound filters.
+- Kept train shared-station behavior aligned with the same robust normalization path.
+
 ## [1.0.10] - 2026-05-27
 
 ### Feature - Colour-coded inbound/outbound direction indicators
