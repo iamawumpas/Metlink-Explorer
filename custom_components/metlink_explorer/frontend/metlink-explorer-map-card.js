@@ -2252,6 +2252,31 @@ class MetlinkExplorerCard extends LitElement {
     return Boolean(rowStationId && targetStationId && rowStationId === targetStationId);
   }
 
+  _candidateScheduleStopKeys(byStop, stopIds, targetMode = "") {
+    const source = byStop && typeof byStop === 'object' ? byStop : {};
+    const directIds = [...new Set((Array.isArray(stopIds) ? stopIds : [stopIds]).map((id) => String(id || '').trim()).filter(Boolean))];
+    if (directIds.length === 0) return [];
+    if (this._modeBucket(targetMode) !== 'train') return directIds;
+
+    // Train schedules can be keyed by platform ids (e.g. WELL1/WELL2) while bubble stops
+    // may refer to station ids. Include all by_stop keys that normalize to the same station id.
+    const targetStations = new Set(
+      directIds
+        .map((id) => this._normalizeTrainStationStopId(id))
+        .filter(Boolean)
+    );
+    const expanded = new Set(directIds);
+    Object.keys(source).forEach((key) => {
+      const raw = String(key || '').trim();
+      if (!raw) return;
+      const station = this._normalizeTrainStationStopId(raw);
+      if (station && targetStations.has(station)) {
+        expanded.add(raw);
+      }
+    });
+    return [...expanded];
+  }
+
   _dbModeSlugFromModeBucket(modeBucket = "") {
     const mode = this._modeBucket(modeBucket);
     if (mode === 'cable') return 'cable_car';
@@ -2312,8 +2337,9 @@ class MetlinkExplorerCard extends LitElement {
 
     const rows = [];
     const seenKeys = new Set();
+    const candidateStopIds = this._candidateScheduleStopKeys(byStop, stopIds, targetMode);
 
-    for (const stopId of stopIds) {
+    for (const stopId of candidateStopIds) {
       const stopRows = byStop[String(stopId)];
       if (!Array.isArray(stopRows)) continue;
 
@@ -2454,6 +2480,10 @@ class MetlinkExplorerCard extends LitElement {
         const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
         const routeId = String(row?.route_id || "").trim();
         const serviceLabel = String(row?.service_label || "").trim();
+        const directionIdRaw = row?.direction_id;
+        const directionId = directionIdRaw === undefined || directionIdRaw === null
+          ? ""
+          : String(directionIdRaw).trim();
         let directionLabel = this._resolveDirectionLabel(
           routeId,
           directionId,
@@ -2467,10 +2497,6 @@ class MetlinkExplorerCard extends LitElement {
             directionLabel = `${originStop} - ${destinationStop}`;
           }
         }
-        const directionIdRaw = row?.direction_id;
-        const directionId = directionIdRaw === undefined || directionIdRaw === null
-          ? ""
-          : String(directionIdRaw).trim();
         const directionKey = directionId || directionLabel;
         const routeCanonical = routeShortName.trim().toUpperCase();
         const directionCanonical = directionLabel.trim().toUpperCase();
