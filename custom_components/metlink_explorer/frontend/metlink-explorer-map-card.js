@@ -2615,11 +2615,13 @@ class MetlinkExplorerCard extends LitElement {
     this._resetBubbleAutoCloseTimer();
 
     try {
-      const allowedRouteIds = new Set(
-        (originFeatures || [])
-          .map((f) => String(f?.properties?.route_id || '').trim())
-          .filter(Boolean)
-      );
+      const allowedRouteIds = modeBucket === 'train'
+        ? new Set()
+        : new Set(
+          (originFeatures || [])
+            .map((f) => String(f?.properties?.route_id || '').trim())
+            .filter(Boolean)
+        );
       let rawDepartures = await this._departuresForStops(stopScopeIds, modeBucket, allowedRouteIds);
 
       // Terminus safety-net: if no rows found, expand scope to terminal siblings on the same route.
