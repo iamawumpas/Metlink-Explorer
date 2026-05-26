@@ -2587,7 +2587,19 @@ class MetlinkExplorerCard extends LitElement {
     // This lets _normalizeRowDirectionKeys rewrite numeric direction_id keys to
     // stable "inbound"/"outbound" labels, handling routes that use 0=inbound, 1=outbound
     // inconsistently.
-    const routeInboundMap = this._buildRouteInboundMap(originFeatures);
+    // For train/bus (shared-stop modes), scan ALL same-mode entities so every
+    // route's inbound_direction_id is known — not just the clicked entity's route.
+    // Without this, rows from other routes (KPL, HVL, MEL, JVL at WELL) keep raw
+    // "0"/"1" directionKeys and get filtered out when the tab shows "outbound".
+    let routeInboundMapFeatures = originFeatures;
+    if (modeBucket === 'train' || modeBucket === 'bus') {
+      const allModeEntries = this._visibleRouteEntriesForMode(modeBucket);
+      const allFeatures = allModeEntries.flatMap((e) => this._parseRouteGeometry(e?.entity) || []);
+      if (allFeatures.length > 0) {
+        routeInboundMapFeatures = allFeatures;
+      }
+    }
+    const routeInboundMap = this._buildRouteInboundMap(routeInboundMapFeatures);
 
     // Always close any existing bubble first so the next one can replay its entry animation.
     if (this._departureBubble) {

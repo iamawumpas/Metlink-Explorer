@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2026-05-28
+
+### Fix - Shared train/bus stop bubbles now show all routes (e.g. WELL shows KPL, HVL, MEL, JVL, WRL)
+
+- Fixed departure bubbles at shared train and bus stops showing only the clicked route's departures instead of all routes serving that stop.
+- Root cause: the per-route direction normalisation map (`routeInboundMap`) was built only from the clicked route entity's geometry features. Rows from other routes at the same stop kept raw numeric `directionKey` values (`"0"`/`"1"`) that didn't match the `"outbound"` tab filter, making them invisible.
+- Fix: for train and bus mode, the direction normalisation map is now built from all same-mode route entities configured in the card, so every route's `inbound_direction_id` is known before direction tabs are applied.
+- Wellington Station (`WELL`) and all other shared Wellington suburban train stations now correctly display departures from all lines (KPL, HVL, MEL, JVL, WRL).
+
 ## [1.0.8] - 2026-05-27
 
 ### Fix - Automatic terminus selection for train and bus routes
