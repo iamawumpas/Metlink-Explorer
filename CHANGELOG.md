@@ -5,7 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.14.1] - 2026-05-24
+## [0.14.3] - 2026-05-26
+
+### Fix - Bubble loading resilience and terminus stop handling
+
+- Prevented departure bubbles from getting stuck on "Loading departures..." by adding board payload fetch timeout handling and a fail-safe empty-state fallback.
+- Terminus-only stops no longer pair with nearby opposite-direction stops, avoiding incorrect extra departures at route endpoints.
+- Route start/end terminus stops are now automatically displayed on the map even when not selected in the editor.
+- Preserved departure-only behavior for termini by keeping endpoint arrival rows excluded from board rows.
+
 ## [0.14.2] - 2026-05-26
 
 ### Feature - Inbound/outbound stop pairing and geographical stop picker

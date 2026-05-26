@@ -1707,12 +1707,16 @@ class MetlinkExplorerCard extends LitElement {
   }
 
   async _fetchBoardPayload(dataUrl) {
+    if (!dataUrl) return null;
     const now = Date.now();
     const cached = this._boardPayloadCache.get(dataUrl);
     if (cached && (now - cached.ts) < 10000) return cached.payload;
 
     try {
-      const response = await fetch(dataUrl, { cache: "no-store" });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500);
+      const response = await fetch(dataUrl, { cache: "no-store", signal: controller.signal });
+      clearTimeout(timeoutId);
       if (!response.ok) return null;
       const payload = await response.json();
       this._boardPayloadCache.set(dataUrl, { ts: now, payload });
@@ -1890,6 +1894,32 @@ class MetlinkExplorerCard extends LitElement {
     }
 
     return Boolean(profile.hasTerminal && !profile.hasPassThrough);
+  }
+
+  _isTerminusOnlyStop(stopId, modeBucket = "") {
+    const profile = this._stopTerminalProfileForMode(stopId, modeBucket);
+    return Boolean(profile.hasTerminal && !profile.hasPassThrough);
+  }
+
+  _terminalStopIdsFromFeatures(features) {
+    const ids = new Set();
+    (features || []).forEach((feature) => {
+      const timelineStops = feature?.properties?.timeline_stops || {};
+      Object.values(timelineStops).forEach((directionStops) => {
+        if (!Array.isArray(directionStops) || directionStops.length === 0) return;
+        const first = String(directionStops[0]?.stop_id || "").trim();
+        const last = String(directionStops[directionStops.length - 1]?.stop_id || "").trim();
+        if (first) ids.add(first);
+        if (last) ids.add(last);
+      });
+    });
+    return ids;
+  }
+
+  _displayStopIdsForEntry(entry, features) {
+    const ids = new Set((entry?.selected_stops || []).map((id) => String(id || "").trim()).filter(Boolean));
+    this._terminalStopIdsFromFeatures(features).forEach((id) => ids.add(id));
+    return ids;
   }
 
   _routeColorForShortName(routeShortName) {
@@ -2091,14 +2121,11 @@ class MetlinkExplorerCard extends LitElement {
     const stopName = String(stopFeature?.properties?.stop_name || `Stop ${stopId}`);
     const modeBucket = this._modeBucket(stopFeature?.properties?.mode || "");
     const forceOutboundOnly = this._shouldForceOutboundOnlyForStop(stopId, modeBucket);
-    const influenceIdsRaw = String(stopFeature?.properties?.influence_stop_ids || "");
-    const influenceStopIds = influenceIdsRaw
-      .split("|")
-      .map((id) => String(id || "").trim())
-      .filter(Boolean);
-
-    // Find the nearest opposite-direction stop on the same route within 50m.
-    const pairedStop = this._findPairedOppositeStop(stopId, lat, lon, modeBucket, 50);
+    const isTerminusOnlyStop = this._isTerminusOnlyStop(stopId, modeBucket);
+    // Find a nearby opposite-direction stop only for non-terminus stops.
+    const pairedStop = isTerminusOnlyStop
+      ? null
+      : this._findPairedOppositeStop(stopId, lat, lon, modeBucket, 50);
     const stopScopeIds = [stopId, pairedStop?.stopId].filter(Boolean);
 
     // Gather route features for Wellington Central inbound direction detection.
@@ -2144,17 +2171,28 @@ class MetlinkExplorerCard extends LitElement {
     this.requestUpdate();
     this._resetBubbleAutoCloseTimer();
 
-    const departures = await this._departuresForStops(stopScopeIds, modeBucket);
-    if (openSequence !== this._bubbleOpenSequence) return;
-    if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
-    this._departureBubble = {
-      ...this._departureBubble,
-      loading: false,
-      departures,
-      directionFilter: forceOutboundOnly ? "outbound" : "all",
-      directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly, routeFeatures),
-    };
-    this.requestUpdate();
+    try {
+      const departures = await this._departuresForStops(stopScopeIds, modeBucket);
+      if (openSequence !== this._bubbleOpenSequence) return;
+      if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
+      this._departureBubble = {
+        ...this._departureBubble,
+        loading: false,
+        departures,
+        directionFilter: forceOutboundOnly ? "outbound" : "all",
+        directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly, routeFeatures),
+      };
+      this.requestUpdate();
+    } catch (_) {
+      if (openSequence !== this._bubbleOpenSequence) return;
+      if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
+      this._departureBubble = {
+        ...this._departureBubble,
+        loading: false,
+        departures: [],
+      };
+      this.requestUpdate();
+    }
   }
 
   _hubFeatureAtPoint(point) {
@@ -2489,12 +2527,17 @@ class MetlinkExplorerCard extends LitElement {
       categories.forEach((cat) => {
         const entries = this.config[`${cat}_entities`] || [];
         [...entries].reverse().forEach((entry) => {
-          const selectedStopIds = new Set((entry.selected_stops || []).map((id) => String(id)));
-          if (selectedStopIds.size === 0) return;
           const features = this._parseRouteGeometry(entry.entity);
           if (!features) return;
+          const displayStopIds = this._displayStopIdsForEntry(entry, features);
+          if (displayStopIds.size === 0) return;
 
-          this._buildSelectedStopContextIndex(cat, entry, features, selectedStopContextsByMode);
+          this._buildSelectedStopContextIndex(
+            cat,
+            { ...entry, selected_stops: [...displayStopIds] },
+            features,
+            selectedStopContextsByMode,
+          );
 
           for (const feature of features) {
             const timelineStops = feature?.properties?.timeline_stops || {};
@@ -2504,7 +2547,7 @@ class MetlinkExplorerCard extends LitElement {
                 const stopId = String(stop?.stop_id || '');
                 const lon = Number(stop?.stop_lon);
                 const lat = Number(stop?.stop_lat);
-                if (!selectedStopIds.has(stopId) || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+                if (!displayStopIds.has(stopId) || !Number.isFinite(lon) || !Number.isFinite(lat)) continue;
 
                 const key = this._hubCoordKey(lon, lat);
                 if (!key) continue;
@@ -2565,8 +2608,8 @@ class MetlinkExplorerCard extends LitElement {
             this.map.setLayoutProperty(`layer-${sourceId}`, 'visibility', 'none');
           }
 
-          const selectedStopIds = new Set((entry.selected_stops || []).map((id) => String(id)));
-          if (selectedStopIds.size > 0) {
+          const displayStopIds = this._displayStopIdsForEntry(entry, features);
+          if (displayStopIds.size > 0) {
             const selectedStops = [];
             for (const feature of features) {
               const props = feature?.properties || {};
@@ -2575,7 +2618,7 @@ class MetlinkExplorerCard extends LitElement {
                 if (!Array.isArray(directionStops)) continue;
                 for (const stop of directionStops) {
                   const stopId = String(stop?.stop_id || '');
-                  if (selectedStopIds.has(stopId) && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
+                  if (displayStopIds.has(stopId) && Number.isFinite(Number(stop.stop_lat)) && Number.isFinite(Number(stop.stop_lon))) {
                     selectedStops.push(stop);
                   }
                 }
