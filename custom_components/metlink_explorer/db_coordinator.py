@@ -192,7 +192,7 @@ class MetlinkStaticDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
 
 class MetlinkScheduleCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Build and write per-mode stop schedules for the next 24 hours."""
+    """Build and write per-mode stop schedules for the next 72 hours."""
 
     def __init__(
         self,
@@ -225,7 +225,7 @@ class MetlinkScheduleCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             now = datetime.now()
             generated_at = _utc_now_iso()
-            raw_by_stop = await self.api_client.get_mode_schedule_window_by_stop(self.route_ids, hours_ahead=24)
+            raw_by_stop = await self.api_client.get_mode_schedule_window_by_stop(self.route_ids, hours_ahead=72)
             by_stop: dict[str, list[dict[str, Any]]] = {}
             total_rows = 0
 

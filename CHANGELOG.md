@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.13] - 2026-05-27
+
+### Fix - School bus inbound/outbound departures now visible
+
+- Fixed school bus routes (and other routes without stop_pair_index data) showing no inbound departures.
+- Root cause 1: the schedule database window was only 24h (today + tomorrow). School buses do not run on weekends, so on a Friday afternoon, the 24h window contains no inbound rows for Monday.
+- Root cause 2: routes with missing/empty stop_pair_index were skipped from `routeInboundMap`, so their raw numeric direction keys (`"0"`/`"1"`) were never normalized to `"inbound"`/`"outbound"`. At a mixed bus+school bus stop, this caused school bus rows to be filtered out by the inbound/outbound tabs.
+- Fix 1: Schedule window extended to 72h (3 days) and the API now fetches service dates for the full window, ensuring school-day routes are included even over weekends.
+- Fix 2: `_buildRouteInboundMap` now includes all routes with a fallback to GTFS default (inbound = direction_id 1) when stop_pair_index is missing. This ensures all routes enter the map and get normalized at filter/render time.
+
 ## [1.0.12] - 2026-05-27
 
 ### Fix - Bus shared-stop bubbles now include outbound departures from all nearby routes

@@ -940,23 +940,31 @@ class MetlinkApiClient:
         today_str = now.strftime("%Y%m%d")
         tomorrow_str = (now + timedelta(days=1)).strftime("%Y%m%d")
 
+        # Fetch enough service dates to cover the full window.  School buses only
+        # run on school days (Mon-Fri), so a 24 h window centred on a Friday
+        # afternoon contains no inbound school-bus rows.  Fetching 4 days ensures
+        # the next school-day morning is always within the window even over a
+        # long weekend.
+        days_needed = max(2, (max(1, int(hours_ahead or 72)) + 23) // 24 + 1)
+        service_dates = [
+            (now + timedelta(days=d)).strftime("%Y%m%d") for d in range(days_needed)
+        ]
+
         trip_updates = await self.get_trip_updates()
         by_stop: dict[str, list[dict[str, Any]]] = {}
         seen_keys: set[tuple[str, str, str, str, str]] = set()
 
         for route_id in [str(rid).strip() for rid in route_ids if str(rid).strip()]:
-            rows_today = await self.get_route_timetable_rows(
-                route_id,
-                service_date=today_str,
-                trip_updates_payload=trip_updates,
-            )
-            rows_tomorrow = await self.get_route_timetable_rows(
-                route_id,
-                service_date=tomorrow_str,
-                trip_updates_payload=None,
-            )
+            all_rows: list[dict[str, Any]] = []
+            for idx, date_str in enumerate(service_dates):
+                date_rows = await self.get_route_timetable_rows(
+                    route_id,
+                    service_date=date_str,
+                    trip_updates_payload=trip_updates if idx == 0 else None,
+                )
+                all_rows.extend(date_rows or [])
 
-            for row in (rows_today or []) + (rows_tomorrow or []):
+            for row in all_rows:
                 if not isinstance(row, dict):
                     continue
 
