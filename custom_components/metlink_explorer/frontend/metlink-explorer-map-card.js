@@ -1101,7 +1101,7 @@ class MetlinkExplorerCard extends LitElement {
     const modeBucket = this._modeBucket(configCategory);
     if (!modeBucket) return;
 
-    const selectedStopIds = new Set((entry?.selected_stops || []).map((id) => String(id)));
+    const selectedStopIds = this._displayStopIdsForEntry(entry, features, modeBucket);
     if (selectedStopIds.size === 0) return;
     if (!Array.isArray(features) || features.length === 0) return;
 
@@ -1112,7 +1112,9 @@ class MetlinkExplorerCard extends LitElement {
       const rawStopId = String(stop?.stop_id || "").trim();
       const lon = Number(stop?.stop_lon);
       const lat = Number(stop?.stop_lat);
-      if (!selectedStopIds.has(rawStopId) || !Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      const normalizedStopIdForMode = this._normalizeStopIdForMode(rawStopId, modeBucket);
+      if (!selectedStopIds.has(rawStopId) && !selectedStopIds.has(normalizedStopIdForMode)) return;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
       const normalizedStopId = modeBucket === "train"
         ? (this._normalizeTrainStationStopId(rawStopId) || rawStopId)
@@ -2127,14 +2129,15 @@ class MetlinkExplorerCard extends LitElement {
     return Boolean(profile.hasTerminal && !profile.hasPassThrough);
   }
 
-  _terminalStopIdsFromFeatures(features) {
+  _terminalStopIdsFromFeatures(features, modeBucket = "") {
+    const mode = this._modeBucket(modeBucket);
     const ids = new Set();
     (features || []).forEach((feature) => {
       const timelineStops = feature?.properties?.timeline_stops || {};
       Object.values(timelineStops).forEach((directionStops) => {
         if (!Array.isArray(directionStops) || directionStops.length === 0) return;
-        const first = String(directionStops[0]?.stop_id || "").trim();
-        const last = String(directionStops[directionStops.length - 1]?.stop_id || "").trim();
+        const first = this._normalizeStopIdForMode(directionStops[0]?.stop_id, mode);
+        const last = this._normalizeStopIdForMode(directionStops[directionStops.length - 1]?.stop_id, mode);
         if (first) ids.add(first);
         if (last) ids.add(last);
       });
@@ -2142,9 +2145,17 @@ class MetlinkExplorerCard extends LitElement {
     return ids;
   }
 
-  _displayStopIdsForEntry(entry, features) {
-    const ids = new Set((entry?.selected_stops || []).map((id) => String(id || "").trim()).filter(Boolean));
-    this._terminalStopIdsFromFeatures(features).forEach((id) => ids.add(id));
+  _displayStopIdsForEntry(entry, features, modeBucket = "") {
+    const mode = this._modeBucket(modeBucket);
+    const ids = new Set(
+      (entry?.selected_stops || [])
+        .map((id) => this._normalizeStopIdForMode(id, mode))
+        .filter(Boolean)
+    );
+    // Automatic terminus selection is always enabled for train and bus routes.
+    if (mode === "train" || mode === "bus") {
+      this._terminalStopIdsFromFeatures(features, mode).forEach((id) => ids.add(id));
+    }
     return ids;
   }
 
@@ -2626,7 +2637,7 @@ class MetlinkExplorerCard extends LitElement {
 
       // Terminus safety-net: if no rows found, expand scope to terminal siblings on the same route.
       if (rawDepartures.length === 0 && isTerminusOnlyStop && originFeatures.length > 0) {
-        const terminalIds = [...this._terminalStopIdsFromFeatures(originFeatures)];
+        const terminalIds = [...this._terminalStopIdsFromFeatures(originFeatures, modeBucket)];
         const expandedScope = [...new Set([...stopScopeIds, ...terminalIds])];
         if (expandedScope.length > stopScopeIds.length) {
           const retryRows = await this._departuresForStops(expandedScope, modeBucket, allowedRouteIds);
@@ -3070,7 +3081,7 @@ class MetlinkExplorerCard extends LitElement {
         [...entries].reverse().forEach((entry) => {
           const features = this._parseRouteGeometry(entry.entity);
           if (!features) return;
-          const displayStopIds = this._displayStopIdsForEntry(entry, features);
+          const displayStopIds = this._displayStopIdsForEntry(entry, features, cat);
           if (displayStopIds.size === 0) return;
 
           this._buildSelectedStopContextIndex(
@@ -3150,7 +3161,7 @@ class MetlinkExplorerCard extends LitElement {
             this.map.setLayoutProperty(`layer-${sourceId}`, 'visibility', 'none');
           }
 
-          const displayStopIds = this._displayStopIdsForEntry(entry, features);
+          const displayStopIds = this._displayStopIdsForEntry(entry, features, cat);
           if (displayStopIds.size > 0) {
             const selectedStops = [];
             for (const feature of features) {

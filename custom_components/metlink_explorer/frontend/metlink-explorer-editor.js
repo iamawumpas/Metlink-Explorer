@@ -166,6 +166,20 @@ class MetlinkExplorerEditor extends LitElement {
     );
     this._updateConfig({ [key]: newEntities });
 
+    if (field === 'entity' && (type === 'train' || type === 'bus')) {
+      const updated = newEntities[index] || {};
+      const hasSelectedStops = Array.isArray(updated.selected_stops) && updated.selected_stops.length > 0;
+      if (!hasSelectedStops) {
+        const autoTerminalStops = this._terminalStopIdsForEntity(String(value || ''), type);
+        if (autoTerminalStops.length > 0) {
+          const withTermini = newEntities.map((item, i) => (
+            i === index ? { ...item, selected_stops: autoTerminalStops } : item
+          ));
+          this._updateConfig({ [key]: withTermini });
+        }
+      }
+    }
+
     // Persist live tracking to integration route config (backend source of truth)
     if (field === 'live_tracking') {
       const updated = newEntities[index];
@@ -267,6 +281,36 @@ class MetlinkExplorerEditor extends LitElement {
     return geojson.features;
   }
 
+  _normalizeStopIdForMode(stopId, mode) {
+    const raw = String(stopId || '').trim();
+    if (!raw) return '';
+    if (mode === 'train') {
+      return raw.toUpperCase().replace(/[\s_-]*\d+$/, '');
+    }
+    return raw;
+  }
+
+  _terminalStopIdsForFeatures(features, mode) {
+    const ids = new Set();
+    (features || []).forEach((feature) => {
+      const timelineStops = feature?.properties?.timeline_stops || {};
+      Object.values(timelineStops).forEach((directionStops) => {
+        if (!Array.isArray(directionStops) || directionStops.length === 0) return;
+        const first = this._normalizeStopIdForMode(directionStops[0]?.stop_id, mode);
+        const last = this._normalizeStopIdForMode(directionStops[directionStops.length - 1]?.stop_id, mode);
+        if (first) ids.add(first);
+        if (last) ids.add(last);
+      });
+    });
+    return [...ids];
+  }
+
+  _terminalStopIdsForEntity(entityId, mode) {
+    const features = this._parseFeatures(entityId);
+    if (!Array.isArray(features) || features.length === 0) return [];
+    return this._terminalStopIdsForFeatures(features, mode);
+  }
+
   _timelineStopsFromFeature(feature) {
     const timelineStops = feature?.properties?.timeline_stops || {};
     const dirKeys = Object.keys(timelineStops);
@@ -340,7 +384,7 @@ class MetlinkExplorerEditor extends LitElement {
   _normalizeStops(type, rawStops) {
     const unique = new Map();
     for (const stop of rawStops || []) {
-      const stopId = String(stop?.stop_id || "").trim();
+      const stopId = this._normalizeStopIdForMode(stop?.stop_id, type);
       const stopName = String(stop?.stop_name || "").trim();
       if (!stopId || !stopName) continue;
       const key = stopId;
@@ -375,11 +419,13 @@ class MetlinkExplorerEditor extends LitElement {
 
   _addSelectedStop(type, index, stopId) {
     const key = `${type}_entities`;
-    const normalized = String(stopId || "").trim();
+    const normalized = this._normalizeStopIdForMode(stopId, type);
     if (!normalized) return;
     const newEntities = (this._config[key] || []).map((item, i) => {
       if (i !== index) return item;
-      const current = Array.isArray(item.selected_stops) ? item.selected_stops.map(String) : [];
+      const current = Array.isArray(item.selected_stops)
+        ? item.selected_stops.map((id) => this._normalizeStopIdForMode(id, type)).filter(Boolean)
+        : [];
       if (current.includes(normalized)) return item;
       return { ...item, selected_stops: [...current, normalized] };
     });
@@ -388,10 +434,12 @@ class MetlinkExplorerEditor extends LitElement {
 
   _removeSelectedStop(type, index, stopId) {
     const key = `${type}_entities`;
-    const normalized = String(stopId || "").trim();
+    const normalized = this._normalizeStopIdForMode(stopId, type);
     const newEntities = (this._config[key] || []).map((item, i) => {
       if (i !== index) return item;
-      const current = Array.isArray(item.selected_stops) ? item.selected_stops.map(String) : [];
+      const current = Array.isArray(item.selected_stops)
+        ? item.selected_stops.map((id) => this._normalizeStopIdForMode(id, type)).filter(Boolean)
+        : [];
       return { ...item, selected_stops: current.filter((id) => id !== normalized) };
     });
     this._updateConfig({ [key]: newEntities });
@@ -493,7 +541,11 @@ class MetlinkExplorerEditor extends LitElement {
             });
 
             const allStops = this._stopsForEntry(type, entry);
-            const selectedStops = Array.isArray(entry.selected_stops) ? entry.selected_stops.map(String) : [];
+            const selectedStops = Array.isArray(entry.selected_stops)
+              ? entry.selected_stops
+                  .map((id) => this._normalizeStopIdForMode(id, type))
+                  .filter(Boolean)
+              : [];
             const selectedSet = new Set(selectedStops);
             const availableStops = allStops.filter((s) => !selectedSet.has(String(s.stop_id)));
             const selectedStopObjects = selectedStops

@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-05-27
+
+### Fix - Automatic terminus selection for train and bus routes
+
+- Restored automatic terminus selection for all train and bus route entries in the map card, even when no manual `selected_stops` are configured.
+- Terminus stop IDs are now mode-normalized before selection and fallback expansion, keeping train platform variants aligned with station IDs.
+- Selected-stop influence indexing now includes auto-selected termini, improving shared-station/stop grouping behavior.
+- Card editor now auto-populates train and bus `selected_stops` with route termini when an entity is chosen and no stops are manually selected.
+- Editor stop normalization now treats train platform suffixes consistently so terminus selections remain stable.
+
 ## [1.0.7] - 2026-05-27
 
 ### Fix - Bus shared-stop bubbles now show mixed routes
