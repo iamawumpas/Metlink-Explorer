@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-05-26
+
+### Fix - Backend train stop normalization across all DB schedule entries
+
+- Added canonical train stop ID normalization in backend schedule generation so platform variants (e.g. `WELL1`, `WELL2`, `PETO0`, `PETO1`) are collapsed to station IDs (e.g. `WELL`, `PETO`).
+- Applied normalization to both schedule row `stop_id` values and DB `by_stop` keys before writing `/local/metlink_explorer/db/train_schedules.json`.
+- Added dedupe for merged train rows and stable per-stop sorting after normalization.
+- Normalized train timeline stop IDs in route geometry metadata so train stop identifiers stay consistent across DB payloads.
+
 ## [1.0.4] - 2026-05-26
 
 ### Fix - Train stop departures missing on some stations

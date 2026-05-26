@@ -125,6 +125,37 @@ class MetlinkApiClient:
         text = re.sub(r"[^A-Z0-9]+", "", text)
         return text
 
+    def _canonical_stop_id(self, stop_id: Any) -> str:
+        """Return canonical stop_id; for train, remove platform suffix digits.
+
+        Examples: WELL1/WELL2 -> WELL, PETO0/PETO1 -> PETO.
+        """
+        raw = str(stop_id or "").strip()
+        if not raw:
+            return ""
+        if self._transportation_type != TRAIN_ROUTE_TYPE:
+            return raw
+        return re.sub(r"[\s_-]*\d+$", "", raw.upper())
+
+    def _normalize_train_timeline_stops(self, stops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Normalize train timeline stop_ids and drop duplicate station entries."""
+        if self._transportation_type != TRAIN_ROUTE_TYPE:
+            return stops
+
+        normalized: list[dict[str, Any]] = []
+        seen_station_ids: set[str] = set()
+        for stop in stops:
+            if not isinstance(stop, dict):
+                continue
+            canonical_id = self._canonical_stop_id(stop.get("stop_id"))
+            if not canonical_id or canonical_id in seen_station_ids:
+                continue
+            seen_station_ids.add(canonical_id)
+            next_stop = dict(stop)
+            next_stop["stop_id"] = canonical_id
+            normalized.append(next_stop)
+        return normalized
+
     async def _request(self, endpoint: str) -> dict[str, Any]:
         """Make a request to the API."""
         url = f"{self._base_url}{endpoint}"
@@ -461,7 +492,10 @@ class MetlinkApiClient:
         for direction_id in (0, 1):
             try:
                 timeline_data = await self.get_route_timeline_for_card(route_id, direction_id)
-                timeline_stops_by_direction[direction_id] = timeline_data.get("stops", [])
+                stops = timeline_data.get("stops", [])
+                if isinstance(stops, list):
+                    stops = self._normalize_train_timeline_stops(stops)
+                timeline_stops_by_direction[direction_id] = stops
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.debug(
                     "Failed to fetch timeline stops for route %s direction %s: %s",
@@ -908,6 +942,7 @@ class MetlinkApiClient:
 
         trip_updates = await self.get_trip_updates()
         by_stop: dict[str, list[dict[str, Any]]] = {}
+        seen_keys: set[tuple[str, str, str, str, str]] = set()
 
         for route_id in [str(rid).strip() for rid in route_ids if str(rid).strip()]:
             rows_today = await self.get_route_timetable_rows(
@@ -941,12 +976,23 @@ class MetlinkApiClient:
                 if dep_dt < now or dep_dt > window_end:
                     continue
 
-                stop_id = str(row.get("stop_id") or "").strip()
+                stop_id = self._canonical_stop_id(row.get("stop_id"))
                 if not stop_id:
                     continue
 
                 out_row = dict(row)
+                out_row["stop_id"] = stop_id
                 out_row["departure_iso"] = dep_dt.isoformat()
+                dedupe_key = (
+                    stop_id,
+                    str(out_row.get("route_id") or "").strip(),
+                    str(out_row.get("trip_id") or "").strip(),
+                    str(out_row.get("direction_id") or "").strip(),
+                    str(out_row.get("departure_iso") or "").strip(),
+                )
+                if dedupe_key in seen_keys:
+                    continue
+                seen_keys.add(dedupe_key)
                 by_stop.setdefault(stop_id, []).append(out_row)
 
         for stop_rows in by_stop.values():
@@ -971,7 +1017,16 @@ class MetlinkApiClient:
             trips_for_date = trips
 
         stops = await self.get_stops()
-        stop_name_by_id = {str(s.get("stop_id")): s.get("stop_name", "Unknown Stop") for s in stops}
+        stop_name_by_id: dict[str, str] = {}
+        for stop in stops:
+            raw_stop_id = str(stop.get("stop_id") or "").strip()
+            if not raw_stop_id:
+                continue
+            stop_name = str(stop.get("stop_name") or "Unknown Stop")
+            stop_name_by_id.setdefault(raw_stop_id, stop_name)
+            canonical_stop_id = self._canonical_stop_id(raw_stop_id)
+            if canonical_stop_id:
+                stop_name_by_id.setdefault(canonical_stop_id, stop_name)
         default_route_short_name = await self._get_route_short_name(route_id)
 
         sem = asyncio.Semaphore(8)
@@ -993,7 +1048,7 @@ class MetlinkApiClient:
                 continue
 
             last = stop_times[-1]
-            destination_stop_id = str(last.get("stop_id"))
+            destination_stop_id = self._canonical_stop_id(last.get("stop_id"))
             destination_name = stop_name_by_id.get(destination_stop_id, "Unknown Stop")
 
             trip_id = str(trip.get("trip_id"))
@@ -1008,7 +1063,9 @@ class MetlinkApiClient:
             )
 
             for st in stop_times:
-                stop_id = str(st.get("stop_id"))
+                stop_id = self._canonical_stop_id(st.get("stop_id"))
+                if not stop_id:
+                    continue
                 # Departure boards should only include true departure events.
                 dep_time = st.get("departure_time")
                 if not dep_time:

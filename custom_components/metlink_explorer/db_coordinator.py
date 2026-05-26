@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -211,6 +212,15 @@ class MetlinkScheduleCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=DB_REFRESH_SCHEDULES_SECONDS),
         )
 
+    def _canonical_stop_id(self, stop_id: Any) -> str:
+        """Collapse train platform stop ids (e.g. WELL1/WELL2 -> WELL)."""
+        raw = str(stop_id or "").strip()
+        if not raw:
+            return ""
+        if self.mode_slug != "train":
+            return raw
+        return re.sub(r"[\s_-]*\d+$", "", raw.upper())
+
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             now = datetime.now()
@@ -222,6 +232,9 @@ class MetlinkScheduleCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for stop_id, rows in raw_by_stop.items():
                 if not isinstance(rows, list):
                     continue
+                canonical_stop_id = self._canonical_stop_id(stop_id)
+                if not canonical_stop_id:
+                    continue
                 normalized_rows: list[dict[str, Any]] = []
                 for row in rows:
                     if not isinstance(row, dict):
@@ -230,13 +243,16 @@ class MetlinkScheduleCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     dep_dt = _service_datetime(row.get("service_date"), dep_time)
                     if dep_dt is None:
                         continue
+                    row_stop_id = self._canonical_stop_id(row.get("stop_id") or canonical_stop_id)
+                    if not row_stop_id:
+                        continue
                     normalized_rows.append(
                         {
                             "route_id": str(row.get("route_id") or ""),
                             "route_short_name": row.get("route_short_name"),
                             "service_label": row.get("service_label"),
                             "direction_id": row.get("direction_id"),
-                            "stop_id": str(row.get("stop_id") or stop_id),
+                            "stop_id": row_stop_id,
                             "stop_name": row.get("stop_name"),
                             "destination": row.get("destination"),
                             "service_date": row.get("service_date"),
@@ -250,8 +266,12 @@ class MetlinkScheduleCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         }
                     )
                 if normalized_rows:
-                    by_stop[str(stop_id)] = normalized_rows
+                    bucket = by_stop.setdefault(canonical_stop_id, [])
+                    bucket.extend(normalized_rows)
                     total_rows += len(normalized_rows)
+
+            for stop_id, rows in by_stop.items():
+                rows.sort(key=lambda r: str(r.get("departure_iso") or ""))
 
             schedules_payload = {
                 "generated_at": generated_at,
