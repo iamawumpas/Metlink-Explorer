@@ -471,6 +471,8 @@ class MetlinkApiClient:
                 )
                 timeline_stops_by_direction[direction_id] = []
         
+        stop_pair_index = self._build_stop_pair_index(route_id, timeline_stops_by_direction)
+
         feature = {
             "type": "Feature",
             "properties": {
@@ -479,6 +481,7 @@ class MetlinkApiClient:
                 "shape_count": len(lines),
                 "timeline_stops": timeline_stops_by_direction,
                 "hub_stops": [stop for stops in timeline_stops_by_direction.values() for stop in stops if isinstance(stop, dict) and stop.get("is_hub")],
+                "stop_pair_index": stop_pair_index,
             },
             "geometry": {
                 "type": "MultiLineString" if len(lines) > 1 else "LineString",
@@ -489,6 +492,139 @@ class MetlinkApiClient:
         self._route_geometry_cache[route_id] = (now, feature)
         self._route_geometry_miss_cache.pop(route_id, None)
         return feature
+
+    # ── Wellington Central reference ────────────────────────────────────────────
+    _WELLINGTON_CENTRAL_LAT: float = -41.2790
+    _WELLINGTON_CENTRAL_LON: float = 174.7802
+    _INBOUND_PROXIMITY_METERS: float = 500.0
+    _STOP_PAIR_MAX_METERS: float = 50.0
+
+    @staticmethod
+    def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Return great-circle distance in metres between two coordinates."""
+        r = 6_371_000.0
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        d_phi = math.radians(lat2 - lat1)
+        d_lam = math.radians(lon2 - lon1)
+        a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
+        return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    def _build_stop_pair_index(
+        self,
+        route_id: str,
+        timeline_stops_by_direction: dict[int, list[dict[str, Any]]],
+    ) -> dict[str, dict[str, Any]]:
+        """Build a per-stop pairing table for a single route.
+
+        Returns a dict keyed by stop_id.  Each value contains:
+            route_id            – the owning route
+            direction_id        – which direction this stop record belongs to
+            is_terminus         – True when the stop is the first or last in its direction
+            has_pair            – True when a nearby opposite-direction stop was found
+            paired_stop_id      – stop_id of the paired stop (or None)
+            pair_distance_m     – haversine distance to the pair (or None)
+            inbound_direction_id – which direction_id is "towards Wellington Central"
+        """
+        # Determine inbound direction via Wellington Central proximity.
+        inbound_direction_id: int | None = None
+        for dir_id, stops in timeline_stops_by_direction.items():
+            for stop in stops:
+                s_lat = stop.get("stop_lat")
+                s_lon = stop.get("stop_lon")
+                if s_lat is None or s_lon is None:
+                    continue
+                try:
+                    dist = self._haversine_meters(
+                        self._WELLINGTON_CENTRAL_LAT, self._WELLINGTON_CENTRAL_LON,
+                        float(s_lat), float(s_lon),
+                    )
+                except (TypeError, ValueError):
+                    continue
+                if dist <= self._INBOUND_PROXIMITY_METERS:
+                    inbound_direction_id = int(dir_id)
+                    break
+            if inbound_direction_id is not None:
+                break
+        if inbound_direction_id is None:
+            inbound_direction_id = 1  # GTFS default
+
+        # Build a flat lookup: stop_id -> list of per-direction entries
+        stop_name_by_id: dict[str, str] = {}  # stop_id -> display name (for paired_stop_name)
+        stop_info_by_id: dict[str, list[dict[str, Any]]] = {}
+        for dir_id, stops in timeline_stops_by_direction.items():
+            total = len(stops)
+            for idx, stop in enumerate(stops):
+                sid = str(stop.get("stop_id") or "").strip()
+                if not sid:
+                    continue
+                s_lat = stop.get("stop_lat")
+                s_lon = stop.get("stop_lon")
+                if s_lat is None or s_lon is None:
+                    continue
+                try:
+                    s_lat = float(s_lat)
+                    s_lon = float(s_lon)
+                except (TypeError, ValueError):
+                    continue
+                s_name = str(stop.get("stop_name") or f"Stop {sid}")
+                stop_name_by_id[sid] = s_name
+                is_terminus = (idx == 0) or (idx == total - 1)
+                entry = {
+                    "route_id": route_id,
+                    "direction_id": int(dir_id),
+                    "lat": s_lat,
+                    "lon": s_lon,
+                    "is_terminus": is_terminus,
+                    "inbound_direction_id": inbound_direction_id,
+                    "has_pair": False,
+                    "paired_stop_id": None,
+                    "paired_stop_name": None,
+                    "pair_distance_m": None,
+                }
+                if sid not in stop_info_by_id:
+                    stop_info_by_id[sid] = []
+                stop_info_by_id[sid].append(entry)
+
+        # For every stop, find the nearest opposite-direction stop within threshold.
+        # Skip pairing for terminus-only stops to avoid merging line endpoints.
+        for sid, entries in stop_info_by_id.items():
+            for entry in entries:
+                # Skip terminus stops — they never pair.
+                if entry["is_terminus"]:
+                    continue
+                anchor_dir = entry["direction_id"]
+                opposite_dir = 1 - anchor_dir
+                best_sid: str | None = None
+                best_dist: float = self._STOP_PAIR_MAX_METERS
+                for candidate_sid, candidate_entries in stop_info_by_id.items():
+                    if candidate_sid == sid:
+                        continue
+                    for c_entry in candidate_entries:
+                        if c_entry["direction_id"] != opposite_dir:
+                            continue
+                        try:
+                            dist = self._haversine_meters(
+                                entry["lat"], entry["lon"],
+                                c_entry["lat"], c_entry["lon"],
+                            )
+                        except (TypeError, ValueError):
+                            continue
+                        if dist < best_dist:
+                            best_dist = dist
+                            best_sid = candidate_sid
+                if best_sid is not None:
+                    entry["has_pair"] = True
+                    entry["paired_stop_id"] = best_sid
+                    entry["paired_stop_name"] = stop_name_by_id.get(best_sid)
+                    entry["pair_distance_m"] = round(best_dist, 1)
+
+        # Flatten: one entry per stop_id (prefer non-terminus, then first entry).
+        result: dict[str, dict[str, Any]] = {}
+        for sid, entries in stop_info_by_id.items():
+            # Prefer the entry that has a pair, then first entry.
+            chosen = next((e for e in entries if e["has_pair"]), entries[0])
+            result[sid] = chosen
+        return result
 
     async def _fallback_route_lines_from_stop_patterns(self, route_id: str) -> list[list[list[float]]]:
         """Build route geometry lines from direction stop patterns as fallback."""

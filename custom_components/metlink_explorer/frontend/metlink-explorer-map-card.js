@@ -862,7 +862,7 @@ class MetlinkExplorerCard extends LitElement {
    * Returns 1 as the default if no determination can be made (GTFS convention).
    */
   _inboundDirectionIdForRoute(features) {
-    const wc = MetlinkExplorerMapCard.WELLINGTON_CENTRAL;
+    const wc = this.constructor?.WELLINGTON_CENTRAL || { lat: -41.2790, lon: 174.7802 };
     const THRESHOLD_METERS = 500;
 
     for (const feature of (features || [])) {
@@ -943,6 +943,58 @@ class MetlinkExplorerCard extends LitElement {
                 directionId: Number(oppositeDir),
               };
             }
+          }
+        }
+      }
+    }
+
+    return bestMatch;
+  }
+
+  _findPairedOppositeStopInFeatures(features, clickedStopId, clickedLat, clickedLon, modeBucket, maxDistanceMeters = 50) {
+    const normalizedClicked = this._normalizeStopIdForMode(clickedStopId, modeBucket);
+    if (!normalizedClicked || !Array.isArray(features) || features.length === 0) return null;
+
+    let bestMatch = null;
+    let bestDist = Infinity;
+
+    for (const feature of features) {
+      const timelineStops = feature?.properties?.timeline_stops || {};
+      const dirKeys = Object.keys(timelineStops);
+      const clickedDirections = new Set();
+      for (const dirKey of dirKeys) {
+        const stops = timelineStops[dirKey];
+        if (!Array.isArray(stops)) continue;
+        for (const stop of stops) {
+          const sid = this._normalizeStopIdForMode(String(stop?.stop_id || ""), modeBucket);
+          if (sid === normalizedClicked) {
+            clickedDirections.add(dirKey);
+            break;
+          }
+        }
+      }
+
+      if (clickedDirections.size === 0) continue;
+      for (const clickedDir of clickedDirections) {
+        const oppositeDir = clickedDir === "0" ? "1" : "0";
+        const oppositeStops = timelineStops[oppositeDir];
+        if (!Array.isArray(oppositeStops)) continue;
+        for (const stop of oppositeStops) {
+          const candidateId = this._normalizeStopIdForMode(String(stop?.stop_id || ""), modeBucket);
+          if (!candidateId || candidateId === normalizedClicked) continue;
+          const sLat = Number(stop?.stop_lat);
+          const sLon = Number(stop?.stop_lon);
+          if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) continue;
+          const dist = this._haversineMeters(clickedLat, clickedLon, sLat, sLon);
+          if (dist <= maxDistanceMeters && dist < bestDist) {
+            bestDist = dist;
+            bestMatch = {
+              stopId: candidateId,
+              stopLat: sLat,
+              stopLon: sLon,
+              stopName: String(stop?.stop_name || `Stop ${candidateId}`),
+              directionId: Number(oppositeDir),
+            };
           }
         }
       }
@@ -1815,7 +1867,7 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
-  _deriveDirectionMetaForMode(rows, modeBucket = "", forceOutboundOnly = false, routeFeatures = null) {
+  _deriveDirectionMetaForMode(rows, modeBucket = "", forceOutboundOnly = false, routeFeatures = null, inboundDirectionId = null) {
     // For ferry or terminal-only stops, collapse to outbound-only display.
     if (this._modeBucket(modeBucket) === "ferry" || forceOutboundOnly) {
       const base = this._deriveDirectionMeta(rows);
@@ -1830,9 +1882,12 @@ class MetlinkExplorerCard extends LitElement {
       };
     }
 
-    // Use Wellington Central proximity to determine stable inbound direction.
-    const inboundDirId = routeFeatures ? this._inboundDirectionIdForRoute(routeFeatures) : null;
-    return this._deriveDirectionMeta(rows, inboundDirId);
+    // Use explicitly provided inbound direction id (from backend pair index) when available,
+    // otherwise fall back to Wellington Central proximity scan over route features.
+    const resolvedInboundDirId = inboundDirectionId !== null
+      ? inboundDirectionId
+      : (routeFeatures ? this._inboundDirectionIdForRoute(routeFeatures) : null);
+    return this._deriveDirectionMeta(rows, resolvedInboundDirId);
   }
 
   _normalizeStopIdForMode(stopId, modeBucket = "") {
@@ -1883,6 +1938,30 @@ class MetlinkExplorerCard extends LitElement {
     return { hasTerminal, hasPassThrough };
   }
 
+  _stopTerminalProfileForFeatures(stopId, modeBucket = "", features = []) {
+    const mode = this._modeBucket(modeBucket);
+    const target = this._normalizeStopIdForMode(stopId, mode);
+    if (!target) return { hasTerminal: false, hasPassThrough: false };
+
+    let hasTerminal = false;
+    let hasPassThrough = false;
+    (features || []).forEach((feature) => {
+      const timelineStops = feature?.properties?.timeline_stops || {};
+      Object.values(timelineStops).forEach((directionStops) => {
+        if (!Array.isArray(directionStops) || directionStops.length === 0) return;
+        directionStops.forEach((stop, idx) => {
+          const current = this._normalizeStopIdForMode(stop?.stop_id, mode);
+          if (!current || current !== target) return;
+          const isTerminal = idx === 0 || idx === directionStops.length - 1;
+          if (isTerminal) hasTerminal = true;
+          else hasPassThrough = true;
+        });
+      });
+    });
+
+    return { hasTerminal, hasPassThrough };
+  }
+
   _shouldForceOutboundOnlyForStop(stopId, modeBucket = "") {
     const mode = this._modeBucket(modeBucket);
     if (mode === "ferry") return false;
@@ -1898,6 +1977,11 @@ class MetlinkExplorerCard extends LitElement {
 
   _isTerminusOnlyStop(stopId, modeBucket = "") {
     const profile = this._stopTerminalProfileForMode(stopId, modeBucket);
+    return Boolean(profile.hasTerminal && !profile.hasPassThrough);
+  }
+
+  _isTerminusOnlyStopForFeatures(stopId, modeBucket = "", features = []) {
+    const profile = this._stopTerminalProfileForFeatures(stopId, modeBucket, features);
     return Boolean(profile.hasTerminal && !profile.hasPassThrough);
   }
 
@@ -2120,20 +2204,41 @@ class MetlinkExplorerCard extends LitElement {
     const stopId = String(stopFeature?.properties?.stop_id || "");
     const stopName = String(stopFeature?.properties?.stop_name || `Stop ${stopId}`);
     const modeBucket = this._modeBucket(stopFeature?.properties?.mode || "");
+    const originEntityId = String(stopFeature?.properties?.entity_id || "").trim();
+    const originFeatures = originEntityId ? (this._parseRouteGeometry(originEntityId) || []) : [];
     const forceOutboundOnly = this._shouldForceOutboundOnlyForStop(stopId, modeBucket);
-    const isTerminusOnlyStop = this._isTerminusOnlyStop(stopId, modeBucket);
-    // Find a nearby opposite-direction stop only for non-terminus stops.
-    const pairedStop = isTerminusOnlyStop
-      ? null
-      : this._findPairedOppositeStop(stopId, lat, lon, modeBucket, 50);
+
+    // Attempt O(1) lookup from backend stop_pair_index before falling back to frontend scanning.
+    let pairedStop = null;
+    let inboundDirectionId = null;
+    const stopPairFeature = originFeatures.find((f) => f?.properties?.stop_pair_index);
+    const stopPairIndex = stopPairFeature?.properties?.stop_pair_index || null;
+    const pairEntry = stopPairIndex ? (stopPairIndex[stopId] || stopPairIndex[stopId.toUpperCase()] || null) : null;
+    const isTerminusOnlyStop = pairEntry
+      ? Boolean(pairEntry.is_terminus)
+      : (originFeatures.length > 0
+        ? this._isTerminusOnlyStopForFeatures(stopId, modeBucket, originFeatures)
+        : this._isTerminusOnlyStop(stopId, modeBucket));
+    if (pairEntry) {
+      inboundDirectionId = pairEntry.inbound_direction_id ?? null;
+      if (!pairEntry.is_terminus && pairEntry.has_pair && pairEntry.paired_stop_id) {
+        pairedStop = {
+          stopId: String(pairEntry.paired_stop_id),
+          stopName: String(pairEntry.paired_stop_name || `Stop ${pairEntry.paired_stop_id}`),
+        };
+      }
+    } else {
+      // Fallback: scan timeline stops when backend index is unavailable (e.g. old cache).
+      pairedStop = isTerminusOnlyStop
+        ? null
+        : (originFeatures.length > 0
+          ? this._findPairedOppositeStopInFeatures(originFeatures, stopId, lat, lon, modeBucket, 50)
+          : this._findPairedOppositeStop(stopId, lat, lon, modeBucket, 50));
+    }
     const stopScopeIds = [stopId, pairedStop?.stopId].filter(Boolean);
 
-    // Gather route features for Wellington Central inbound direction detection.
-    const routeFeatures = [];
-    for (const entry of this._visibleRouteEntriesForMode(modeBucket)) {
-      const features = this._parseRouteGeometry(entry?.entity);
-      if (Array.isArray(features)) routeFeatures.push(...features);
-    }
+    // Gather route features for inbound direction detection (used as fallback in _deriveDirectionMetaForMode).
+    const routeFeatures = originFeatures.length > 0 ? originFeatures : [];
 
     // Always close any existing bubble first so the next one can replay its entry animation.
     if (this._departureBubble) {
@@ -2180,7 +2285,7 @@ class MetlinkExplorerCard extends LitElement {
         loading: false,
         departures,
         directionFilter: forceOutboundOnly ? "outbound" : "all",
-        directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly, routeFeatures),
+        directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly, routeFeatures, inboundDirectionId),
       };
       this.requestUpdate();
     } catch (_) {
@@ -2574,6 +2679,7 @@ class MetlinkExplorerCard extends LitElement {
 
       let layerIdx = 0;
       const topHubLayerIds = [];
+      const emittedHubKeysByMode = new Map();
       for (const cat of categories) {
         const entries = this.config[`${cat}_entities`] || [];
         for (const entry of [...entries].reverse()) {
@@ -2690,6 +2796,16 @@ class MetlinkExplorerCard extends LitElement {
                 const offset = offsets[stopId] || { dLon: 0, dLat: 0 };
                 const baseLon = Number(stop.stop_lon);
                 const baseLat = Number(stop.stop_lat);
+                const canonicalStopKey = cat === 'train'
+                  ? (this._normalizeTrainStationStopId(stopId) || String(stopId || '').trim().toUpperCase())
+                  : String(stopId || '').trim().toUpperCase();
+                if (!emittedHubKeysByMode.has(cat)) emittedHubKeysByMode.set(cat, new Set());
+                const emitted = emittedHubKeysByMode.get(cat);
+                const globalHubKey = cat === 'train'
+                  ? canonicalStopKey
+                  : `${canonicalStopKey}:${baseLat.toFixed(6)}:${baseLon.toFixed(6)}`;
+                if (emitted.has(globalHubKey)) return null;
+                emitted.add(globalHubKey);
                 const coordKey = this._hubCoordKey(baseLon, baseLat);
                 const sharedModes = hubCoordModes.get(coordKey);
                 const hasTrainBusShare = sharedModes?.has('train') && sharedModes?.has('bus');
@@ -2704,13 +2820,17 @@ class MetlinkExplorerCard extends LitElement {
                     stop_id: stopId,
                     stop_name: String(stop.stop_name || 'Hub'),
                     mode: cat,
-                    canonical_stop_key: cat === 'train'
-                      ? (this._normalizeTrainStationStopId(stopId) || String(stopId || '').trim().toUpperCase())
-                      : String(stopId || '').trim().toUpperCase(),
+                    entity_id: String(entry.entity || ''),
+                    canonical_stop_key: canonicalStopKey,
                     influence_stop_ids: entryStop.influenceStopIds.join('|'),
                   },
                 };
-              });
+              }).filter(Boolean);
+
+              if (hubFeatures.length === 0) {
+                layerIdx++;
+                continue;
+              }
 
               const hubSourceId = `hub-source-${sourceId}`;
               if (!this.map.getSource(hubSourceId)) {

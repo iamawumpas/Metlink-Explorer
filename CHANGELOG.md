@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.4] - 2026-05-27
+
+### Improvement - Backend stop pairing table for faster map bubble lookups
+
+- Stop pairing (inbound/outbound match-up) is now computed once in the backend when route geometry is fetched and cached with the weekly geometry refresh, instead of being re-scanned in the browser on every stop click.
+- Each route's GeoJSON feature now includes a `stop_pair_index` dict keyed by stop ID, with pre-computed fields: `direction_id`, `is_terminus`, `has_pair`, `paired_stop_id`, `paired_stop_name`, `pair_distance_m`, and `inbound_direction_id`.
+- The `inbound_direction_id` per route is determined by Wellington Central proximity (500 m threshold) in the backend; the frontend no longer needs to scan stop coordinates at click time.
+- Map card `_openDepartureBubble` now performs an O(1) index lookup rather than an O(n) timeline scan to resolve paired stop and inbound direction.
+- Frontend scanning methods (`_findPairedOppositeStopInFeatures`, `_findPairedOppositeStop`, `_inboundDirectionIdForRoute`) are retained as fallbacks for cached features that pre-date this release.
+
 ## [0.14.3] - 2026-05-26
 
 ### Fix - Bubble loading resilience and terminus stop handling
