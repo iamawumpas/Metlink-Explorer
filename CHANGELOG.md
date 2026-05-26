@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-05-26
+
+### Fix - Bubble pairing subtitle, route direction labels, and terminus zero-results fallback
+
+- Restored nearby-stop bubble subheading behavior by re-enabling a route-scoped pairing fallback scan when backend pair index has no usable pair entry.
+- Direction display text for rows now uses route sensor attributes `direction_0_label` / `direction_1_label` (matched by `route_id`) when available, with destination text only as fallback.
+- Added a terminus fallback in bubble loading: when a terminus click returns zero rows, the card retries with terminal sibling stop IDs from the same route feature set, recovering expected early-morning departures at endpoints.
+
 ## [1.0.2] - 2026-05-26
 
 ### Fix - Correct route labels and direction chips in stop bubbles

@@ -2258,7 +2258,55 @@ class MetlinkExplorerCard extends LitElement {
     return mode;
   }
 
-  _departureRowsFromSchedulePayload(payload, stopIds, targetMode, now, maxPastMs, maxFutureMs, allowedRouteIds = null) {
+  _buildDirectionLabelIndex() {
+    const index = new Map();
+    const states = this.hass?.states || {};
+    Object.values(states).forEach((state) => {
+      const attrs = state?.attributes || {};
+      const routeId = String(attrs.route_id || '').trim();
+      if (!routeId) return;
+      const d0 = String(attrs.direction_0_label || '').trim();
+      const d1 = String(attrs.direction_1_label || '').trim();
+      if (!d0 && !d1) return;
+      const prev = index.get(routeId) || {};
+      index.set(routeId, {
+        0: d0 || prev[0] || '',
+        1: d1 || prev[1] || '',
+      });
+    });
+    return index;
+  }
+
+  _resolveDirectionLabel(routeId, directionId, fallbackLabel, directionLabelIndex) {
+    const rid = String(routeId || '').trim();
+    const did = Number.isFinite(Number(directionId)) ? Number(directionId) : null;
+    const byRoute = rid ? directionLabelIndex?.get(rid) : null;
+    if (byRoute && did !== null) {
+      const mapped = String(byRoute[did] || '').trim();
+      if (mapped) return mapped;
+    }
+    return String(fallbackLabel || '').trim() || 'Unknown direction';
+  }
+
+  _stopNameForIdInFeatures(stopId, features) {
+    const target = String(stopId || '').trim();
+    if (!target) return null;
+    for (const feature of (features || [])) {
+      const timelineStops = feature?.properties?.timeline_stops || {};
+      for (const directionStops of Object.values(timelineStops)) {
+        if (!Array.isArray(directionStops)) continue;
+        for (const stop of directionStops) {
+          if (String(stop?.stop_id || '').trim() === target) {
+            const name = String(stop?.stop_name || '').trim();
+            if (name) return name;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  _departureRowsFromSchedulePayload(payload, stopIds, targetMode, now, maxPastMs, maxFutureMs, allowedRouteIds = null, directionLabelIndex = null) {
     const byStop = payload?.by_stop;
     if (!byStop || typeof byStop !== 'object') return [];
 
@@ -2295,7 +2343,16 @@ class MetlinkExplorerCard extends LitElement {
         const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
         const routeId = String(row?.route_id || "").trim();
         const serviceLabel = String(row?.service_label || "").trim();
-        let directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
+        const directionIdRaw = row?.direction_id;
+        const directionId = directionIdRaw === undefined || directionIdRaw === null
+          ? ""
+          : String(directionIdRaw).trim();
+        let directionLabel = this._resolveDirectionLabel(
+          routeId,
+          directionId,
+          String(row?.direction_label || row?.destination || "Unknown direction"),
+          directionLabelIndex
+        );
         if (this._modeBucket(targetMode) === "ferry") {
           const originStop = String(row?.stop_name || "").trim();
           const destinationStop = String(row?.destination || "").trim();
@@ -2303,10 +2360,6 @@ class MetlinkExplorerCard extends LitElement {
             directionLabel = `${originStop} - ${destinationStop}`;
           }
         }
-        const directionIdRaw = row?.direction_id;
-        const directionId = directionIdRaw === undefined || directionIdRaw === null
-          ? ""
-          : String(directionIdRaw).trim();
         const directionKey = directionId || directionLabel;
         const routeCanonical = routeShortName.trim().toUpperCase();
         const directionCanonical = directionLabel.trim().toUpperCase();
@@ -2346,6 +2399,7 @@ class MetlinkExplorerCard extends LitElement {
     const routeScope = allowedRouteIds instanceof Set
       ? allowedRouteIds
       : new Set((Array.isArray(allowedRouteIds) ? allowedRouteIds : []).map((id) => String(id || '').trim()).filter(Boolean));
+    const directionLabelIndex = this._buildDirectionLabelIndex();
 
     // Preferred path: local DB schedules cache.
     const dbModeSlug = this._dbModeSlugFromModeBucket(targetMode || modeBucket);
@@ -2358,7 +2412,8 @@ class MetlinkExplorerCard extends LitElement {
         now,
         maxPastMs,
         maxFutureMs,
-        routeScope
+        routeScope,
+        directionLabelIndex
       );
     }
 
@@ -2399,7 +2454,12 @@ class MetlinkExplorerCard extends LitElement {
         const routeShortName = String(row?.route_short_name || row?.service_label || row?.route_id || "?");
         const routeId = String(row?.route_id || "").trim();
         const serviceLabel = String(row?.service_label || "").trim();
-        let directionLabel = String(row?.direction_label || row?.destination || "Unknown direction");
+        let directionLabel = this._resolveDirectionLabel(
+          routeId,
+          directionId,
+          String(row?.direction_label || row?.destination || "Unknown direction"),
+          directionLabelIndex
+        );
         if (this._modeBucket(targetMode) === "ferry") {
           const originStop = String(row?.stop_name || "").trim();
           const destinationStop = String(row?.destination || "").trim();
@@ -2473,15 +2533,18 @@ class MetlinkExplorerCard extends LitElement {
           stopName: String(pairEntry.paired_stop_name || `Stop ${pairEntry.paired_stop_id}`),
         };
       }
-    } else {
-      // Fallback: scan timeline stops when backend index is unavailable (e.g. old cache).
-      pairedStop = isTerminusOnlyStop
-        ? null
-        : (originFeatures.length > 0
-          ? this._findPairedOppositeStopInFeatures(originFeatures, stopId, lat, lon, modeBucket, 50)
-          : this._findPairedOppositeStop(stopId, lat, lon, modeBucket, 50));
     }
-    const stopScopeIds = [stopId, pairedStop?.stopId].filter(Boolean);
+
+    // Fallback: scan timeline stops when backend index has no usable pair.
+    if (!pairedStop) {
+      const fallbackMaxDistance = isTerminusOnlyStop ? 120 : 50;
+      pairedStop = originFeatures.length > 0
+        ? this._findPairedOppositeStopInFeatures(originFeatures, stopId, lat, lon, modeBucket, fallbackMaxDistance)
+        : this._findPairedOppositeStop(stopId, lat, lon, modeBucket, fallbackMaxDistance);
+    }
+
+    let effectivePairedStop = pairedStop;
+    let stopScopeIds = [stopId, effectivePairedStop?.stopId].filter(Boolean);
 
     // Build per-route inbound direction map from backend stop_pair_index.
     // This lets _normalizeRowDirectionKeys rewrite numeric direction_id keys to
@@ -2509,8 +2572,8 @@ class MetlinkExplorerCard extends LitElement {
         name: stopName,
         mode: modeBucket,
         forceOutboundOnly,
-        pairedStopId: pairedStop?.stopId || null,
-        pairedStopName: pairedStop?.stopName || null,
+        pairedStopId: effectivePairedStop?.stopId || null,
+        pairedStopName: effectivePairedStop?.stopName || null,
         coordinates: [lon, lat],
         influenceStopIds: stopScopeIds,
       },
@@ -2531,7 +2594,30 @@ class MetlinkExplorerCard extends LitElement {
           .map((f) => String(f?.properties?.route_id || '').trim())
           .filter(Boolean)
       );
-      const rawDepartures = await this._departuresForStops(stopScopeIds, modeBucket, allowedRouteIds);
+      let rawDepartures = await this._departuresForStops(stopScopeIds, modeBucket, allowedRouteIds);
+
+      // Terminus safety-net: if no rows found, expand scope to terminal siblings on the same route.
+      if (rawDepartures.length === 0 && isTerminusOnlyStop && originFeatures.length > 0) {
+        const terminalIds = [...this._terminalStopIdsFromFeatures(originFeatures)];
+        const expandedScope = [...new Set([...stopScopeIds, ...terminalIds])];
+        if (expandedScope.length > stopScopeIds.length) {
+          const retryRows = await this._departuresForStops(expandedScope, modeBucket, allowedRouteIds);
+          if (retryRows.length > 0) {
+            rawDepartures = retryRows;
+            stopScopeIds = expandedScope;
+            if (!effectivePairedStop) {
+              const altId = expandedScope.find((id) => String(id) !== String(stopId));
+              if (altId) {
+                effectivePairedStop = {
+                  stopId: String(altId),
+                  stopName: this._stopNameForIdInFeatures(altId, originFeatures) || `Stop ${altId}`,
+                };
+              }
+            }
+          }
+        }
+      }
+
       if (openSequence !== this._bubbleOpenSequence) return;
       if (!this._departureBubble || this._departureBubble.stop?.id !== stopId) return;
       // Normalise per-route direction keys ("0"/"1" → "inbound"/"outbound") so the
@@ -2541,6 +2627,12 @@ class MetlinkExplorerCard extends LitElement {
       this._departureBubble = {
         ...this._departureBubble,
         loading: false,
+        stop: {
+          ...this._departureBubble.stop,
+          pairedStopId: effectivePairedStop?.stopId || null,
+          pairedStopName: effectivePairedStop?.stopName || null,
+          influenceStopIds: stopScopeIds,
+        },
         departures,
         directionFilter: forceOutboundOnly ? "outbound" : "all",
         directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly),
