@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-27
+
+### Feature - Colour-coded inbound/outbound direction indicators
+
+- Inbound filter button and row badge are now **amber** (`#f59e0b`) — warm colour for travel towards the city.
+- Outbound filter button and row badge are now **teal** (`#0891b2`) — cool colour for travel away from the city.
+- Active filter button uses the full colour as its background; inactive state shows a tinted border and text to hint the available direction.
+- Per-row direction chip on each departure card uses a matching translucent pill style for inbound (amber) and outbound (teal).
+- Colour coding applies consistently across all modes: train, bus, and ferry stops.
+- Neutral "All" button retains the existing white active state.
+
 ## [1.0.9] - 2026-05-28
 
 ### Fix - Shared train/bus stop bubbles now show all routes (e.g. WELL shows KPL, HVL, MEL, JVL, WRL)

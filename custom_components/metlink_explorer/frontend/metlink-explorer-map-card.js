@@ -2769,12 +2769,12 @@ class MetlinkExplorerCard extends LitElement {
                 @click=${() => this._setBubbleDirectionFilter("all")}
               >All</button>
               <button
-                class=${`departure-filter-btn ${bubble.directionFilter === "inbound" ? "active" : ""}`}
+                class=${`departure-filter-btn departure-filter-btn--inbound ${bubble.directionFilter === "inbound" ? "active" : ""}`}
                 ?disabled=${isOutboundOnlyBubble || !canFilterInbound}
                 @click=${() => this._setBubbleDirectionFilter("inbound")}
               >Inbound</button>
               <button
-                class=${`departure-filter-btn ${bubble.directionFilter === "outbound" ? "active" : ""}`}
+                class=${`departure-filter-btn departure-filter-btn--outbound ${bubble.directionFilter === "outbound" ? "active" : ""}`}
                 ?disabled=${!canFilterOutbound}
                 @click=${() => this._setBubbleDirectionFilter("outbound")}
               >Outbound</button>
@@ -2792,9 +2792,7 @@ class MetlinkExplorerCard extends LitElement {
               <div class="departure-item" style=${rc ? `background: linear-gradient(to right, ${rc}bf 0%, #000000 40%)` : ''}>
                 <div class="departure-route-line">
                   <div class="departure-route" style="color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 0 6px rgba(0,0,0,0.9);">${dep.routeShortName}</div>
-                  ${this._departureDirectionTag(dep, bubble)
-                    ? html`<div class="departure-direction-chip">${this._departureDirectionTag(dep, bubble)}</div>`
-                    : null}
+                  ${(() => { const _dt = this._departureDirectionTag(dep, bubble); const _dc = _dt === 'Inbound' ? 'departure-direction-chip departure-direction-chip--inbound' : _dt === 'Outbound' ? 'departure-direction-chip departure-direction-chip--outbound' : 'departure-direction-chip'; return _dt ? html`<div class=${_dc}>${_dt}</div>` : null; })()}
                 </div>
                 <div class="departure-destination">${dep.directionLabel}</div>
                 <div class="departure-time">${dep.departureText}</div>
@@ -4179,6 +4177,24 @@ class MetlinkExplorerCard extends LitElement {
         color: #111;
         border-color: #ffffff;
       }
+      .departure-filter-btn--inbound:not(:disabled):not(.active) {
+        border-color: rgba(245, 158, 11, 0.5);
+        color: rgba(252, 211, 77, 0.9);
+      }
+      .departure-filter-btn--inbound.active {
+        background: #f59e0b;
+        color: #1c1100;
+        border-color: #f59e0b;
+      }
+      .departure-filter-btn--outbound:not(:disabled):not(.active) {
+        border-color: rgba(8, 145, 178, 0.5);
+        color: rgba(103, 232, 249, 0.9);
+      }
+      .departure-filter-btn--outbound.active {
+        background: #0891b2;
+        color: #fff;
+        border-color: #0891b2;
+      }
       .departure-filter-btn:disabled {
         opacity: 0.45;
         cursor: not-allowed;
@@ -4284,6 +4300,16 @@ class MetlinkExplorerCard extends LitElement {
         font-size: 11px;
         font-weight: 700;
         letter-spacing: 0.02em;
+      }
+      .departure-direction-chip--inbound {
+        background: rgba(245, 158, 11, 0.2);
+        border-color: rgba(245, 158, 11, 0.55);
+        color: #fcd34d;
+      }
+      .departure-direction-chip--outbound {
+        background: rgba(8, 145, 178, 0.2);
+        border-color: rgba(8, 145, 178, 0.55);
+        color: #67e8f9;
       }
       .departure-time {
         margin-top: 4px;
