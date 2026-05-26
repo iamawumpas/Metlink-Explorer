@@ -850,6 +850,107 @@ class MetlinkExplorerCard extends LitElement {
     return diff > 180 ? (360 - diff) : diff;
   }
 
+  // Wellington Central reference used to determine inbound direction across all modes.
+  // (Lambton Quay / Wellington Railway Station precinct)
+  static get WELLINGTON_CENTRAL() {
+    return { lat: -41.2790, lon: 174.7802 };
+  }
+
+  /**
+   * Determine which GTFS direction_id (0 or 1) is "inbound" (towards Wellington Central)
+   * for a given set of route GeoJSON features.
+   * Returns 1 as the default if no determination can be made (GTFS convention).
+   */
+  _inboundDirectionIdForRoute(features) {
+    const wc = MetlinkExplorerMapCard.WELLINGTON_CENTRAL;
+    const THRESHOLD_METERS = 500;
+
+    for (const feature of (features || [])) {
+      const timelineStops = feature?.properties?.timeline_stops || {};
+      for (const [dirKey, stops] of Object.entries(timelineStops)) {
+        if (!Array.isArray(stops)) continue;
+        for (const stop of stops) {
+          const sLat = Number(stop?.stop_lat);
+          const sLon = Number(stop?.stop_lon);
+          if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) continue;
+          const dist = this._haversineMeters(wc.lat, wc.lon, sLat, sLon);
+          if (dist <= THRESHOLD_METERS) {
+            return Number(dirKey); // direction containing WLN-proximity stop = inbound
+          }
+        }
+      }
+    }
+    return 1; // GTFS default: direction_id 1 = inbound
+  }
+
+  /**
+   * Find the nearest stop in the opposite travel direction on the same route,
+   * within maxDistanceMeters of the clicked stop.
+   * Scans timeline_stops from all visible route features for the mode.
+   * Returns { stopId, stopLat, stopLon, stopName, directionId } or null.
+   */
+  _findPairedOppositeStop(clickedStopId, clickedLat, clickedLon, modeBucket, maxDistanceMeters = 50) {
+    const entries = this._visibleRouteEntriesForMode(modeBucket);
+    const normalizedClicked = this._normalizeStopIdForMode(clickedStopId, modeBucket);
+
+    let bestMatch = null;
+    let bestDist = Infinity;
+
+    for (const entry of entries) {
+      const features = this._parseRouteGeometry(entry?.entity);
+      if (!Array.isArray(features)) continue;
+
+      for (const feature of features) {
+        const timelineStops = feature?.properties?.timeline_stops || {};
+        const dirKeys = Object.keys(timelineStops);
+
+        // Find which direction(s) the clicked stop appears in
+        let clickedDirections = new Set();
+        for (const dirKey of dirKeys) {
+          const stops = timelineStops[dirKey];
+          if (!Array.isArray(stops)) continue;
+          for (const stop of stops) {
+            const sid = this._normalizeStopIdForMode(String(stop?.stop_id || ""), modeBucket);
+            if (sid === normalizedClicked) {
+              clickedDirections.add(dirKey);
+              break;
+            }
+          }
+        }
+
+        if (clickedDirections.size === 0) continue;
+
+        // Scan opposite direction(s) for nearby stops
+        for (const clickedDir of clickedDirections) {
+          const oppositeDir = clickedDir === "0" ? "1" : "0";
+          const oppositeStops = timelineStops[oppositeDir];
+          if (!Array.isArray(oppositeStops)) continue;
+
+          for (const stop of oppositeStops) {
+            const candidateId = this._normalizeStopIdForMode(String(stop?.stop_id || ""), modeBucket);
+            if (!candidateId || candidateId === normalizedClicked) continue;
+            const sLat = Number(stop?.stop_lat);
+            const sLon = Number(stop?.stop_lon);
+            if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) continue;
+            const dist = this._haversineMeters(clickedLat, clickedLon, sLat, sLon);
+            if (dist <= maxDistanceMeters && dist < bestDist) {
+              bestDist = dist;
+              bestMatch = {
+                stopId: candidateId,
+                stopLat: sLat,
+                stopLon: sLon,
+                stopName: String(stop?.stop_name || `Stop ${candidateId}`),
+                directionId: Number(oppositeDir),
+              };
+            }
+          }
+        }
+      }
+    }
+
+    return bestMatch;
+  }
+
   _routeTokenForFeature(feature) {
     const props = feature?.properties || {};
     const routeShort = String(props.route_short_name || "").trim();
@@ -1676,7 +1777,22 @@ class MetlinkExplorerCard extends LitElement {
     return `Departs ${timeFmt.format(departureDate)} on ${dayFmt.format(departureDate)}, in ${this._formatCountdown(deltaMs)}.`;
   }
 
-  _deriveDirectionMeta(rows) {
+  _deriveDirectionMeta(rows, inboundDirectionId = null) {
+    // If we know which direction_id is inbound (from Wellington Central proximity),
+    // use that directly rather than relying on first-seen order.
+    if (inboundDirectionId !== null && Number.isFinite(Number(inboundDirectionId))) {
+      const inboundKey = String(inboundDirectionId);
+      const outboundKey = String(1 - Number(inboundDirectionId));
+      const hasInbound = (rows || []).some((r) => String(r?.directionKey || "").trim() === inboundKey);
+      const hasOutbound = (rows || []).some((r) => String(r?.directionKey || "").trim() === outboundKey);
+      return {
+        inboundKey: hasInbound ? inboundKey : null,
+        outboundKey: hasOutbound ? outboundKey : null,
+        hasBoth: hasInbound && hasOutbound,
+      };
+    }
+
+    // Fallback: first-seen order (used when no route geometry is available)
     const uniqueKeys = [];
     const seen = new Set();
     (rows || []).forEach((row) => {
@@ -1695,20 +1811,24 @@ class MetlinkExplorerCard extends LitElement {
     };
   }
 
-  _deriveDirectionMetaForMode(rows, modeBucket = "", forceOutboundOnly = false) {
-    const base = this._deriveDirectionMeta(rows);
-    if (this._modeBucket(modeBucket) !== "ferry" && !forceOutboundOnly) return base;
+  _deriveDirectionMetaForMode(rows, modeBucket = "", forceOutboundOnly = false, routeFeatures = null) {
+    // For ferry or terminal-only stops, collapse to outbound-only display.
+    if (this._modeBucket(modeBucket) === "ferry" || forceOutboundOnly) {
+      const base = this._deriveDirectionMeta(rows);
+      const fallbackKey = base.outboundKey
+        || base.inboundKey
+        || String((rows || [])[0]?.directionKey || "").trim()
+        || null;
+      return {
+        inboundKey: null,
+        outboundKey: fallbackKey,
+        hasBoth: false,
+      };
+    }
 
-    const fallbackKey = base.outboundKey
-      || base.inboundKey
-      || String((rows || [])[0]?.directionKey || "").trim()
-      || null;
-
-    return {
-      inboundKey: null,
-      outboundKey: fallbackKey,
-      hasBoth: false,
-    };
+    // Use Wellington Central proximity to determine stable inbound direction.
+    const inboundDirId = routeFeatures ? this._inboundDirectionIdForRoute(routeFeatures) : null;
+    return this._deriveDirectionMeta(rows, inboundDirId);
   }
 
   _normalizeStopIdForMode(stopId, modeBucket = "") {
@@ -1976,8 +2096,17 @@ class MetlinkExplorerCard extends LitElement {
       .split("|")
       .map((id) => String(id || "").trim())
       .filter(Boolean);
-    // Always scope departures to the clicked stop only.
-    const stopScopeIds = [stopId].filter(Boolean);
+
+    // Find the nearest opposite-direction stop on the same route within 50m.
+    const pairedStop = this._findPairedOppositeStop(stopId, lat, lon, modeBucket, 50);
+    const stopScopeIds = [stopId, pairedStop?.stopId].filter(Boolean);
+
+    // Gather route features for Wellington Central inbound direction detection.
+    const routeFeatures = [];
+    for (const entry of this._visibleRouteEntriesForMode(modeBucket)) {
+      const features = this._parseRouteGeometry(entry?.entity);
+      if (Array.isArray(features)) routeFeatures.push(...features);
+    }
 
     // Always close any existing bubble first so the next one can replay its entry animation.
     if (this._departureBubble) {
@@ -1999,7 +2128,8 @@ class MetlinkExplorerCard extends LitElement {
         name: stopName,
         mode: modeBucket,
         forceOutboundOnly,
-        strictStopOnly: true,
+        pairedStopId: pairedStop?.stopId || null,
+        pairedStopName: pairedStop?.stopName || null,
         coordinates: [lon, lat],
         influenceStopIds: stopScopeIds,
       },
@@ -2022,7 +2152,7 @@ class MetlinkExplorerCard extends LitElement {
       loading: false,
       departures,
       directionFilter: forceOutboundOnly ? "outbound" : "all",
-      directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly),
+      directionMeta: this._deriveDirectionMetaForMode(departures, modeBucket, forceOutboundOnly, routeFeatures),
     };
     this.requestUpdate();
   }
@@ -2061,10 +2191,8 @@ class MetlinkExplorerCard extends LitElement {
     const visibleDepartures = this._filteredBubbleDepartures(bubble);
     const canFilterInbound = Boolean(bubble?.directionMeta?.inboundKey);
     const canFilterOutbound = Boolean(bubble?.directionMeta?.outboundKey);
-    const influenceCount = Array.isArray(bubble?.stop?.influenceStopIds)
-      ? bubble.stop.influenceStopIds.length
-      : 0;
-    const showInfluenceHint = !bubble?.stop?.strictStopOnly && influenceCount > 1;
+    const pairedStopName = bubble?.stop?.pairedStopName || null;
+    const showPairedHint = Boolean(pairedStopName);
 
     const cardWidth = 360;
     const offset = 30;
@@ -2084,8 +2212,8 @@ class MetlinkExplorerCard extends LitElement {
       >
         <div class="departure-head-shell">
           <div class="departure-heading">${bubble.stop?.id || ""} ${bubble.stop?.name || "Stop"}</div>
-          ${showInfluenceHint
-            ? html`<div class="departure-subheading">Aggregated from ${influenceCount} nearby stops</div>`
+          ${showPairedHint
+            ? html`<div class="departure-subheading">+ ${pairedStopName}</div>`
             : null}
         </div>
         <div class="departure-body-shell">

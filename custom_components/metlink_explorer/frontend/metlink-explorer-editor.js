@@ -164,14 +164,72 @@ class MetlinkExplorerEditor extends LitElement {
 
   _timelineStopsFromFeature(feature) {
     const timelineStops = feature?.properties?.timeline_stops || {};
-    const directionKeys = Object.keys(timelineStops).sort((a, b) => Number(a) - Number(b));
-    const ordered = [];
-    for (const key of directionKeys) {
+    const dirKeys = Object.keys(timelineStops);
+
+    // If only one direction exists, return it directly.
+    if (dirKeys.length <= 1) {
+      const key = dirKeys[0];
+      return Array.isArray(timelineStops[key]) ? [...timelineStops[key]] : [];
+    }
+
+    // Collect all stops from all directions with their lat/lon.
+    const allStops = [];
+    for (const key of dirKeys) {
       const stops = timelineStops[key];
       if (!Array.isArray(stops)) continue;
-      for (const stop of stops) ordered.push(stop);
+      for (const stop of stops) {
+        allStops.push({ ...stop, _dirKey: key });
+      }
     }
-    return ordered;
+
+    // Use direction "0" as the geographic spine. Sort all stops by their
+    // projected distance along that spine so inbound+outbound stops that
+    // are physically close appear adjacent in the list.
+    const spine = Array.isArray(timelineStops["0"]) ? timelineStops["0"] : allStops;
+    if (spine.length === 0) return allStops;
+
+    // Build a cumulative arc-length index along the spine.
+    const toRad = Math.PI / 180;
+    const haversine = (lat1, lon1, lat2, lon2) => {
+      const dLat = (lat2 - lat1) * toRad;
+      const dLon = (lon2 - lon1) * toRad;
+      const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
+      return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    const spineArc = [0];
+    for (let i = 1; i < spine.length; i++) {
+      const prev = spine[i - 1];
+      const curr = spine[i];
+      const d = haversine(
+        Number(prev?.stop_lat), Number(prev?.stop_lon),
+        Number(curr?.stop_lat), Number(curr?.stop_lon),
+      );
+      spineArc.push(spineArc[i - 1] + (Number.isFinite(d) ? d : 0));
+    }
+    const totalArc = spineArc[spineArc.length - 1] || 1;
+
+    // Project each stop to its closest point on the spine (0–1 normalised position).
+    const projectToSpine = (lat, lon) => {
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return 0;
+      let bestArc = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < spine.length; i++) {
+        const d = haversine(lat, lon, Number(spine[i]?.stop_lat), Number(spine[i]?.stop_lon));
+        if (d < bestDist) { bestDist = d; bestArc = spineArc[i]; }
+      }
+      return bestArc / totalArc;
+    };
+
+    // Sort by spine position.
+    allStops.sort((a, b) => {
+      const pa = projectToSpine(Number(a?.stop_lat), Number(a?.stop_lon));
+      const pb = projectToSpine(Number(b?.stop_lat), Number(b?.stop_lon));
+      return pa - pb;
+    });
+
+    return allStops;
   }
 
   _normalizeStops(type, rawStops) {

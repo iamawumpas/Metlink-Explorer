@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.14.1] - 2026-05-24
+## [0.14.2] - 2026-05-26
+
+### Feature - Inbound/outbound stop pairing and geographical stop picker
+
+- Map bubble now auto-detects the nearest opposite-direction stop on the same route within 50m and includes its departures alongside the clicked stop's departures.
+- Bubble subheading shows the paired stop name (e.g. "+ Muritai Road at Makaro St Gardens") when a pair is found.
+- Inbound/Outbound direction labels are now determined by proximity to Wellington Central Station rather than first-seen departure order, giving stable filter tabs regardless of time of day.
+- Editor bus stop picker now lists stops in geographical order along the route (spine-projected sort) so inbound/outbound stops near each other appear adjacent rather than grouped by direction block.
+
+## [0.14.1] - 2026-05-24
 
 ### Fix - Stop-only departure bubbles and full service alert attributes
 
