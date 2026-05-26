@@ -1089,6 +1089,69 @@ class MetlinkExplorerCard extends LitElement {
     return bestMatch;
   }
 
+  _nearbyOppositeStopIds(clickedStopId, clickedLat, clickedLon, modeBucket, maxDistanceMeters = 120, maxResults = 6) {
+    const entries = this._visibleRouteEntriesForMode(modeBucket);
+    const normalizedClicked = this._normalizeStopIdForMode(clickedStopId, modeBucket);
+    if (!normalizedClicked || !Number.isFinite(clickedLat) || !Number.isFinite(clickedLon)) return [];
+
+    const byStopId = new Map();
+
+    for (const entry of entries) {
+      const features = this._parseRouteGeometry(entry?.entity);
+      if (!Array.isArray(features)) continue;
+
+      for (const feature of features) {
+        const timelineStops = feature?.properties?.timeline_stops || {};
+        const dirKeys = Object.keys(timelineStops);
+        const clickedDirections = new Set();
+
+        for (const dirKey of dirKeys) {
+          const stops = timelineStops[dirKey];
+          if (!Array.isArray(stops)) continue;
+          for (const stop of stops) {
+            const sid = this._normalizeStopIdForMode(String(stop?.stop_id || ""), modeBucket);
+            if (sid === normalizedClicked) {
+              clickedDirections.add(dirKey);
+              break;
+            }
+          }
+        }
+
+        if (clickedDirections.size === 0) continue;
+
+        for (const clickedDir of clickedDirections) {
+          const oppositeDir = clickedDir === "0" ? "1" : "0";
+          const oppositeStops = timelineStops[oppositeDir];
+          if (!Array.isArray(oppositeStops)) continue;
+
+          for (const stop of oppositeStops) {
+            const candidateId = this._normalizeStopIdForMode(String(stop?.stop_id || ""), modeBucket);
+            if (!candidateId || candidateId === normalizedClicked) continue;
+            const sLat = Number(stop?.stop_lat);
+            const sLon = Number(stop?.stop_lon);
+            if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) continue;
+            const dist = this._haversineMeters(clickedLat, clickedLon, sLat, sLon);
+            if (dist > maxDistanceMeters) continue;
+
+            const prev = byStopId.get(candidateId);
+            if (!prev || dist < prev.dist) {
+              byStopId.set(candidateId, {
+                stopId: candidateId,
+                stopName: String(stop?.stop_name || `Stop ${candidateId}`),
+                dist,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return [...byStopId.values()]
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, Math.max(1, Number(maxResults) || 6))
+      .map((item) => item.stopId);
+  }
+
   _routeTokenForFeature(feature) {
     const props = feature?.properties || {};
     const routeShort = String(props.route_short_name || "").trim();
@@ -2607,13 +2670,33 @@ class MetlinkExplorerCard extends LitElement {
     // Fallback: scan timeline stops when backend index has no usable pair.
     if (!pairedStop) {
       const fallbackMaxDistance = isTerminusOnlyStop ? 120 : 50;
-      pairedStop = originFeatures.length > 0
-        ? this._findPairedOppositeStopInFeatures(originFeatures, stopId, lat, lon, modeBucket, fallbackMaxDistance)
-        : this._findPairedOppositeStop(stopId, lat, lon, modeBucket, fallbackMaxDistance);
+      // Bus shared stops can have opposite departures spread across multiple route features,
+      // so prefer global same-mode scan rather than only the clicked route feature set.
+      pairedStop = modeBucket === "bus"
+        ? this._findPairedOppositeStop(stopId, lat, lon, modeBucket, isTerminusOnlyStop ? 180 : 120)
+        : (originFeatures.length > 0
+          ? this._findPairedOppositeStopInFeatures(originFeatures, stopId, lat, lon, modeBucket, fallbackMaxDistance)
+          : this._findPairedOppositeStop(stopId, lat, lon, modeBucket, fallbackMaxDistance));
     }
 
     let effectivePairedStop = pairedStop;
     let stopScopeIds = [stopId, effectivePairedStop?.stopId].filter(Boolean);
+
+    if (modeBucket === "bus") {
+      // Expand bus scope to include multiple nearby opposite stops (bays/platforms)
+      // so inbound/outbound tabs can show all routes at shared interchanges.
+      const nearbyOppositeIds = this._nearbyOppositeStopIds(
+        stopId,
+        lat,
+        lon,
+        modeBucket,
+        isTerminusOnlyStop ? 180 : 120,
+        8
+      );
+      if (nearbyOppositeIds.length > 0) {
+        stopScopeIds = [...new Set([...stopScopeIds, ...nearbyOppositeIds])];
+      }
+    }
 
     // Build per-route inbound direction map from backend stop_pair_index.
     // This lets _normalizeRowDirectionKeys rewrite numeric direction_id keys to

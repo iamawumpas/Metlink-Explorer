@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.12] - 2026-05-27
+
+### Fix - Bus shared-stop bubbles now include outbound departures from all nearby routes
+
+- Fixed outbound bus routes not appearing in departure bubbles at shared bus stops and interchanges.
+- Root cause: the fallback opposite-stop scan was limited to the clicked route's geometry feature set only, so opposite bays served by other bus routes were never added to the departure stop scope.
+- Additionally, bus departure scope was restricted to a single paired stop ID, missing nearby bays and platforms on the opposite side of the road.
+- Fix: for bus mode, fallback pairing now scans all visible bus route entities globally (same approach as `routeInboundMap` scanning introduced in v1.0.9).
+- Fix: bus departure scope is expanded to include up to 8 nearby opposite-direction stop IDs within 120 m (180 m for terminus stops), using the new `_nearbyOppositeStopIds` helper.
+- Train and ferry pairing logic is unchanged.
+
 ## [1.0.11] - 2026-05-27
 
 ### Fix - Bus shared-stop inbound/outbound filtering now includes all routes correctly
