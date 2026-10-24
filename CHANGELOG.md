@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.6] - 2026-10-24
+
+### Fix - Cards showed "Custom element doesn't exist" until a hard refresh
+
+- What happened: the cards loaded, then failed after a while or when the screen changed, and only a hard refresh recovered them. Your browser console showed the card-mod add-on throwing `themesReady: Timeout waiting for themes to become ready`, with the trace running through our cards' `<ha-card>` element.
+- Both cards no longer create an `<ha-card>` element. They draw their own container styled from your theme's card colour, radius, shadow and border, so card-mod has nothing to hook and can stay enabled for your other cards.
+- The map card now also clears its saved map and marker state when removed from the page, so a card that is re-attached after a layout change rebuilds its map and tiles.
+- Side effect: card-mod styling applied to these two cards no longer takes effect.
+- Not yet confirmed: this is my best explanation, not a proven cause. It has not been tried in a real Home Assistant. The card scripts themselves loaded fine (status 200) and threw no errors.
+
 ## [2.1.5] - 2026-10-24
 
 ### Fix - Map showed "API KEY REQUIRED" and spilled out of its card

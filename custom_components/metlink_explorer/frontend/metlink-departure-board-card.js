@@ -42,7 +42,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
   _build() {
     this._built = true;
     this.innerHTML = `
-      <ha-card>
+      <div class="mx-card" style="background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color));color:var(--primary-text-color);overflow:hidden">
         <style>
           .mx{padding:12px 16px}.mx input,.mx select{width:100%;box-sizing:border-box;padding:8px;margin:4px 0;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color)}
           .mx .hits button{display:block;width:100%;text-align:left;padding:6px 8px;border:0;background:none;color:var(--primary-text-color);cursor:pointer}
@@ -58,7 +58,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
           <select class="towards" hidden></select>
           <div class="body"></div>
         </div>
-      </ha-card>`;
+      </div>`;
     const q = (s) => this.querySelector(s);
     this._el = { title: q(".title"), search: q(".search"), hits: q(".hits"), towards: q(".towards"), body: q(".body") };
     this._el.search.addEventListener("input", () => this._search());

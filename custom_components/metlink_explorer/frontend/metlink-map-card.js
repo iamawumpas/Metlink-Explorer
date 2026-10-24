@@ -63,6 +63,10 @@ class MetlinkMapCard extends HTMLElement {
     clearTimeout(this._moveTimer);
     if (this._observer) this._observer.disconnect();
     if (this._map) { this._map.remove(); this._map = null; }
+    this._base = null;
+    this._basemapName = null;
+    this._fitted = false;
+    this._vehicleMarkers = null;
   }
 
   getCardSize() { return 8; }
@@ -73,7 +77,7 @@ class MetlinkMapCard extends HTMLElement {
   _build() {
     this._built = true;
     this.innerHTML = `
-      <ha-card style="overflow:hidden">
+      <div class="mm-card" style="background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color));color:var(--primary-text-color);overflow:hidden">
         <link rel="stylesheet" href="${LEAFLET}.css" integrity="${LEAFLET_SRI.css}" crossorigin="">
         <style>
           .mm{padding:8px 12px}.mm .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
@@ -100,7 +104,7 @@ class MetlinkMapCard extends HTMLElement {
         </details>
         <div class="mm-map"></div>
         <div class="mm"><div class="status muted"></div></div>
-      </ha-card>`;
+      </div>`;
     const q = (s) => this.querySelector(s);
     this._el = { modes: q(".modes"), school: q(".school"), stops: q(".stops"), light: q(".light"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status") };
     this._el.mapDiv.style.height = this._height + "px";
