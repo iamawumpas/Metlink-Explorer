@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-10-24
+
+### Change - Version 2 is now on the main branch
+
+- Why: HACS installs from the repository's default branch (`main`), and version 2 was released from a separate `v2` branch while it was being built. Nobody could install it through HACS. Version 2 has now been merged into `main` so it can be downloaded and tested in Home Assistant.
+- No code changed in this release. It only moves version 2 (including the map card and ferry tracking from 2.1.0) onto `main`, and bumps the version number so HACS offers it as an update.
+- The old version 1 code is kept in the `legacy` folder for reference only and is not installed.
+
 ## [2.1.0] - 2026-10-24
 
 ### Feature - Live map card
