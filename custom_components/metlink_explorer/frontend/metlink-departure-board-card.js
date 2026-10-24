@@ -146,9 +146,18 @@ class MetlinkDepartureBoardCard extends HTMLElement {
   }
 }
 
-if (!customElements.get("metlink-departure-board-card")) {
-  customElements.define("metlink-departure-board-card", MetlinkDepartureBoardCard);
+const BOARD_TAG = "metlink-departure-board-card";
+if (!customElements.get(BOARD_TAG)) {
+  customElements.define(BOARD_TAG, MetlinkDepartureBoardCard);
   window.customCards = window.customCards || [];
-  window.customCards.push({ type: "metlink-departure-board-card", name: "Metlink Departure Board", description: "Scheduled and live departures for a stop, filtered by where you are going." });
+  window.customCards.push({ type: BOARD_TAG, name: "Metlink Departure Board", description: "Scheduled and live departures for a stop, filtered by where you are going." });
+  // Home Assistant has been seen discarding the definition shortly after load; keep re-registering until it holds.
+  let tries = 0;
+  const watch = setInterval(() => {
+    if (++tries > 240) { clearInterval(watch); return; }
+    if (customElements.get(BOARD_TAG)) return;
+    console.warn(`Metlink departure board card: element missing after ${tries * 250} ms, registering again`);
+    try { customElements.define(BOARD_TAG, class extends MetlinkDepartureBoardCard {}); } catch (_) { /* retry on the next tick */ }
+  }, 250);
 }
 })();

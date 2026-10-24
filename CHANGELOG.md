@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.8] - 2026-10-24
+
+### Fix - Cards disappeared from the picker a moment after the page loaded
+
+- What happened: the 2.1.7 console log showed the map card registering correctly (`registered = true`), then the element being missing about a second later (`element missing after 1000 ms, registering again`). Something in the page discards the definition shortly after load, so the card picker and editor found nothing and reported "Custom element not found". Other cards survive because they load later, as dashboard resources, while ours load early with the integration. This is my explanation from the log; I have not proven what removes the definition.
+- Both cards now check every 250 ms for the first minute and register themselves again whenever the element is missing, so the gap is much shorter than the 1 s wait in 2.1.7. A console warning is written each time this happens.
+- The departure board card gets the same protection, although it is not in use yet.
+- Not yet confirmed: that the picker now lists the card and that it stays defined for longer than a minute in a real Home Assistant.
+
 ## [2.1.7] - 2026-10-24
 
 ### Fix - Map card missing from the card picker and "Custom element doesn't exist" (diagnostic release)

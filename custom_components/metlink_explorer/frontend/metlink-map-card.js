@@ -333,11 +333,13 @@ if (!customElements.get(TAG)) {
   console.info("Metlink map card: loaded, registered =", ok);
   window.customCards = window.customCards || [];
   window.customCards.push({ type: TAG, name: "Metlink Map", description: "Live buses, trains and ferries, routes and stops on a street map." });
-  // The element has been seen missing after a successful define; re-register it if that happens.
-  [1000, 5000, 15000].forEach((ms) => setTimeout(() => {
+  // Home Assistant has been seen discarding the definition shortly after load; keep re-registering until it holds.
+  let tries = 0;
+  const watch = setInterval(() => {
+    if (++tries > 240) { clearInterval(watch); return; }
     if (customElements.get(TAG)) return;
-    console.warn(`Metlink map card: element missing after ${ms} ms, registering again`);
+    console.warn(`Metlink map card: element missing after ${tries * 250} ms, registering again`);
     define(class extends MetlinkMapCard {});
-  }, ms));
+  }, 250);
 }
 })();
