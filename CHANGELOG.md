@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.5] - 2026-10-24
+
+### Fix - Map showed "API KEY REQUIRED" and spilled out of its card
+
+- What happened: CARTO, the map tile provider I switched to in 2.1.3, now requires an API key for its basemaps and returns a placeholder tile reading "API KEY REQUIRED". My 2.1.3 check only confirmed the tile address responded, not that it was a real map.
+- The street map now uses Esri World Street Map and the light map uses Esri Light Gray Canvas. Neither needs an API key or a referrer, so they work inside Home Assistant. I checked that both return real map images over Wellington, not placeholders. Attribution to Esri is shown on the map.
+- The map spilled out of its card and drew over the departure board. Home Assistant draws cards in an isolated style scope, so Leaflet's stylesheet (loaded into the main page) never reached the map. The stylesheet is now loaded inside the card, and the map is clipped to its own box.
+- The removed `referrerPolicy` option from 2.1.3 is no longer needed.
+- Not yet confirmed: the layout fix in a real Home Assistant. It was checked in a simulated browser only.
+
 ## [2.1.4] - 2026-10-24
 
 ### Fix - Only one of the two cards could load

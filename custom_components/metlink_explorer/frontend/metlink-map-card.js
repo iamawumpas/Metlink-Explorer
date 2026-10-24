@@ -10,8 +10,8 @@ const MAX_ROUTES = 12;
 const STOP_ZOOM = 15;
 const CENTRE = [-41.2865, 174.7762];
 const BASEMAPS = {
-  street: ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", "© OpenStreetMap contributors © CARTO"],
-  light: ["https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", "© OpenStreetMap contributors © CARTO"],
+  street: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", "Tiles © Esri", 19],
+  light: ["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", "Tiles © Esri", 16],
 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -22,9 +22,6 @@ let leafletPromise;
 function loadLeaflet() {
   if (window.L) return Promise.resolve(window.L);
   leafletPromise ||= new Promise((resolve, reject) => {
-    const css = document.createElement("link");
-    Object.assign(css, { rel: "stylesheet", href: LEAFLET + ".css", integrity: LEAFLET_SRI.css, crossOrigin: "" });
-    document.head.appendChild(css);
     const js = document.createElement("script");
     Object.assign(js, { src: LEAFLET + ".js", integrity: LEAFLET_SRI.js, crossOrigin: "" });
     js.onload = () => resolve(window.L);
@@ -76,7 +73,8 @@ class MetlinkMapCard extends HTMLElement {
   _build() {
     this._built = true;
     this.innerHTML = `
-      <ha-card>
+      <ha-card style="overflow:hidden">
+        <link rel="stylesheet" href="${LEAFLET}.css" integrity="${LEAFLET_SRI.css}" crossorigin="">
         <style>
           .mm{padding:8px 12px}.mm .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
           .mm button.chip{border:1px solid var(--divider-color);border-radius:16px;padding:4px 12px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer}
@@ -85,7 +83,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm .hits{max-height:160px;overflow:auto}.mm .hits button{display:block;width:100%;text-align:left;padding:4px 6px;border:0;background:none;color:var(--primary-text-color);cursor:pointer}
           .mm .hits button:hover{background:var(--secondary-background-color)}.mm .muted{color:var(--secondary-text-color)}
           .mm .opts{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0}.mm .status{font-size:.85em;min-height:1.2em}
-          .mm-map{width:100%}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
+          .mm-map{width:100%;position:relative;overflow:hidden;isolation:isolate;z-index:0}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
           .mm-pop td{padding:1px 6px 1px 0}.mm-pop .late{color:#c62828}
         </style>
         <details class="mm" open>
@@ -165,8 +163,8 @@ class MetlinkMapCard extends HTMLElement {
     const L = window.L;
     if (!this._map || this._basemapName === this._sel.basemap) return;
     if (this._base) this._map.removeLayer(this._base);
-    const [url, attribution] = BASEMAPS[this._sel.basemap] || BASEMAPS.street;
-    this._base = L.tileLayer(url, { attribution, maxZoom: 19, subdomains: "abcd", referrerPolicy: "origin" }).addTo(this._map);
+    const [url, attribution, nativeZoom] = BASEMAPS[this._sel.basemap] || BASEMAPS.street;
+    this._base = L.tileLayer(url, { attribution, maxZoom: 19, maxNativeZoom: nativeZoom }).addTo(this._map);
     this._base.bringToBack();
     this._basemapName = this._sel.basemap;
   }
