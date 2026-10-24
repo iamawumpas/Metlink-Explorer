@@ -1,4 +1,6 @@
 /* Metlink departure board. Stop and "Towards" are chosen in the card and remembered per browser. */
+(() => {
+"use strict";
 const WS = "metlink_explorer/";
 const STORE_KEY = "metlink_explorer_board:";
 
@@ -149,3 +151,4 @@ if (!customElements.get("metlink-departure-board-card")) {
   window.customCards = window.customCards || [];
   window.customCards.push({ type: "metlink-departure-board-card", name: "Metlink Departure Board", description: "Scheduled and live departures for a stop, filtered by where you are going." });
 }
+})();

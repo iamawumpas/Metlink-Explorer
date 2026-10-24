@@ -1,4 +1,6 @@
 /* Metlink map. Shows nothing but a street map until you pick modes or routes; choices are remembered per browser. */
+(() => {
+"use strict";
 const WS = "metlink_explorer/";
 const STORE_KEY = "metlink_explorer_map:";
 const LEAFLET = "https://unpkg.com/leaflet@1.9.4/dist/leaflet";
@@ -324,3 +326,4 @@ if (!customElements.get("metlink-map-card")) {
   window.customCards = window.customCards || [];
   window.customCards.push({ type: "metlink-map-card", name: "Metlink Map", description: "Live buses, trains and ferries, routes and stops on a street map." });
 }
+})();

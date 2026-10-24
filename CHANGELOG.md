@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4] - 2026-10-24
+
+### Fix - Only one of the two cards could load
+
+- What happened: both card files declared the same top-level names (`WS`, `esc`, `clock`). Home Assistant loads them into the same page scope, so the second file failed with `Identifier 'WS' has already been declared` and its card never registered. The card picker then showed endless spinners and a dashboard reported "Custom element not found".
+- Each card file is now wrapped in its own scope, so the two cards can no longer clash with each other or with other custom cards.
+- Not caused by 2.1.3: that release only changed the map tile source. The clash was already present in 2.1.0.
+- Why this was missed: the earlier browser check loaded each file in its own scope, which hid the clash. Both files are now tested together in one page.
+- Not yet confirmed: that this alone fixes the picker on a real Home Assistant. If a card is still missing, send the browser console errors.
+
 ## [2.1.3] - 2026-10-24
 
 ### Fix - Map showed "403 Access blocked" instead of the street map
