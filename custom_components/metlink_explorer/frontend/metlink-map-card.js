@@ -8,7 +8,7 @@ const MAX_ROUTES = 12;
 const STOP_ZOOM = 15;
 const CENTRE = [-41.2865, 174.7762];
 const BASEMAPS = {
-  street: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png", "© OpenStreetMap contributors"],
+  street: ["https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", "© OpenStreetMap contributors © CARTO"],
   light: ["https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", "© OpenStreetMap contributors © CARTO"],
 };
 
@@ -164,7 +164,7 @@ class MetlinkMapCard extends HTMLElement {
     if (!this._map || this._basemapName === this._sel.basemap) return;
     if (this._base) this._map.removeLayer(this._base);
     const [url, attribution] = BASEMAPS[this._sel.basemap] || BASEMAPS.street;
-    this._base = L.tileLayer(url, { attribution, maxZoom: 19, subdomains: "abcd" }).addTo(this._map);
+    this._base = L.tileLayer(url, { attribution, maxZoom: 19, subdomains: "abcd", referrerPolicy: "origin" }).addTo(this._map);
     this._base.bringToBack();
     this._basemapName = this._sel.basemap;
   }

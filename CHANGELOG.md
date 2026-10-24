@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3] - 2026-10-24
+
+### Fix - Map showed "403 Access blocked" instead of the street map
+
+- What happened: the map card loaded its tiles from OpenStreetMap's own volunteer-run servers, which replied "Access blocked". Their tile usage policy requires requests to identify the website they come from, and Home Assistant tells browsers not to send that information.
+- The default street map now uses CARTO Voyager, a street-style map from a provider that does not have that restriction. It still credits OpenStreetMap and CARTO.
+- Tile requests now also send the site's origin as the referrer.
+- Your saved choices (modes, routes, light map) are unaffected.
+- Why this was missed: the card had never been shown in a real browser before 2.1.0 was installed.
+
 ## [2.1.2] - 2026-10-24
 
 ### Fix - Cards did not load when an old version 1 entry was present
