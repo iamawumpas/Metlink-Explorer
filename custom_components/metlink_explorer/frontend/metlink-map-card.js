@@ -323,9 +323,21 @@ class MetlinkMapCard extends HTMLElement {
   }
 }
 
-if (!customElements.get("metlink-map-card")) {
-  customElements.define("metlink-map-card", MetlinkMapCard);
+const TAG = "metlink-map-card";
+const define = (cls) => {
+  try { customElements.define(TAG, cls); } catch (err) { console.warn("Metlink map card: define failed", err); }
+  return !!customElements.get(TAG);
+};
+if (!customElements.get(TAG)) {
+  const ok = define(MetlinkMapCard);
+  console.info("Metlink map card: loaded, registered =", ok);
   window.customCards = window.customCards || [];
-  window.customCards.push({ type: "metlink-map-card", name: "Metlink Map", description: "Live buses, trains and ferries, routes and stops on a street map." });
+  window.customCards.push({ type: TAG, name: "Metlink Map", description: "Live buses, trains and ferries, routes and stops on a street map." });
+  // The element has been seen missing after a successful define; re-register it if that happens.
+  [1000, 5000, 15000].forEach((ms) => setTimeout(() => {
+    if (customElements.get(TAG)) return;
+    console.warn(`Metlink map card: element missing after ${ms} ms, registering again`);
+    define(class extends MetlinkMapCard {});
+  }, ms));
 }
 })();

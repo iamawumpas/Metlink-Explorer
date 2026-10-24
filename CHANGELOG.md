@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.7] - 2026-10-24
+
+### Fix - Map card missing from the card picker and "Custom element doesn't exist" (diagnostic release)
+
+- What happened: after 2.1.6 the map card file loaded (status 200) with no errors, and the card appeared in Home Assistant's list of custom cards, yet the browser reported the `metlink-map-card` element as not defined. Other custom cards (button-card, Mushroom) were defined normally. The card picker and editor then failed with "Custom element not found".
+- The card now checks that its element is really defined after registering it, and writes `Metlink map card: loaded, registered = true/false` to the browser console. If the element is missing after 1, 5 or 15 seconds, it logs a warning and registers it again.
+- Not yet confirmed: I do not know the root cause. This release may fix it or may only show what is happening. If the card is still missing, the console lines starting with `Metlink map card:` will tell us whether the script runs at all.
+- The departure board card is unchanged.
+
 ## [2.1.6] - 2026-10-24
 
 ### Fix - Cards showed "Custom element doesn't exist" until a hard refresh
