@@ -5,6 +5,20 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-10-24
+
+### Added - Service alerts, replacement notices and cancelled trips on the map
+
+- Why: with the Train button on, the map showed nothing because the trains are currently replaced by buses, and Metlink's timetable counts those buses as buses. You asked for the map to say so, and to show other alerts and cancellations too.
+- A banner above the map lists the active service alerts for the buttons you have switched on. If you pick routes, it shows alerts for those routes instead. Network-wide alerts are included. Alerts that mention replacement or "replaced by" buses are pinned in orange above the list.
+- Rail-replacement buses stay as buses, as you asked. The pinned notice explains why trains are missing.
+- A selected route with an alert is drawn dashed, and hovering over it shows the alert headline.
+- Tapping a stop also shows any alert for that stop.
+- A vehicle on a cancelled trip is faded and labelled "(cancelled trip)".
+- Only alerts that are active right now are shown.
+- New `subscribe_alerts` websocket subscription, and the `alerts` command now accepts `modes`. Alerts include the matched routes, the modes they affect and a `replacement` flag; vehicles include `canceled`.
+- Not yet confirmed: this has not run against Metlink's real alert data in Home Assistant. Alerts may use route ids that differ from the timetable, so I match them by id, short name and trip. The replacement notice is a text match on the alert wording, so an unusual phrase could be missed. Cancelled trips often have no vehicle on the road, so a faded vehicle may be rare.
+
 ## [2.1.8] - 2026-10-24
 
 ### Fix - Cards disappeared from the picker a moment after the page loaded

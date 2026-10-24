@@ -14,7 +14,7 @@ from .core.service import MetlinkService
 _LOGGER = logging.getLogger(__name__)
 
 PREFIX = f"{DOMAIN}/"
-SUBSCRIPTIONS = ("subscribe_vehicles", "subscribe_departures")
+SUBSCRIPTIONS = ("subscribe_vehicles", "subscribe_departures", "subscribe_alerts")
 
 
 def _service(hass: HomeAssistant) -> MetlinkService | None:
@@ -32,6 +32,8 @@ def _make_handler(command: str):
                 send = lambda data: connection.send_message(websocket_api.event_message(msg["id"], data))  # noqa: E731
                 if command == "subscribe_vehicles":
                     unsub, kick = await api.subscribe_vehicles(service, msg, send)
+                elif command == "subscribe_alerts":
+                    unsub, kick = await api.subscribe_alerts(service, msg, send)
                 else:
                     unsub, kick = await api.subscribe_departures(service, msg, send, _spawner(hass))
             else:

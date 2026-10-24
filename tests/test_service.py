@@ -85,6 +85,37 @@ def test_departures_include_live_delay(tmp_path):
     with_service(tmp_path, body)
 
 
+def test_alerts_by_mode_resolve_routes_and_flag_replacements(tmp_path):
+    async def body(svc, rt):
+        now = int(svc._now().timestamp())
+        rt.snapshot.alerts = [
+            {"id": "short", "stop_ids": [], "route_ids": ["1"], "trip_ids": [], "header": "Buses replace trains", "periods": [{"start": now - 60, "end": now + 600}]},
+            {"id": "trip", "stop_ids": [], "route_ids": [], "trip_ids": ["T_in_1"], "header": "Delays", "periods": []},
+            {"id": "all", "stop_ids": [], "route_ids": [], "trip_ids": [], "header": "Network notice"},
+            {"id": "old", "stop_ids": [], "route_ids": ["R1"], "trip_ids": [], "periods": [{"start": now - 900, "end": now - 600}]},
+            {"id": "ferry", "stop_ids": [], "route_ids": ["R3"], "trip_ids": []},
+        ]
+        by_id = {a["id"]: a for a in svc.alerts()}
+        assert "old" not in by_id and by_id["short"]["routes"] == ["R1"] and by_id["short"]["replacement"]
+        assert not by_id["trip"]["replacement"] and by_id["trip"]["modes"] == ["bus"]
+        assert {a["id"] for a in svc.alerts(modes=["bus"])} == {"short", "trip", "all"}
+        assert {a["id"] for a in svc.alerts(modes=["ferry"])} == {"ferry", "all"}
+        assert {a["id"] for a in svc.alerts(route_ids=["R3"])} == {"ferry", "all"}
+
+    with_service(tmp_path, body)
+
+
+def test_vehicle_on_cancelled_trip_is_flagged(tmp_path):
+    async def body(svc, rt):
+        rt.snapshot.vehicles = {"1": vehicle("1", "T_in_1"), "2": vehicle("2", "T_in_2")}
+        rt.snapshot.trip_updates = parse_trip_updates({"entity": [
+            {"id": "x", "trip_update": {"trip": {"trip_id": "T_in_1", "schedule_relationship": 3}}}]})
+        flags = {v["id"]: v["canceled"] for v in svc.vehicles()}
+        assert flags == {"1": True, "2": False}
+
+    with_service(tmp_path, body)
+
+
 def test_alerts_filter_and_status(tmp_path):
     async def body(svc, rt):
         rt.snapshot.alerts = [

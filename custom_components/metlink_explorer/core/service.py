@@ -1,6 +1,7 @@
 """Glue between the static database, the realtime feeds and the card-facing API."""
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -11,6 +12,18 @@ from .ais import AisService
 from .realtime import RealtimeService, apply_delays
 from .static_sync import StaticSync
 from .store import Store
+
+
+REPLACEMENT = re.compile(r"replacement|replaced by|bus(?:es)? replac|bus(?:es)? (?:instead|will run)", re.I)
+
+
+def _alert_active(alert: dict[str, Any], now: float) -> bool:
+    periods = alert.get("periods") or []
+    if not periods:
+        return True
+    return any(
+        (p.get("start") or 0) <= now and (not p.get("end") or now <= p["end"]) for p in periods
+    )
 
 
 class MetlinkService:
@@ -30,6 +43,7 @@ class MetlinkService:
         self._now = now
         self._trips: dict[str, tuple[str, int]] = {}
         self._routes: dict[str, dict[str, Any]] = {}
+        self._by_short: dict[str, str] = {}
 
     async def async_reload_index(self) -> None:
         """Rebuild the trip and route lookups. Call after every static sync."""
@@ -40,6 +54,9 @@ class MetlinkService:
             for rid, short, mode, school, color in await self.store.query(
                 "SELECT route_id, short_name, mode, is_school, color FROM routes")
         }
+        self._by_short = {}
+        for rid, r in self._routes.items():
+            self._by_short.setdefault(r["route"], rid)
         self._ferry_route = next((rid for rid, r in self._routes.items() if r["mode"] == "ferry"), None)
 
     def vehicles(
@@ -69,6 +86,7 @@ class MetlinkService:
                     "mode": route["mode"] if route else None,
                     "is_school": route["is_school"] if route else False,
                     "color": route["color"] if route else None,
+                    "canceled": bool(self.realtime.snapshot.trip_updates.get(vehicle.get("trip_id") or "", {}).get("canceled")),
                     "kind": "vehicle",
                 }
             )
@@ -114,14 +132,53 @@ class MetlinkService:
         )
         return apply_delays(rows, self.realtime.snapshot.trip_updates)
 
-    def alerts(self, stop_ids: list[str] | None = None, route_ids: list[str] | None = None) -> list[dict[str, Any]]:
-        stops, routes = set(stop_ids or []), set(route_ids or [])
-        if not stops and not routes:
-            return list(self.realtime.snapshot.alerts)
-        return [
-            a for a in self.realtime.snapshot.alerts
-            if stops.intersection(a["stop_ids"]) or routes.intersection(a["route_ids"])
-        ]
+    def _alert_routes(self, alert: dict[str, Any]) -> set[str]:
+        """Static route ids an alert applies to. Alert ids may be route ids, short names or trips."""
+        found = set()
+        for rid in alert.get("route_ids", []):
+            static = rid if rid in self._routes else self._by_short.get(rid)
+            if static:
+                found.add(static)
+        for trip_id in alert.get("trip_ids", []):
+            trip = self._trips.get(trip_id)
+            if trip:
+                found.add(trip[0])
+        return found
+
+    def alerts(
+        self,
+        stop_ids: list[str] | None = None,
+        route_ids: list[str] | None = None,
+        modes: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Active alerts. With no filter, everything; otherwise those touching the given
+        stops, routes or modes, plus network-wide alerts when routes or modes are given."""
+        stops, routes, wanted_modes = set(stop_ids or []), set(route_ids or []), set(modes or [])
+        filtered = bool(stops or routes or wanted_modes)
+        now = self._now().timestamp()
+        out = []
+        for alert in self.realtime.snapshot.alerts:
+            if not _alert_active(alert, now):
+                continue
+            affected = self._alert_routes(alert)
+            alert_modes = {self._routes[r]["mode"] for r in affected}
+            network_wide = not alert.get("route_ids") and not alert.get("stop_ids") and not alert.get("trip_ids")
+            if filtered and not (
+                stops.intersection(alert.get("stop_ids", []))
+                or routes.intersection(affected)
+                or routes.intersection(alert.get("route_ids", []))
+                or wanted_modes.intersection(alert_modes)
+                or (network_wide and (routes or wanted_modes))
+            ):
+                continue
+            text = f"{alert.get('header') or ''} {alert.get('description') or ''}"
+            out.append({
+                **alert,
+                "routes": sorted(affected),
+                "modes": sorted(alert_modes),
+                "replacement": bool(REPLACEMENT.search(text)),
+            })
+        return out
 
     async def status(self) -> dict[str, Any]:
         feed_version = await self.store.get_meta("feed_version")

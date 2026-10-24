@@ -62,6 +62,12 @@ def test_commands_through_the_websocket_layer(tmp_path):
         assert [d["trip_id"] for d in conn.log[1][2]] == ["T_in_1", "T_in_2"]
         conn.subscriptions.pop(7)()
 
+        rt.snapshot.alerts = [{"id": "a", "stop_ids": [], "route_ids": ["R1"], "trip_ids": [], "header": "Detour"}]
+        conn.log.clear()
+        await call(hass, conn, "subscribe_alerts", {"modes": ["bus"]})
+        assert [e[0] for e in conn.log] == ["result", "message"] and conn.log[1][2][0]["id"] == "a"
+        conn.subscriptions.pop(7)()
+
     with_service(tmp_path, body)
 
 

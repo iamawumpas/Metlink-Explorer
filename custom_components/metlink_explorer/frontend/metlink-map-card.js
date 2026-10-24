@@ -60,6 +60,7 @@ class MetlinkMapCard extends HTMLElement {
 
   disconnectedCallback() {
     this._unsubscribe();
+    this._unsubscribeAlerts();
     clearTimeout(this._moveTimer);
     if (this._observer) this._observer.disconnect();
     if (this._map) { this._map.remove(); this._map = null; }
@@ -67,6 +68,7 @@ class MetlinkMapCard extends HTMLElement {
     this._basemapName = null;
     this._fitted = false;
     this._vehicleMarkers = null;
+    this._routeLines = new Map();
   }
 
   getCardSize() { return 8; }
@@ -88,7 +90,9 @@ class MetlinkMapCard extends HTMLElement {
           .mm .hits button:hover{background:var(--secondary-background-color)}.mm .muted{color:var(--secondary-text-color)}
           .mm .opts{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0}.mm .status{font-size:.85em;min-height:1.2em}
           .mm-map{width:100%;position:relative;overflow:hidden;isolation:isolate;z-index:0}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
-          .mm-pop td{padding:1px 6px 1px 0}.mm-pop .late{color:#c62828}
+          .mm-pop td{padding:1px 6px 1px 0}.mm-pop .late{color:#c62828}.mm-pop .warn{margin-top:4px;color:#e65100}
+          .mm .alerts{margin:4px 0}.mm .alerts .pin{padding:6px 8px;margin:4px 0;border-radius:6px;background:#fff3e0;color:#5d4037;border-left:4px solid #e65100}
+          .mm .alerts details{margin:4px 0}.mm .alerts .item{padding:4px 0;border-top:1px solid var(--divider-color)}.mm .alerts .item p{margin:2px 0 0;font-size:.9em;white-space:pre-wrap}
         </style>
         <details class="mm" open>
           <summary>Filters</summary>
@@ -102,11 +106,12 @@ class MetlinkMapCard extends HTMLElement {
           <div class="hits"></div>
           <div class="chips picked"></div>
         </details>
+        <div class="mm"><div class="alerts"></div></div>
         <div class="mm-map"></div>
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { modes: q(".modes"), school: q(".school"), stops: q(".stops"), light: q(".light"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status") };
+    this._el = { modes: q(".modes"), school: q(".school"), stops: q(".stops"), light: q(".light"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
     this._el.mapDiv.style.height = this._height + "px";
     this._el.modes.innerHTML = MODES.map(([id, label]) => `<button class="chip" data-mode="${id}">${label}</button>`).join("");
     this._el.modes.addEventListener("click", (e) => {
@@ -143,6 +148,7 @@ class MetlinkMapCard extends HTMLElement {
     await this._drawRoutes();
     this._drawStops();
     this._subscribe();
+    this._subscribeAlerts();
   }
 
   _syncControls() {
@@ -206,12 +212,18 @@ class MetlinkMapCard extends HTMLElement {
         const route = await this._hass.callWS({ type: WS + "route", route_id: sel.id });
         const shapeIds = route.directions.flatMap((d) => d.shape_ids.slice(0, 1));
         const shapes = await Promise.all(shapeIds.map((id) => this._hass.callWS({ type: WS + "shape", shape_id: id }).catch(() => null)));
-        for (const s of shapes) if (s) lines.push({ points: s.points, color: hex(route.color, "#1976d2") });
+        for (const s of shapes) if (s) lines.push({ points: s.points, color: hex(route.color, "#1976d2"), routeId: sel.id });
       } catch (_) { /* a missing route must not stop the others */ }
       if (this._routeToken !== token) return;
     }
     this._layers.routes.clearLayers();
-    lines.forEach((l) => L.polyline(l.points, { color: l.color, weight: 4, opacity: 0.8 }).addTo(this._layers.routes));
+    this._routeLines = new Map();
+    lines.forEach((l) => {
+      const line = L.polyline(l.points, { color: l.color, weight: 4, opacity: 0.8 }).addTo(this._layers.routes);
+      if (!this._routeLines.has(l.routeId)) this._routeLines.set(l.routeId, []);
+      this._routeLines.get(l.routeId).push(line);
+    });
+    this._markRoutes();
     if (lines.length && !this._fitted) {
       this._map.fitBounds(L.latLngBounds(lines.flatMap((l) => l.points)), { padding: [20, 20] });
       this._fitted = true;
@@ -251,9 +263,70 @@ class MetlinkMapCard extends HTMLElement {
     }
   }
 
+  async _subscribeAlerts() {
+    this._unsubscribeAlerts();
+    const sel = this._sel;
+    this._alerts = [];
+    this._renderAlerts();
+    if (!this._hass || (!sel.routes.length && !sel.modes.length)) return;
+    const msg = { type: WS + "subscribe_alerts" };
+    if (sel.routes.length) msg.route_ids = sel.routes.map((r) => r.id);
+    else msg.modes = sel.modes;
+    const token = (this._alertToken = {});
+    try {
+      const unsub = await this._hass.connection.subscribeMessage((alerts) => {
+        this._alerts = alerts;
+        this._renderAlerts();
+        this._markRoutes();
+      }, msg);
+      if (this._alertToken !== token) { unsub(); return; }
+      this._unsubAlerts = unsub;
+    } catch (_) { /* alerts are optional; the map still works */ }
+  }
+
+  _unsubscribeAlerts() {
+    this._alertToken = null;
+    if (this._unsubAlerts) { try { this._unsubAlerts(); } catch (_) { /* socket closed */ } this._unsubAlerts = null; }
+  }
+
+  _renderAlerts() {
+    const box = this._el && this._el.alerts;
+    if (!box) return;
+    const alerts = this._alerts || [];
+    if (!alerts.length) { box.innerHTML = ""; return; }
+    const pinned = alerts.filter((a) => a.replacement);
+    const item = (a) => {
+      const names = (a.routes || []).map((r) => this._sel.routes.find((p) => p.id === r)?.name).filter(Boolean);
+      return `<div class="item"><b>${esc(a.header || "Service notice")}</b>${names.length ? ` <span class="muted">${esc(names.join(", "))}</span>` : ""}${a.description ? `<p>${esc(a.description)}</p>` : ""}</div>`;
+    };
+    box.innerHTML =
+      pinned.map((a) => `<div class="pin">⚠ <b>${esc(a.header || "Replacement services")}</b></div>`).join("") +
+      `<details><summary>⚠ ${alerts.length} service alert${alerts.length === 1 ? "" : "s"}</summary>${alerts.map(item).join("")}</details>`;
+  }
+
+  _markRoutes() {
+    if (!this._routeLines) return;
+    const byRoute = new Map();
+    for (const a of this._alerts || []) for (const r of a.routes || []) {
+      if (!byRoute.has(r)) byRoute.set(r, []);
+      byRoute.get(r).push(a.header || "Service notice");
+    }
+    for (const [routeId, lines] of this._routeLines) {
+      const notes = byRoute.get(routeId);
+      for (const line of lines) {
+        line.setStyle({ dashArray: notes ? "10 8" : null });
+        line.unbindTooltip();
+        if (notes) line.bindTooltip(`⚠ ${notes.map(esc).join("<br>⚠ ")}`, { sticky: true });
+      }
+    }
+  }
+
   async _stopPopup(marker, stop) {
     try {
-      const rows = await this._hass.callWS({ type: WS + "departures", stop_id: stop.id, limit: 5 });
+      const [rows, alerts] = await Promise.all([
+        this._hass.callWS({ type: WS + "departures", stop_id: stop.id, limit: 5 }),
+        this._hass.callWS({ type: WS + "alerts", stop_ids: [stop.id] }).catch(() => []),
+      ]);
       const now = Date.now() / 1000;
       const body = rows.length
         ? `<table>${rows.map((r) => {
@@ -262,7 +335,8 @@ class MetlinkMapCard extends HTMLElement {
             return `<tr><td><b>${esc(r.route)}</b></td><td>${esc(r.headsign || r.destination)}</td><td class="${r.status === "delayed" ? "late" : ""}">${esc(when)}</td></tr>`;
           }).join("")}</table>`
         : "No departures soon.";
-      marker.setPopupContent(`<div class="mm-pop"><b>${esc(stop.name)}</b> <span class="muted">${esc(stop.id)}</span><br>${body}</div>`);
+      const warn = alerts.map((a) => `<div class="warn">⚠ ${esc(a.header || "Service notice")}</div>`).join("");
+      marker.setPopupContent(`<div class="mm-pop"><b>${esc(stop.name)}</b> <span class="muted">${esc(stop.id)}</span><br>${body}${warn}</div>`);
     } catch (_) {
       marker.setPopupContent(`<div class="mm-pop"><b>${esc(stop.name)}</b><br>Departures unavailable.</div>`);
     }
@@ -308,11 +382,11 @@ class MetlinkMapCard extends HTMLElement {
       const label = esc(v.route || (v.mode === "ferry" ? "⛴" : "?"));
       const rotate = typeof v.bearing === "number" ? `<div style="position:absolute;inset:-9px;transform:rotate(${Math.round(v.bearing)}deg);pointer-events:none"><div style="margin:0 auto;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid ${color}"></div></div>` : "";
       const icon = L.divIcon({ className: "", iconSize: [28, 22], iconAnchor: [14, 11], html: `<div style="position:relative">${rotate}<div class="mm-badge" style="background:${color}">${label}</div></div>` });
-      const title = v.name || (v.route ? `Route ${v.route}` : "Vehicle");
+      const title = (v.name || (v.route ? `Route ${v.route}` : "Vehicle")) + (v.canceled ? " (cancelled trip)" : "");
       let marker = this._vehicleMarkers.get(v.id);
-      if (marker) { marker.setLatLng([v.lat, v.lon]); marker.setIcon(icon); marker.setTooltipContent(esc(title)); }
+      if (marker) { marker.setLatLng([v.lat, v.lon]); marker.setIcon(icon); marker.setOpacity(v.canceled ? 0.45 : 1); marker.setTooltipContent(esc(title)); }
       else {
-        marker = L.marker([v.lat, v.lon], { icon, keyboard: false }).bindTooltip(esc(title)).addTo(this._layers.vehicles);
+        marker = L.marker([v.lat, v.lon], { icon, keyboard: false, opacity: v.canceled ? 0.45 : 1 }).bindTooltip(esc(title)).addTo(this._layers.vehicles);
         this._vehicleMarkers.set(v.id, marker);
       }
     }

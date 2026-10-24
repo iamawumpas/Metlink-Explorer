@@ -128,7 +128,7 @@ async def _departures(s, m):
     return await s.departures(stop_id, **_departure_args(m))
 
 
-async def _alerts(s, m): return s.alerts(_str_list(m, "stop_ids"), _str_list(m, "route_ids"))
+async def _alerts(s, m): return s.alerts(_str_list(m, "stop_ids"), _str_list(m, "route_ids"), _modes(m))
 async def _status(s, m): return await s.status()
 
 
@@ -171,6 +171,19 @@ async def subscribe_vehicles(
             unsubscribe_ais()
 
     return stop, push
+
+
+async def subscribe_alerts(
+    service: MetlinkService, msg: dict, send: Send
+) -> tuple[Callable[[], None], Callable[[], None]]:
+    """Active alerts for the given stops, routes or modes, pushed whenever the alerts feed updates."""
+    args = {"stop_ids": _str_list(msg, "stop_ids"), "route_ids": _str_list(msg, "route_ids"), "modes": _modes(msg)}
+
+    def push(feed: str | None = None) -> None:
+        if feed in (None, "alerts"):
+            send(service.alerts(**args))
+
+    return service.realtime.subscribe(push), push
 
 
 async def subscribe_departures(
