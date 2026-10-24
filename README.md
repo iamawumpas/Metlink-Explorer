@@ -10,24 +10,28 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-  <strong>Version:</strong> 1.0.13
+  <strong>Version:</strong> 2.0.0
     </td>
   </tr>
 </table>
 
-A Home Assistant custom component that integrates with the Metlink Open Data API to provide real-time Wellington public transport information as sensor entities.
+A Home Assistant custom integration that brings Wellington public transport from the Metlink Open Data API into Home Assistant as a data service for dashboard cards.
+
+> **Version 2 is a rebuild and is not compatible with version 1.** Entities, setup options and card configuration have all changed. See the [changelog](CHANGELOG.md) for what changed and why. The version 1 code is kept in the `legacy` folder for reference only.
 
 ## Features
 
-- **Multi-Modal Transport Support**: Bus, Train, Ferry, Cable Car, and School Bus routes
-- **Real-Time Data**: Vehicle positions, trip updates, and service alerts
-- **Direction-Based Entities**: Separate sensors for each route direction with intelligent naming
-- **Easy Setup**: Step-by-step configuration flow with API key validation
-- **Route Filtering**: Select routes by transportation type with alphanumeric sorting
+- **Pick your stop in the card**: search for a stop, then choose where you are heading ("Towards Courtenay Place"). You only see trips that really go there, so you always get the schedule for the right direction.
+- **Live information**: delays, early running, cancellations and skipped stops are merged into the timetable.
+- **Whole network timetable**: all Metlink routes and stops are downloaded once, stored on disk and checked for changes every day. Bus, train, ferry and cable car are included, and school buses are flagged.
+- **Gentle on the API**: nothing is requested from Metlink while no card is open, and one failing feed never stops another.
+- **No entities to manage**: the integration is a data service. Your choices live in the card.
+
+Still to come in version 2: the live map card and live ferry positions (AISStream). The AISStream key can be entered now, but it is not used yet.
 
 
 ## Why this integration?
-Simply put I got frustrated :smile: trying to make my dashboard do things the entities couldn't/wouldn't/probably shouldn't do (but hey! It's my server I can stress it outas much as I want). It turns out that while the Metlink API uses the GTFS standard for publishing its scheduling data and real-time data, it does not fully conform to the standard. The result is many fields do not behave the way they were meant to, contain different data, or data is formatted incorrectly. I wanted an integration that gathers all of the data and fixes much of these errors into easy to use entities, that could then be used in a number Home Assistant Lovelace Cards, or custom cards that I want to create next.
+Simply put I got frustrated :smile: trying to make my dashboard do things the entities couldn't/wouldn't/probably shouldn't do. It turns out that while the Metlink API uses the GTFS standard for publishing its scheduling data and real-time data, it does not fully conform to the standard. The result is many fields do not behave the way they were meant to, contain different data, or data is formatted incorrectly. I wanted an integration that gathers all of the data, fixes many of these problems, and serves it to custom cards.
 
 
 ## Installation
@@ -73,25 +77,11 @@ Quick guide:
 
 ## Setup Process
 
-1. **API Key**: Enter your Metlink Open Data API key (get one free from [Metlink Developer Portal](https://opendata.metlink.org.nz/))
-2. **Transport Type**: Choose from Bus, Train, Ferry, Cable Car, or School Bus
-3. **Route Selection**: Pick a specific route from the filtered list
-4. **Entities Created**: Two sensors are created (one for each direction)
+1. **API keys**: Enter your Metlink Open Data API key (get one free from [Metlink Developer Portal](https://opendata.metlink.org.nz/)). The AISStream key is optional.
+2. **Wait for the first timetable download**: it runs in the background and can take several minutes. Home Assistant is not held up.
+3. **Add the card**: edit a dashboard, add the **Metlink Departure Board** card, search for your stop and choose where you are heading.
 
-## Entity Naming Convention
-
-Entities are named using the format: `Route Number :: Route Description`
-
-- **Direction 0**: `route_short_name :: route_desc` 
-- **Direction 1**: `route_short_name :: route_long_name`
-
-The GTFS data provides separate descriptions for each direction (note our mapping is reversed to better match local usage):
-- `route_desc` is shown for Direction 0
-- `route_long_name` is shown for Direction 1
-
-Example:
-- `83 :: Eastbourne - Lower Hutt - Petone - Wellington Station` (Direction 0)
-- `83 :: Wellington Station - Petone - Lower Hutt - Eastbourne` (Direction 1)
+You can change the keys later from the integration's **Reconfigure** option.
 
 ## Development
 

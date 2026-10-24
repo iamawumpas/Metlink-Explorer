@@ -1,122 +1,61 @@
-"""Constants for the Metlink Explorer integration."""
+"""Constants for Metlink Explorer v2."""
 
 DOMAIN = "metlink_explorer"
 
-# API Configuration
-BASE_URL = "https://api.opendata.metlink.org.nz/v1"
-API_ENDPOINTS = {
-    "agency": "/gtfs/agency",
-    "routes": "/gtfs/routes", 
-    "stops": "/gtfs/stops",
-    "trips": "/gtfs/trips",
-    "stop_times": "/gtfs/stop_times",  # NEW: Needed for stop sequences
-    "shapes": "/gtfs/shapes",
-    "calendar_dates": "/gtfs/calendar_dates",
-    "vehicle_positions": "/gtfs-rt/vehiclepositions",
-    "trip_updates": "/gtfs-rt/tripupdates",
-    "service_alerts": "/gtfs-rt/servicealerts",
-    "stop_predictions": "/stop-predictions"
-}
+CONF_METLINK_KEY = "metlink_api_key"
+CONF_AIS_KEY = "aisstream_api_key"
+METLINK_BASE_URL = "https://api.opendata.metlink.org.nz/v1"
+FRONTEND_URL_BASE = "/metlink_explorer_frontend"
 
-# Transportation Types (GTFS route_type mapping)
-TRAIN_ROUTE_TYPE = 2
+STATIC_GTFS_URL = "https://static.opendata.metlink.org.nz/v1/gtfs/full.zip"
+STATIC_CHECK_INTERVAL_HOURS = 24
+STATIC_DB_FILENAME = "metlink_explorer_gtfs.db"
+STATIC_DB_SCHEMA_VERSION = 2
 
-TRANSPORTATION_TYPES = {
-    TRAIN_ROUTE_TYPE: "Train",
-    3: "Bus", 
-    4: "Ferry",
-    5: "Cable Car",
-    712: "School Bus"
-}
-
-# Configuration Keys
-CONF_API_KEY = "api_key"
-CONF_TRANSPORTATION_TYPE = "transportation_type"
-CONF_ROUTE_ID = "route_id"
-CONF_ROUTE_SHORT_NAME = "route_short_name"
-CONF_ROUTE_LONG_NAME = "route_long_name"
-CONF_ROUTE_DESC = "route_desc"
-CONF_ROUTES = "routes"
-CONF_ACTIVE_DIRECTION = "active_direction"
-CONF_LEGACY_DIRECTION_ENTITIES = "legacy_direction_entities"
-CONF_AIS_API_KEY = "ais_api_key"
-CONF_AIS_VESSEL_MAP = "ais_vessel_map"
-
-# Default Values
-DEFAULT_SCAN_INTERVAL = 30  # Aligned with Metlink backend update frequency and new RTI system
-REQUEST_TIMEOUT = 15  # Increased timeout for complex requests
-DEFAULT_ACTIVE_DIRECTION = 0
-DEFAULT_GTFS_CACHE_TTL_SECONDS = 300
-TRAIN_GTFS_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
-TRAIN_GEOMETRY_SENSOR_KEY = "train_route_geometry"
-
-# Local DB pipeline (v1.0.0)
-DB_SUBDIR = "db"
-DB_META_FILENAME = "meta.json"
-DB_ALERTS_FILENAME = "alerts.json"
-
-DB_REFRESH_ROUTES_SECONDS = 24 * 60 * 60
-DB_REFRESH_SCHEDULES_SECONDS = 60 * 60
-DB_REFRESH_ALERTS_SECONDS = 5 * 60
-DB_REFRESH_VEHICLES_SECONDS = DEFAULT_SCAN_INTERVAL
-DB_ROUTES_REFRESH_HOUR_LOCAL = 5
-
-DB_ROUTES_FILENAME_TEMPLATE = "{mode}_route.json"
-DB_ROUTE_GEOMETRY_FILENAME_TEMPLATE = "{mode}_route_geometry.json"
-DB_STOPS_FILENAME_TEMPLATE = "{mode}_stops.json"
-DB_SCHEDULES_FILENAME_TEMPLATE = "{mode}_schedules.json"
-DB_VEHICLES_FILENAME_TEMPLATE = "{mode}_vehicles.json"
-
-# Map GTFS transport type ids to file slugs.
-DB_MODE_SLUG_BY_TYPE = {
+# GTFS route_type -> mode. School buses are bus mode with the is_school flag.
+ROUTE_TYPE_MODES = {
     2: "train",
     3: "bus",
     4: "ferry",
     5: "cable_car",
-    # Metlink school bus (712) is merged into the main bus DB payloads.
     712: "bus",
 }
+SCHOOL_ROUTE_TYPES = frozenset({712})
 
-# AIS ferry live tracking
-FERRY_ROUTE_TYPE = 4
-EAST_BY_WEST_FLEET_URL = "https://eastbywest.co.nz/about-us/our-fleet/"
-AISSTREAM_WS_URL = "wss://stream.aisstream.io/v0/stream"
-AISSTREAM_DEFAULT_BBOX = [[[-41.38, 174.73], [-41.21, 174.92]]]
-AISSTREAM_SAMPLE_SECONDS = 20
-AISSTREAM_POSITION_CACHE_SECONDS = 20
-AISSTREAM_RECONNECT_SECONDS = 60
-AISSTREAM_REPORT_MAX_AGE_SECONDS = 6 * 60 * 60
-AIS_VESSEL_REFRESH_SECONDS = 24 * 60 * 60
-AIS_FERRY_SEED_NAMES = [
-    "IKA RERE",
-    "COBAR CAT",
-    "CITY CAT",
-]
-DEFAULT_AIS_FERRY_VESSELS = {
-    "512010273": "IKA RERE",
-    "512003410": "COBAR CAT",
-    "512003252": "CITY CAT",
-}
+# "Inbound" means travelling towards the nearest CBD anchor.
+CBD_ANCHORS = (
+    ("Wellington Station", -41.2782, 174.7800),
+    ("Lambton Quay", -41.2830, 174.7757),
+    ("Courtenay Place", -41.2935, 174.7800),
+    ("Manners and Cuba", -41.2910, 174.7766),
+)
 
-LEGACY_AIS_FERRY_VESSELS = {
-    "210375740": "CITY CAT",
-    "210375730": "COBAR CAT",
-    "210375710": "IKA RERE",
-}
+# Used only for routes that do not run to the CBD (local routes between hubs).
+REGIONAL_HUBS = (
+    ("Queensgate", -41.2103, 174.9049),
+    ("Petone Station", -41.2226, 174.8687),
+    ("Waterloo", -41.2136, 174.9215),
+    ("Naenae Station", -41.1985, 174.9463),
+    ("Taita Station", -41.1803, 174.9607),
+    ("Upper Hutt Station", -41.1260, 175.0705),
+    ("Porirua Station", -41.1377, 174.8432),
+    ("Johnsonville", -41.2233, 174.8048),
+    ("Paraparaumu Station", -40.9165, 175.0074),
+    ("Waikanae Station", -40.8766, 175.0662),
+)
 
+# Direction detection
+DIRECTION_LOOKAHEAD_M = 500.0
+DIRECTION_MIN_DELTA_M = 100.0
+CBD_RADIUS_M = 2500.0
+HUB_RADIUS_M = 800.0
 
-def normalize_ais_ferry_vessel_map(vessel_map: dict[str, str] | None) -> dict[str, str]:
-    """Return a normalized ferry MMSI map, migrating known legacy defaults."""
-    if not isinstance(vessel_map, dict) or not vessel_map:
-        return dict(DEFAULT_AIS_FERRY_VESSELS)
+# Stop pairing
+PAIR_MAX_DISTANCE_M = 60.0
+PAIR_MAX_DISTANCE_STRONG_M = 150.0
+PAIR_MIN_SCORE = 0.5
 
-    normalized: dict[str, str] = {
-        str(mmsi).strip(): str(name or "").strip().upper()
-        for mmsi, name in vessel_map.items()
-        if str(mmsi).strip() and str(mmsi).strip().isdigit()
-    }
-
-    if normalized == LEGACY_AIS_FERRY_VESSELS:
-        return dict(DEFAULT_AIS_FERRY_VESSELS)
-
-    return normalized or dict(DEFAULT_AIS_FERRY_VESSELS)
+# Departures
+DEFAULT_DEPARTURE_LIMIT = 20
+DEFAULT_DEPARTURE_HORIZON_HOURS = 72
+MAX_DEPARTURE_HORIZON_HOURS = 168

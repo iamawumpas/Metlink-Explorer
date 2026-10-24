@@ -1,434 +1,151 @@
+/* Metlink departure board. Stop and "Towards" are chosen in the card and remembered per browser. */
+const WS = "metlink_explorer/";
+const STORE_KEY = "metlink_explorer_board:";
+
+let stopsCache;
+const loadStops = (hass) => (stopsCache ||= hass.callWS({ type: WS + "stops" }).catch((e) => { stopsCache = undefined; throw e; }));
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
 class MetlinkDepartureBoardCard extends HTMLElement {
-  static getStubConfig() {
-    return {
-      type: "custom:metlink-departure-board-card",
-      title: "Departures",
-      entities: ["sensor.bus_departures_board"],
-      route_entities: [],
-      stop_filter: "",
-      limit: 20,
-    };
-  }
-
   setConfig(config) {
-    if (!config || (!config.entity && !config.entities)) {
-      throw new Error("Provide entity or entities in card configuration");
-    }
-
-    const entities = Array.isArray(config.entities)
-      ? config.entities
-      : config.entity
-        ? [config.entity]
-        : [];
-
-    this._config = {
-      title: config.title || "Departures",
-      entities,
-      route_entities: Array.isArray(config.route_entities) ? config.route_entities : [],
-      stop_filter: (config.stop_filter || "").toLowerCase(),
-      limit: Number.isInteger(config.limit) ? config.limit : 20,
-      sort_by: config.sort_by || "scheduled",
-      show_countdown: config.show_countdown !== false,
-      show_dividers: config.show_dividers !== false,
-      divider_color: config.divider_color || "#ffffff66",
-      fields: {
-        route: config.fields?.route !== false,
-        description: config.fields?.description !== false,
-        stop: config.fields?.stop === true,
-        departs: config.fields?.departs !== false,
-      },
-      route_color: config.route_color || "#ff9800",
-      route_size: config.route_size || "1.4em",
-      description_color: config.description_color || "#ffffff",
-      meta_color: config.meta_color || "#ffd54f",
-      card_max_height: config.card_max_height || "300px",
-    };
-
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: "open" });
-    }
-
-    if (!this._timer) {
-      this._timer = window.setInterval(() => this._render(), 30000);
-    }
-
-    if (!this._dbCache) this._dbCache = new Map();
-    if (!this._dbCacheMs) this._dbCacheMs = 0;
-
-    this._render();
-  }
-
-  disconnectedCallback() {
-    if (this._timer) {
-      window.clearInterval(this._timer);
-      this._timer = null;
-    }
+    this._config = config || {};
+    this._key = STORE_KEY + (this._config.id || "default");
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(this._key) || "{}"); } catch (_) { /* ignore */ }
+    this._sel = { stopId: this._config.stop_id || saved.stopId || "", stopName: saved.stopName || "", towards: this._config.towards ?? saved.towards ?? "" };
+    this._limit = this._config.limit || 10;
+    if (this._built) this._refresh();
   }
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
+    if (!this._built) this._build();
   }
 
-  getCardSize() {
-    return 4;
+  connectedCallback() {
+    this._tick = setInterval(() => this._renderRows(), 30000);
+    if (this._built) this._subscribe();
   }
 
-  _render() {
-    if (!this._hass || !this._config || !this.shadowRoot) {
+  disconnectedCallback() {
+    clearInterval(this._tick);
+    this._unsubscribe();
+  }
+
+  getCardSize() { return 6; }
+  static getStubConfig() { return { limit: 10 }; }
+
+  _build() {
+    this._built = true;
+    this.innerHTML = `
+      <ha-card>
+        <style>
+          .mx{padding:12px 16px}.mx input,.mx select{width:100%;box-sizing:border-box;padding:8px;margin:4px 0;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color)}
+          .mx .hits button{display:block;width:100%;text-align:left;padding:6px 8px;border:0;background:none;color:var(--primary-text-color);cursor:pointer}
+          .mx .hits button:hover{background:var(--secondary-background-color)}
+          .mx table{width:100%;border-collapse:collapse}.mx td{padding:6px 4px;border-top:1px solid var(--divider-color)}
+          .mx .badge{display:inline-block;min-width:2.2em;text-align:center;padding:2px 6px;border-radius:4px;font-weight:600}
+          .mx .late{color:var(--error-color)}.mx .early{color:var(--info-color)}.mx .gone{text-decoration:line-through;opacity:.6}.mx .muted{color:var(--secondary-text-color)}
+        </style>
+        <div class="mx">
+          <div class="title"></div>
+          <input class="search" type="search" placeholder="Search for a stop…" autocomplete="off">
+          <div class="hits"></div>
+          <select class="towards" hidden></select>
+          <div class="body"></div>
+        </div>
+      </ha-card>`;
+    const q = (s) => this.querySelector(s);
+    this._el = { title: q(".title"), search: q(".search"), hits: q(".hits"), towards: q(".towards"), body: q(".body") };
+    this._el.search.addEventListener("input", () => this._search());
+    this._el.towards.addEventListener("change", () => {
+      this._sel.towards = this._el.towards.value;
+      this._save();
+      this._subscribe();
+    });
+    this._refresh();
+  }
+
+  _save() {
+    try { localStorage.setItem(this._key, JSON.stringify(this._sel)); } catch (_) { /* private mode */ }
+  }
+
+  async _search() {
+    const text = this._el.search.value.trim().toLowerCase();
+    if (text.length < 2) { this._el.hits.innerHTML = ""; return; }
+    try {
+      const stops = await loadStops(this._hass);
+      const hits = stops.filter((s) => s.name.toLowerCase().includes(text) || s.stop_ids.some((i) => i.startsWith(text))).slice(0, 12);
+      this._el.hits.innerHTML = hits.map((s) => `<button data-id="${esc(s.id)}" data-name="${esc(s.name)}">${esc(s.name)} <span class="muted">${esc(s.modes.join(", "))} · ${esc(s.id)}</span></button>`).join("") || `<div class="muted">No stops found</div>`;
+      this._el.hits.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+        this._sel = { stopId: b.dataset.id, stopName: b.dataset.name, towards: "" };
+        this._el.search.value = "";
+        this._el.hits.innerHTML = "";
+        this._save();
+        this._refresh();
+      }));
+    } catch (err) {
+      this._el.hits.innerHTML = `<div class="muted">Stops are not available yet. The timetable is still downloading.</div>`;
+    }
+  }
+
+  async _refresh() {
+    this._unsubscribe();
+    this._rows = null;
+    this._el.title.innerHTML = this._sel.stopId ? `<h2 style="margin:0 0 4px">${esc(this._sel.stopName || this._sel.stopId)}</h2>` : "";
+    this._el.towards.hidden = !this._sel.stopId;
+    if (!this._sel.stopId) { this._el.body.innerHTML = `<p class="muted">Search for a stop to see its departures.</p>`; return; }
+    try {
+      const dests = await this._hass.callWS({ type: WS + "destinations", stop_id: this._sel.stopId });
+      this._el.towards.innerHTML = `<option value="">Towards: anywhere</option>` + dests.map((d) => `<option value="${esc(d.stop_id)}">Towards ${esc(d.name)} (${esc(d.routes.join(", "))})</option>`).join("");
+      this._el.towards.value = dests.some((d) => d.stop_id === this._sel.towards) ? this._sel.towards : "";
+      this._sel.towards = this._el.towards.value;
+    } catch (err) {
+      this._el.body.innerHTML = `<p class="muted">Could not load this stop (${esc(err.message || err.code)}).</p>`;
       return;
     }
-
-    const routeLabelMap = this._buildRouteLabelMap();
-    if (!this._dbCacheMs || (Date.now() - this._dbCacheMs) > 60000) {
-      this._refreshDbSchedulesCache();
-    }
-    const rows = this._buildRows(routeLabelMap);
-    const sorted = this._sortRows(rows);
-    const limited = sorted.slice(0, this._config.limit);
-
-    const itemsHtml =
-      limited.length === 0
-        ? `<div class="empty">No departures found.</div>`
-        : limited
-            .map((row, index) => {
-              const route = this._config.fields.route
-                ? `<div class="route">${this._escape(row.route)}</div>`
-                : "";
-              const description = this._config.fields.description
-                ? `<div class="description">${this._escape(row.description)}</div>`
-                : "";
-              const stop = this._config.fields.stop
-                ? `<div class="stop">${this._escape(row.stop_name)}</div>`
-                : "";
-              const departs = this._config.fields.departs
-                ? `<div class="meta">Departs <span class="meta-strong">${this._escape(row.scheduled_hhmm)}</span>${this._config.show_countdown ? ` in ${this._escape(row.countdown)}` : ""}</div>`
-                : "";
-              const divider =
-                this._config.show_dividers && index < limited.length - 1
-                  ? `<hr />`
-                  : "";
-              return `<div class="item">${route}${description}${stop}${departs}</div>${divider}`;
-            })
-            .join("");
-
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host {
-          display: block;
-        }
-        .card {
-          background: var(--ha-card-background, var(--card-background-color, #1c1c1c));
-          border-radius: var(--ha-card-border-radius, 12px);
-          box-shadow: var(--ha-card-box-shadow, none);
-          padding: 12px;
-          max-height: ${this._config.card_max_height};
-          overflow-y: auto;
-          overflow-x: hidden;
-          scrollbar-width: thin;
-        }
-        .title {
-          margin: 0 0 10px 0;
-          font-size: 1.1em;
-          font-weight: 600;
-          color: var(--primary-text-color);
-        }
-        .route {
-          color: ${this._config.route_color};
-          font-weight: 800;
-          font-size: ${this._config.route_size};
-          line-height: 1.15;
-        }
-        .description {
-          color: ${this._config.description_color};
-          font-weight: 600;
-          font-size: 1em;
-          line-height: 1.25;
-          margin-top: 2px;
-        }
-        .stop {
-          color: var(--secondary-text-color);
-          font-size: 0.9em;
-          margin-top: 2px;
-        }
-        .meta {
-          color: ${this._config.meta_color};
-          font-size: 1em;
-          margin-top: 3px;
-        }
-        .meta-strong {
-          color: var(--primary-text-color);
-          font-weight: 700;
-        }
-        hr {
-          border: none;
-          border-top: 2px solid ${this._config.divider_color};
-          margin: 10px 20px;
-        }
-        .empty {
-          color: var(--secondary-text-color);
-          font-size: 0.95em;
-        }
-      </style>
-      <div class="card">
-        ${this._config.title ? `<div class="title">${this._escape(this._config.title)}</div>` : ""}
-        ${itemsHtml}
-      </div>
-    `;
+    this._subscribe();
   }
 
-  _modeSlugFromBoardState(state) {
-    const attrs = state?.attributes || {};
-    const typeText = String(attrs.transportation_type || "").trim().toLowerCase();
-    if (typeText.includes("train")) return "train";
-    if (typeText.includes("ferry")) return "ferry";
-    if (typeText.includes("bus")) return "bus";
-
-    const typeId = Number(attrs.transportation_type_id);
-    if (typeId === 2) return "train";
-    if (typeId === 4) return "ferry";
-    if (typeId === 3 || typeId === 712) return "bus";
-
-    return null;
+  async _subscribe() {
+    this._unsubscribe();
+    if (!this._hass || !this._sel.stopId) return;
+    const msg = { type: WS + "subscribe_departures", stop_id: this._sel.stopId, limit: this._limit };
+    if (this._sel.towards) msg.towards = this._sel.towards;
+    const token = (this._token = {});
+    try {
+      const unsub = await this._hass.connection.subscribeMessage((rows) => { this._rows = rows; this._renderRows(); }, msg);
+      if (this._token !== token) { unsub(); return; }
+      this._unsub = unsub;
+    } catch (err) {
+      this._el.body.innerHTML = `<p class="muted">Live departures unavailable (${esc(err.message || err.code)}).</p>`;
+    }
   }
 
-  async _refreshDbSchedulesCache() {
-    if (!this._hass || !this._config) return;
-    const states = this._hass.states || {};
-    const modes = new Set();
-    for (const entityId of this._config.entities || []) {
-      const state = states[entityId];
-      const mode = this._modeSlugFromBoardState(state);
-      if (mode) modes.add(mode);
-    }
+  _unsubscribe() {
+    this._token = null;
+    if (this._unsub) { try { this._unsub(); } catch (_) { /* socket closed */ } this._unsub = null; }
+  }
 
-    const loads = [...modes].map(async (mode) => {
-      try {
-        const url = `/local/metlink_explorer/db/${mode}_schedules.json`;
-        const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) return;
-        const payload = await res.json();
-        this._dbCache.set(`${mode}_schedules`, payload);
-      } catch (_) {
-        // Fallback to legacy state attributes if DB fetch fails.
-      }
+  _renderRows() {
+    if (!this._built || !this._rows) return;
+    if (!this._rows.length) { this._el.body.innerHTML = `<p class="muted">No departures in the next 72 hours.</p>`; return; }
+    const now = Date.now() / 1000;
+    const rows = this._rows.filter((r) => r.timestamp_expected > now - 60).map((r) => {
+      const mins = Math.round((r.timestamp_expected - now) / 60);
+      const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected);
+      const note = r.status === "delayed" ? `<span class="late">+${Math.round(r.delay / 60)} min</span>` : r.status === "early" ? `<span class="early">${Math.round(r.delay / 60)} min</span>` : r.status === "skipped" ? "Skipped" : "";
+      const style = r.color ? `background:#${esc(r.color)};color:${r.text_color ? "#" + esc(r.text_color) : "#fff"}` : "background:var(--primary-color);color:#fff";
+      return `<tr class="${r.status === "canceled" || r.status === "skipped" ? "gone" : ""}"><td><span class="badge" style="${style}">${esc(r.route)}</span></td><td>${esc(r.headsign || r.destination)}${r.is_school ? ' <span class="muted">school</span>' : ""}</td><td>${esc(clock(r.timestamp))}</td><td>${esc(when)} ${note}</td></tr>`;
     });
-
-    await Promise.all(loads);
-    this._dbCacheMs = Date.now();
-    this._render();
-  }
-
-  _rowsFromDbSchedules(payload, routeLabelMap, stopFilter) {
-    const rows = [];
-    const byStop = payload?.by_stop;
-    if (!byStop || typeof byStop !== "object") return rows;
-
-    Object.values(byStop).forEach((stopRows) => {
-      if (!Array.isArray(stopRows)) return;
-      stopRows.forEach((dep) => {
-        const stopName = String(dep?.stop_name || "");
-        if (stopFilter && !stopName.toLowerCase().includes(stopFilter)) return;
-
-        const depIso = dep?.departure_iso ? new Date(String(dep.departure_iso)) : null;
-        const depTs = depIso && !Number.isNaN(depIso.getTime()) ? depIso.getTime() : null;
-        if (!depTs) return;
-
-        const now = Date.now();
-        const etaSec = Math.floor((depTs - now) / 1000);
-        if (etaSec < 0 || etaSec > 24 * 3600) return;
-
-        const route = String(dep?.route_short_name || dep?.service_label || dep?.route_id || "?");
-        const directionId = Number.isInteger(dep?.direction_id)
-          ? dep.direction_id
-          : parseInt(dep?.direction_id || "0", 10) || 0;
-
-        const mapped = routeLabelMap.get(`${route}|${directionId}`);
-        const description = String(mapped?.label || dep?.direction_label || dep?.destination || "Unknown destination");
-
-        const depDate = new Date(depTs);
-        const hh = String(depDate.getHours()).padStart(2, "0");
-        const mm = String(depDate.getMinutes()).padStart(2, "0");
-        const ss = String(depDate.getSeconds()).padStart(2, "0");
-        const parsed = this._parseTime(`${hh}:${mm}:${ss}`);
-        if (!parsed) return;
-
-        rows.push({
-          route,
-          direction_id: directionId,
-          description,
-          stop_name: stopName,
-          scheduled_hhmm: `${hh}:${mm}`,
-          scheduled_sort_seconds: parsed.seconds,
-          eta_seconds: etaSec,
-          countdown: this._formatCountdown(etaSec),
-        });
-      });
-    });
-
-    return rows;
-  }
-
-  _buildRouteLabelMap() {
-    const map = new Map();
-    const states = this._hass.states;
-
-    for (const entityId of this._config.route_entities) {
-      const state = states[entityId];
-      if (!state || state.state === "unavailable" || state.state === "unknown") {
-        continue;
-      }
-
-      const rsn = String(state.attributes.route_short_name || "").trim();
-      if (!rsn) {
-        continue;
-      }
-
-      const d0 = state.attributes.direction_0_label || null;
-      const d1 = state.attributes.direction_1_label || null;
-      const d0Dest = state.attributes.direction_0_destination || null;
-      const d1Dest = state.attributes.direction_1_destination || null;
-
-      map.set(`${rsn}|0`, { label: d0, destination: d0Dest });
-      map.set(`${rsn}|1`, { label: d1, destination: d1Dest });
-    }
-
-    return map;
-  }
-
-  _buildRows(routeLabelMap) {
-    const rows = [];
-    const stopFilter = this._config.stop_filter;
-    const states = this._hass.states;
-    const dbModesAdded = new Set();
-
-    for (const boardEntity of this._config.entities) {
-      const state = states[boardEntity];
-      if (!state || state.state === "unavailable" || state.state === "unknown") {
-        continue;
-      }
-
-      const modeSlug = this._modeSlugFromBoardState(state);
-      const dbPayload = modeSlug ? this._dbCache?.get(`${modeSlug}_schedules`) : null;
-      if (dbPayload && !dbModesAdded.has(modeSlug)) {
-        rows.push(...this._rowsFromDbSchedules(dbPayload, routeLabelMap, stopFilter));
-        dbModesAdded.add(modeSlug);
-        continue;
-      }
-
-      const departures = Array.isArray(state.attributes.departures)
-        ? state.attributes.departures
-        : [];
-
-      for (const dep of departures) {
-        const stopName = String(dep.stop_name || "");
-        if (stopFilter && !stopName.toLowerCase().includes(stopFilter)) {
-          continue;
-        }
-
-        const scheduledRaw =
-          String(dep.scheduled_departure_time || dep.departure_time || "")
-            .replace("Scheduled:", "")
-            .trim();
-        const parsed = this._parseTime(scheduledRaw);
-        if (!parsed) {
-          continue;
-        }
-
-        const now = new Date();
-        const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-        let etaSec = parsed.seconds - nowSec;
-        if (etaSec < 0) {
-          etaSec += 86400;
-        }
-
-        const route = String(dep.route_short_name || "?");
-        const directionId = Number.isInteger(dep.direction_id)
-          ? dep.direction_id
-          : parseInt(dep.direction_id || "0", 10) || 0;
-
-        const mapped = routeLabelMap.get(`${route}|${directionId}`);
-        let description = mapped?.label || dep.direction_label || dep.destination || "Unknown destination";
-
-        if (mapped?.destination && dep.destination) {
-          const rowDest = String(dep.destination).toLowerCase();
-          const mappedDest = String(mapped.destination).toLowerCase();
-          if (rowDest && mappedDest && !mappedDest.includes(rowDest) && !rowDest.includes(mappedDest)) {
-            // Keep mapped label; destination mismatch is tolerated.
-            description = mapped.label || description;
-          }
-        }
-
-        rows.push({
-          route,
-          direction_id: directionId,
-          description: String(description),
-          stop_name: stopName,
-          scheduled_hhmm: `${String(parsed.hour % 24).padStart(2, "0")}:${String(parsed.minute).padStart(2, "0")}`,
-          scheduled_sort_seconds: parsed.seconds,
-          eta_seconds: etaSec,
-          countdown: this._formatCountdown(etaSec),
-        });
-      }
-    }
-
-    return rows;
-  }
-
-  _sortRows(rows) {
-    if (this._config.sort_by === "eta") {
-      return rows.sort((a, b) => a.eta_seconds - b.eta_seconds);
-    }
-    return rows.sort((a, b) => a.scheduled_sort_seconds - b.scheduled_sort_seconds);
-  }
-
-  _parseTime(value) {
-    if (!value || typeof value !== "string") {
-      return null;
-    }
-    const parts = value.split(":");
-    if (parts.length < 2) {
-      return null;
-    }
-    const hour = parseInt(parts[0], 10);
-    const minute = parseInt(parts[1], 10);
-    const second = parts.length > 2 ? parseInt(parts[2], 10) : 0;
-    if (Number.isNaN(hour) || Number.isNaN(minute) || Number.isNaN(second)) {
-      return null;
-    }
-    return {
-      hour,
-      minute,
-      second,
-      seconds: hour * 3600 + minute * 60 + second,
-    };
-  }
-
-  _formatCountdown(totalSeconds) {
-    if (totalSeconds < 3600) {
-      const m = Math.floor((totalSeconds % 3600) / 60);
-      return `${String(m).padStart(2, "0")}m`;
-    }
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
-  }
-
-  _escape(value) {
-    return String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+    this._el.body.innerHTML = `<table>${rows.join("")}</table>`;
   }
 }
 
-customElements.define("metlink-departure-board-card", MetlinkDepartureBoardCard);
-
-window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "metlink-departure-board-card",
-  name: "Metlink Departure Board Card",
-  description: "Configurable departures board for Metlink sensors",
-});
+if (!customElements.get("metlink-departure-board-card")) {
+  customElements.define("metlink-departure-board-card", MetlinkDepartureBoardCard);
+  window.customCards = window.customCards || [];
+  window.customCards.push({ type: "metlink-departure-board-card", name: "Metlink Departure Board", description: "Scheduled and live departures for a stop, filtered by where you are going." });
+}

@@ -1,395 +1,105 @@
-"""The Metlink Explorer integration."""
+"""Metlink Explorer v2: a data service for the Metlink cards.
+
+Static timetables live in SQLite and are refreshed daily. Live data is only
+fetched while a card is subscribed. Everything is served over authenticated
+Home Assistant websocket commands, so there are no entities.
+"""
 from __future__ import annotations
 
-import json
 import logging
+from datetime import datetime, timedelta
 from pathlib import Path
 
-import voluptuous as vol
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.loader import async_get_integration
+from homeassistant.util import dt as dt_util
 
-from .api import MetlinkApiClient
-from .coordinator import MetlinkDataUpdateCoordinator, MetlinkRouteGeometryCoordinator
-from .db_coordinator import (
-    MetlinkAlertCoordinator,
-    MetlinkScheduleCoordinator,
-    MetlinkStaticDataCoordinator,
-)
-from .db_manager import mode_slug_for_type
 from .const import (
-    CONF_AIS_API_KEY,
-    CONF_AIS_VESSEL_MAP,
-    CONF_API_KEY,
-    CONF_ROUTE_DESC,
-    CONF_ROUTE_ID,
-    CONF_ROUTE_LONG_NAME,
-    CONF_ROUTE_SHORT_NAME,
-    CONF_ROUTES,
-    CONF_TRANSPORTATION_TYPE,
-    DEFAULT_AIS_FERRY_VESSELS,
-    TRAIN_GEOMETRY_SENSOR_KEY,
-    TRAIN_ROUTE_TYPE,
-    TRANSPORTATION_TYPES,
-    normalize_ais_ferry_vessel_map,
+    CONF_METLINK_KEY,
+    DOMAIN,
+    FRONTEND_URL_BASE,
+    METLINK_BASE_URL,
+    STATIC_CHECK_INTERVAL_HOURS,
+    STATIC_DB_FILENAME,
 )
-from .const import DOMAIN
-from .mode_registry import entry_routes, entry_routes_from_data, merged_routes, same_mode_entries
+from .core.http import MetlinkHttpClient
+from .core.realtime import RealtimeService
+from .core.service import MetlinkService
+from .core.static_sync import StaticSync
+from .core.store import Store
+from .websocket import async_register_commands
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SELECT, Platform.DEVICE_TRACKER]
-
-FRONTEND_URL_BASE = "/metlink_explorer_frontend"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
-MANIFEST_PATH = Path(__file__).parent / "manifest.json"
-SERVICE_SET_LIVE_TRACKING = "set_live_tracking"
-
-
-def _transport_type_matches(entry_transport_type: int, requested: str | int | None) -> bool:
-    """Return True if service request transport type matches entry mode."""
-    if requested is None:
-        return True
-
-    # Numeric request path (e.g. 2, 3, 4, 712)
-    try:
-        requested_num = int(requested)
-        return int(entry_transport_type) == requested_num
-    except (TypeError, ValueError):
-        pass
-
-    # Slug request path from frontend editor (train, bus, ferry, cable)
-    requested_slug = str(requested).strip().lower()
-    entry_name = TRANSPORTATION_TYPES.get(int(entry_transport_type), "").lower().replace(" ", "_")
-
-    if requested_slug == "cable":
-        requested_slug = "cable_car"
-
-    if requested_slug == "bus":
-        return entry_name in {"bus", "school_bus"}
-
-    return entry_name == requested_slug
-
-
-def _update_route_live_tracking(
-    routes: list[dict[str, str]],
-    route_id: str,
-    live_tracking: bool,
-) -> tuple[list[dict[str, str]], bool]:
-    """Return updated routes and whether any route changed."""
-    changed = False
-    new_routes: list[dict[str, str]] = []
-    for route in routes:
-        updated_route = dict(route)
-        if str(updated_route.get(CONF_ROUTE_ID, "")).strip() == route_id:
-            if bool(updated_route.get("live_tracking", True)) != live_tracking:
-                updated_route["live_tracking"] = live_tracking
-                changed = True
-        new_routes.append(updated_route)
-    return new_routes, changed
-
-
-async def _async_frontend_asset_version(hass: HomeAssistant) -> str:
-    """Return frontend cache-busting version from manifest.
-
-    File IO runs in the executor to avoid blocking the HA event loop.
-    """
-
-    def _read_manifest_version() -> str:
-        try:
-            manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-            return str(manifest.get("version", "dev"))
-        except Exception:  # pragma: no cover - best effort fallback
-            return "dev"
-
-    return await hass.async_add_executor_job(_read_manifest_version)
+CARD_FILES = ("metlink-departure-board-card.js",)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register frontend static path and card resource."""
-    hass.data.setdefault(DOMAIN, {})
+    return True
 
-    asset_version = await _async_frontend_asset_version(hass)
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if domain_data.get("frontend"):
+        return
+    version = (await async_get_integration(hass, DOMAIN)).version
     await hass.http.async_register_static_paths(
         [StaticPathConfig(FRONTEND_URL_BASE, str(FRONTEND_DIR), cache_headers=False)]
     )
-    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-explorer-map-card.js?v={asset_version}")
-    add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/metlink-departure-board-card.js?v={asset_version}")
-
-    async def _async_handle_set_live_tracking(call) -> None:
-        """Persist per-route live tracking in config entries and active coordinators."""
-        route_id = str(call.data.get("route_id", "")).strip()
-        if not route_id:
-            return
-
-        live_tracking = bool(call.data.get("live_tracking", True))
-        requested_transport = call.data.get("transportation_type")
-
-        for entry in hass.config_entries.async_entries(DOMAIN):
-            entry_transport_type = int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1))
-            if not _transport_type_matches(entry_transport_type, requested_transport):
-                continue
-
-            normalized_routes = entry_routes(entry)
-            new_routes, changed = _update_route_live_tracking(normalized_routes, route_id, live_tracking)
-            if not changed:
-                continue
-
-            updated_data = dict(entry.data)
-            updated_data[CONF_ROUTES] = new_routes
-
-            # Keep legacy single-route compatibility field in sync.
-            if str(updated_data.get(CONF_ROUTE_ID, "")).strip() == route_id:
-                updated_data["live_tracking"] = live_tracking
-
-            hass.config_entries.async_update_entry(entry, data=updated_data)
-
-            runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-            if runtime:
-                runtime["routes"] = entry_routes_from_data(updated_data)
-
-                coordinators = runtime.get("coordinators", {})
-                coordinator = coordinators.get(route_id)
-                if coordinator is not None:
-                    coordinator.live_tracking_enabled = live_tracking
-                    await coordinator.async_request_refresh()
-
-                geometry_coordinator = runtime.get("geometry_coordinator")
-                if geometry_coordinator is not None:
-                    geometry_coordinator.route_live_tracking_map[route_id] = live_tracking
-                    await geometry_coordinator.async_request_refresh()
-
-    if not hass.services.has_service(DOMAIN, SERVICE_SET_LIVE_TRACKING):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_SET_LIVE_TRACKING,
-            _async_handle_set_live_tracking,
-            schema=vol.Schema(
-                {
-                    vol.Required("route_id"): str,
-                    vol.Required("live_tracking"): bool,
-                    vol.Optional("transportation_type"): vol.Any(str, int),
-                }
-            ),
-        )
-
-    return True
+    for name in CARD_FILES:
+        add_extra_js_url(hass, f"{FRONTEND_URL_BASE}/{name}?v={version}")
+    async_register_commands(hass)
+    domain_data["frontend"] = True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Metlink Explorer from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].setdefault("_db_alert_by_api_key", {})
-    routes = entry_routes(entry)
-
-    # Consolidate legacy duplicate entries for the same API key + transportation type.
-    grouped_mode_entries = same_mode_entries(
-        hass,
-        entry.data.get(CONF_API_KEY),
-        entry.data.get(CONF_TRANSPORTATION_TYPE),
-    )
-    if grouped_mode_entries:
-        leader = grouped_mode_entries[0]
-        merged = merged_routes(grouped_mode_entries)
-
-        if merged:
-            updated_data = dict(leader.data)
-            updated_data[CONF_ROUTES] = merged
-            updated_data[CONF_ROUTE_ID] = merged[0].get(CONF_ROUTE_ID)
-            updated_data[CONF_ROUTE_SHORT_NAME] = merged[0].get(CONF_ROUTE_SHORT_NAME)
-            updated_data[CONF_ROUTE_LONG_NAME] = merged[0].get(CONF_ROUTE_LONG_NAME)
-            updated_data[CONF_ROUTE_DESC] = merged[0].get(CONF_ROUTE_DESC, "")
-            title = TRANSPORTATION_TYPES.get(int(leader.data.get(CONF_TRANSPORTATION_TYPE, -1)), leader.title)
-            if updated_data != leader.data or title != leader.title:
-                hass.config_entries.async_update_entry(leader, data=updated_data, title=title)
-
-        if entry.entry_id != leader.entry_id:
-            await hass.config_entries.async_reload(leader.entry_id)
-            await hass.config_entries.async_remove(entry.entry_id)
-            return False
-
-        # Leader setup should use merged routes immediately, even before reloads.
-        if merged:
-            routes = merged
-
     session = async_get_clientsession(hass)
-    stored_vessel_map = entry.data.get(CONF_AIS_VESSEL_MAP)
-    normalized_vessel_map = normalize_ais_ferry_vessel_map(stored_vessel_map)
-    if isinstance(stored_vessel_map, dict) and normalized_vessel_map != stored_vessel_map:
-        updated_data = dict(entry.data)
-        updated_data[CONF_AIS_VESSEL_MAP] = normalized_vessel_map
-        hass.config_entries.async_update_entry(entry, data=updated_data)
+    db_path = Path(hass.config.path(STATIC_DB_FILENAME))
 
-    effective_ais_api_key = entry.data.get(CONF_AIS_API_KEY)
-    if not effective_ais_api_key:
-        for candidate in hass.config_entries.async_entries(DOMAIN):
-            if candidate.entry_id == entry.entry_id:
-                continue
-            if candidate.data.get(CONF_API_KEY) != entry.data.get(CONF_API_KEY):
-                continue
-            candidate_ais = candidate.data.get(CONF_AIS_API_KEY)
-            if candidate_ais:
-                effective_ais_api_key = candidate_ais
-                break
+    store = Store(db_path)
+    sync = StaticSync(session, store, db_path)
+    await sync.async_open()
 
-    api_client = MetlinkApiClient(
-        entry.data[CONF_API_KEY],
-        session,
-        transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
-        ais_api_key=effective_ais_api_key,
-        ais_vessel_map=normalized_vessel_map,
+    http = MetlinkHttpClient(session, entry.data[CONF_METLINK_KEY], base_url=METLINK_BASE_URL)
+    realtime = RealtimeService(
+        http,
+        spawn=lambda coro: entry.async_create_background_task(hass, coro, "metlink_explorer_realtime"),
+    )
+    service = MetlinkService(store, sync, realtime, dt_util.now)
+    await service.async_reload_index()
+
+    async def refresh_static(_now: datetime | None = None) -> None:
+        result = await sync.async_sync()
+        if result.status == "updated":
+            await service.async_reload_index()
+        elif result.status == "failed":
+            _LOGGER.warning("Static timetable check failed; keeping the existing data")
+
+    # The first download takes a while, so it must not hold up Home Assistant's startup.
+    entry.async_create_background_task(hass, refresh_static(), "metlink_explorer_static_sync")
+    entry.async_on_unload(
+        async_track_time_interval(hass, refresh_static, timedelta(hours=STATIC_CHECK_INTERVAL_HOURS))
     )
 
-    coordinators: dict[str, MetlinkDataUpdateCoordinator] = {}
-    for route in routes:
-        route_id = str(route.get(CONF_ROUTE_ID))
-        if not route_id:
-            continue
-        # Default live_tracking to True for backward compatibility (existing routes)
-        live_tracking_enabled = route.get("live_tracking", True)
-        coordinator = MetlinkDataUpdateCoordinator(
-            hass,
-            api_client,
-            route_id,
-            live_tracking_enabled=live_tracking_enabled,
-            transportation_type=entry.data.get(CONF_TRANSPORTATION_TYPE),
-        )
-        await coordinator.async_config_entry_first_refresh()
-        coordinators[route_id] = coordinator
-
-    hass.data[DOMAIN][entry.entry_id] = {
-        "api_client": api_client,
-        "coordinators": coordinators,
-        # Keep legacy key for code paths that still expect one coordinator.
-        "coordinator": next(iter(coordinators.values())) if coordinators else None,
-        "routes": routes,
-    }
-
-    # Build route geometry coordinator for all transportation modes.
-    # Geometry is based on weekly-cached GTFS shapes and is mode-agnostic.
-    transport_type_int = int(entry.data.get(CONF_TRANSPORTATION_TYPE, -1))
-    if transport_type_int in TRANSPORTATION_TYPES:
-        geometry_route_ids: list[str] = []
-        seen_route_ids: set[str] = set()
-
-        if transport_type_int == TRAIN_ROUTE_TYPE:
-            # Union installed train routes across all train entries for this API key.
-            source_entries = same_mode_entries(hass, entry.data.get(CONF_API_KEY), TRAIN_ROUTE_TYPE) or [entry]
-            geo_mode_key = TRAIN_GEOMETRY_SENSOR_KEY
-        else:
-            source_entries = [entry]
-            type_name = TRANSPORTATION_TYPES.get(transport_type_int, "unknown")
-            geo_mode_key = f"{type_name.lower().replace(' ', '_')}_geometry"
-
-        for source_entry in source_entries:
-            for route in entry_routes(source_entry):
-                route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
-                if not route_id or route_id in seen_route_ids:
-                    continue
-                seen_route_ids.add(route_id)
-                geometry_route_ids.append(route_id)
-
-        if not geometry_route_ids:
-            geometry_route_ids = [
-                str(route.get(CONF_ROUTE_ID))
-                for route in routes
-                if route.get(CONF_ROUTE_ID)
-            ]
-
-        route_live_tracking_map = {
-            str(route.get(CONF_ROUTE_ID)): bool(route.get("live_tracking", True))
-            for route in routes
-            if route.get(CONF_ROUTE_ID)
-        }
-
-        geometry_coordinator = MetlinkRouteGeometryCoordinator(
-            hass,
-            api_client,
-            mode_key=geo_mode_key,
-            route_ids=geometry_route_ids,
-            route_live_tracking_map=route_live_tracking_map,
-        )
-        await geometry_coordinator.async_config_entry_first_refresh()
-        hass.data[DOMAIN][entry.entry_id]["geometry_coordinator"] = geometry_coordinator
-
-    # Build local DB coordinators using DB mode slug grouping.
-    # This intentionally merges bus (3) and school bus (712) into one "bus" DB dataset.
-    db_mode_slug = mode_slug_for_type(transport_type_int)
-    if db_mode_slug != "unknown":
-        db_mode_entries = sorted(
-            [
-                candidate
-                for candidate in hass.config_entries.async_entries(DOMAIN)
-                if candidate.data.get(CONF_API_KEY) == entry.data.get(CONF_API_KEY)
-                and mode_slug_for_type(candidate.data.get(CONF_TRANSPORTATION_TYPE)) == db_mode_slug
-            ],
-            key=lambda candidate: candidate.entry_id,
-        )
-        is_db_mode_leader = bool(db_mode_entries) and db_mode_entries[0].entry_id == entry.entry_id
-
-        if is_db_mode_leader:
-            db_route_ids: list[str] = []
-            seen_db_routes: set[str] = set()
-            for source_entry in db_mode_entries:
-                for route in entry_routes(source_entry):
-                    route_id = str(route.get(CONF_ROUTE_ID, "")).strip()
-                    if not route_id or route_id in seen_db_routes:
-                        continue
-                    seen_db_routes.add(route_id)
-                    db_route_ids.append(route_id)
-
-            if db_route_ids:
-                static_db_coordinator = MetlinkStaticDataCoordinator(
-                    hass,
-                    api_client,
-                    db_mode_slug,
-                    db_route_ids,
-                )
-                await static_db_coordinator.async_config_entry_first_refresh()
-
-                schedule_db_coordinator = MetlinkScheduleCoordinator(
-                    hass,
-                    api_client,
-                    db_mode_slug,
-                    db_route_ids,
-                )
-                await schedule_db_coordinator.async_config_entry_first_refresh()
-
-                alert_registry: dict[str, MetlinkAlertCoordinator] = hass.data[DOMAIN].setdefault(
-                    "_db_alert_by_api_key",
-                    {},
-                )
-                api_key = str(entry.data.get(CONF_API_KEY) or "")
-                alert_db_coordinator = alert_registry.get(api_key)
-                if alert_db_coordinator is None:
-                    alert_db_coordinator = MetlinkAlertCoordinator(hass, api_client)
-                    await alert_db_coordinator.async_config_entry_first_refresh()
-                    alert_registry[api_key] = alert_db_coordinator
-
-                alert_db_coordinator.register_schedule_coordinator(schedule_db_coordinator)
-
-                hass.data[DOMAIN][entry.entry_id]["static_db_coordinator"] = static_db_coordinator
-                hass.data[DOMAIN][entry.entry_id]["schedule_db_coordinator"] = schedule_db_coordinator
-                hass.data[DOMAIN][entry.entry_id]["alert_db_coordinator"] = alert_db_coordinator
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    hass.data.setdefault(DOMAIN, {})["service"] = service
+    await _async_register_frontend(hass)
+    entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        runtime = hass.data[DOMAIN].get(entry.entry_id, {})
-        api_client = runtime.get("api_client")
-        if api_client is not None:
-            try:
-                await api_client.async_shutdown()
-            except Exception as exc:  # noqa: BLE001
-                _LOGGER.debug("Error while shutting down API client: %s", exc)
-        hass.data[DOMAIN].pop(entry.entry_id)
+async def _async_reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
 
-    return unload_ok
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    service: MetlinkService | None = hass.data.get(DOMAIN, {}).pop("service", None)
+    if service is not None:
+        await service.realtime.async_stop()
+        await service.store.close()
+    return True

@@ -1,0 +1,122 @@
+"""Constants for the Metlink Explorer integration."""
+
+DOMAIN = "metlink_explorer"
+
+# API Configuration
+BASE_URL = "https://api.opendata.metlink.org.nz/v1"
+API_ENDPOINTS = {
+    "agency": "/gtfs/agency",
+    "routes": "/gtfs/routes", 
+    "stops": "/gtfs/stops",
+    "trips": "/gtfs/trips",
+    "stop_times": "/gtfs/stop_times",  # NEW: Needed for stop sequences
+    "shapes": "/gtfs/shapes",
+    "calendar_dates": "/gtfs/calendar_dates",
+    "vehicle_positions": "/gtfs-rt/vehiclepositions",
+    "trip_updates": "/gtfs-rt/tripupdates",
+    "service_alerts": "/gtfs-rt/servicealerts",
+    "stop_predictions": "/stop-predictions"
+}
+
+# Transportation Types (GTFS route_type mapping)
+TRAIN_ROUTE_TYPE = 2
+
+TRANSPORTATION_TYPES = {
+    TRAIN_ROUTE_TYPE: "Train",
+    3: "Bus", 
+    4: "Ferry",
+    5: "Cable Car",
+    712: "School Bus"
+}
+
+# Configuration Keys
+CONF_API_KEY = "api_key"
+CONF_TRANSPORTATION_TYPE = "transportation_type"
+CONF_ROUTE_ID = "route_id"
+CONF_ROUTE_SHORT_NAME = "route_short_name"
+CONF_ROUTE_LONG_NAME = "route_long_name"
+CONF_ROUTE_DESC = "route_desc"
+CONF_ROUTES = "routes"
+CONF_ACTIVE_DIRECTION = "active_direction"
+CONF_LEGACY_DIRECTION_ENTITIES = "legacy_direction_entities"
+CONF_AIS_API_KEY = "ais_api_key"
+CONF_AIS_VESSEL_MAP = "ais_vessel_map"
+
+# Default Values
+DEFAULT_SCAN_INTERVAL = 30  # Aligned with Metlink backend update frequency and new RTI system
+REQUEST_TIMEOUT = 15  # Increased timeout for complex requests
+DEFAULT_ACTIVE_DIRECTION = 0
+DEFAULT_GTFS_CACHE_TTL_SECONDS = 300
+TRAIN_GTFS_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
+TRAIN_GEOMETRY_SENSOR_KEY = "train_route_geometry"
+
+# Local DB pipeline (v1.0.0)
+DB_SUBDIR = "db"
+DB_META_FILENAME = "meta.json"
+DB_ALERTS_FILENAME = "alerts.json"
+
+DB_REFRESH_ROUTES_SECONDS = 24 * 60 * 60
+DB_REFRESH_SCHEDULES_SECONDS = 60 * 60
+DB_REFRESH_ALERTS_SECONDS = 5 * 60
+DB_REFRESH_VEHICLES_SECONDS = DEFAULT_SCAN_INTERVAL
+DB_ROUTES_REFRESH_HOUR_LOCAL = 5
+
+DB_ROUTES_FILENAME_TEMPLATE = "{mode}_route.json"
+DB_ROUTE_GEOMETRY_FILENAME_TEMPLATE = "{mode}_route_geometry.json"
+DB_STOPS_FILENAME_TEMPLATE = "{mode}_stops.json"
+DB_SCHEDULES_FILENAME_TEMPLATE = "{mode}_schedules.json"
+DB_VEHICLES_FILENAME_TEMPLATE = "{mode}_vehicles.json"
+
+# Map GTFS transport type ids to file slugs.
+DB_MODE_SLUG_BY_TYPE = {
+    2: "train",
+    3: "bus",
+    4: "ferry",
+    5: "cable_car",
+    # Metlink school bus (712) is merged into the main bus DB payloads.
+    712: "bus",
+}
+
+# AIS ferry live tracking
+FERRY_ROUTE_TYPE = 4
+EAST_BY_WEST_FLEET_URL = "https://eastbywest.co.nz/about-us/our-fleet/"
+AISSTREAM_WS_URL = "wss://stream.aisstream.io/v0/stream"
+AISSTREAM_DEFAULT_BBOX = [[[-41.38, 174.73], [-41.21, 174.92]]]
+AISSTREAM_SAMPLE_SECONDS = 20
+AISSTREAM_POSITION_CACHE_SECONDS = 20
+AISSTREAM_RECONNECT_SECONDS = 60
+AISSTREAM_REPORT_MAX_AGE_SECONDS = 6 * 60 * 60
+AIS_VESSEL_REFRESH_SECONDS = 24 * 60 * 60
+AIS_FERRY_SEED_NAMES = [
+    "IKA RERE",
+    "COBAR CAT",
+    "CITY CAT",
+]
+DEFAULT_AIS_FERRY_VESSELS = {
+    "512010273": "IKA RERE",
+    "512003410": "COBAR CAT",
+    "512003252": "CITY CAT",
+}
+
+LEGACY_AIS_FERRY_VESSELS = {
+    "210375740": "CITY CAT",
+    "210375730": "COBAR CAT",
+    "210375710": "IKA RERE",
+}
+
+
+def normalize_ais_ferry_vessel_map(vessel_map: dict[str, str] | None) -> dict[str, str]:
+    """Return a normalized ferry MMSI map, migrating known legacy defaults."""
+    if not isinstance(vessel_map, dict) or not vessel_map:
+        return dict(DEFAULT_AIS_FERRY_VESSELS)
+
+    normalized: dict[str, str] = {
+        str(mmsi).strip(): str(name or "").strip().upper()
+        for mmsi, name in vessel_map.items()
+        if str(mmsi).strip() and str(mmsi).strip().isdigit()
+    }
+
+    if normalized == LEGACY_AIS_FERRY_VESSELS:
+        return dict(DEFAULT_AIS_FERRY_VESSELS)
+
+    return normalized or dict(DEFAULT_AIS_FERRY_VESSELS)

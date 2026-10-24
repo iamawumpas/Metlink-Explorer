@@ -5,6 +5,76 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-10-24
+
+### Breaking - Version 2 is a rebuild and is not compatible with version 1
+
+- Why the major version: the whole integration was rebuilt from scratch. Almost nothing from version 1 carries over, so continuing the 1.x numbers would have misled anyone updating.
+- There are no longer any sensors. Version 1 created two entities for every route you chose. Version 2 creates none, so any dashboard, card or automation that used those entities will stop working.
+- The setup steps for choosing a transport type and a route are gone. Setup now only asks for the Metlink API key (and, optionally, an AISStream key). Your choice of stops and routes is now made inside the card.
+- The old cards (the map, the departure board and the editor) have been removed. They depended on the entities above. A new departure board card replaces the old one. A new map card is not ready yet.
+- Automations are no longer possible. The live data only updates about once a minute, which is too slow for triggers such as "the bus is 500 m away", so the integration does not offer them.
+- What you need to do: remove the old Metlink Explorer integration and its cards from your dashboards, restart Home Assistant, add the integration again with your API key, and add the new **Metlink Departure Board** card. The old v1 code is kept in the `legacy` folder in the repository for reference only.
+
+### Change - Why version 2 was needed
+
+- Version 1 could break itself. An error log showed the ship-tracking websocket (AISStream) being refused more than 150 times in a short period, and the Metlink API itself refusing requests as well. Home Assistant then reported "Error fetching metlink_explorer data" and no departures were shown.
+- Root cause: every time Home Assistant set up the integration, it started its own private ship-tracking connection, and those connections were never shut down when a setup failed or was merged into another. After a few failed setups there were more than 100 connections running at once, each retrying and each counting against the single AISStream key. Metlink data was requested in the same loop, so one failing source took the other down with it.
+- The fix could not be a small patch. The data collection, the entities, the cards and the schedule building were all tangled together, and each route created its own copy of the work. Rebuilding with separate, independent parts was safer than patching.
+- The design goals for the rebuild were: only one ship-tracking connection no matter what; ship and bus failures must never stop each other; nothing is requested from Metlink while no one is looking at a card; and the card, not the integration, should hold your choices.
+
+### Feature - A data service instead of entities
+
+- The integration is now a background data service. It downloads and stores the timetable, collects live data, and serves both to the cards over Home Assistant's own authenticated websocket connection. Only people logged in to Home Assistant can read it.
+- Home Assistant only. There is no separate web interface for other software.
+- Phones, laptops and tablets that open your dashboard share the same single service. Opening a new browser does not start a new copy of anything.
+- Live data is only requested while at least one card is open. With no cards open, the integration makes no live requests to Metlink.
+
+### Feature - The whole timetable is stored on disk and refreshed daily
+
+- The full Metlink timetable (every route, stop, trip, stop time, shape and calendar) is downloaded as Metlink's single GTFS file and stored in a local database on disk, not in memory. The database was about 54 MB when tested.
+- Once a day the integration asks Metlink whether the timetable changed. If it has not, nothing is downloaded or rebuilt. If it has, a new database is built beside the old one and swapped in only when complete, so a failed or interrupted download never leaves you without a timetable.
+- The first download runs in the background so Home Assistant starts normally. On a slow machine it can take several minutes.
+- Buses, trains, the ferry and the cable car are all included. School buses are marked with a school flag so cards can show or hide them. The cable car is kept as its own type.
+
+### Feature - Choose where you are going, and always see the right schedule
+
+- The question was how to show the correct schedule for the direction you want to travel, for example catching the 83 at Muritai Road and heading to Wellington.
+- Version 1 labelled trips "inbound" or "outbound" and worked out which was which with its own guesswork. We tested this against Metlink's live departures and found it is not reliable: on cross-town routes, loops and regional routes there is no single "towards the city", and even Metlink's own inbound/outbound label is only a route code, not a geographic direction. Our guesses agreed with Metlink only about 65% of the time.
+- In version 2 you pick the stop and then pick where you are heading ("Towards Courtenay Place"). The list of choices is built from the real trips that call at your stop, and you only see trips that stop at your chosen place afterwards. This uses the actual timetable, so it is correct for every kind of route.
+- The two stops on opposite sides of a road are shown as one marker with one set of departures, and the opposite-side stops are matched using names, streets, distance and Metlink's stop numbering (stops on opposite sides often differ by exactly 1000). The match is scored and the reason is stored.
+- Departures show the next 20 trips within the next 72 hours by default (up to 168 hours if a card asks). Times after midnight and public holiday changes are handled.
+- A towards/away-from-the-centre label is still worked out for each stop and kept for the map, but it is never used to decide which schedule you see.
+
+### Feature - Live delays, cancellations and alerts
+
+- Live vehicle positions, trip updates and service alerts are collected from the three Metlink live feeds, each on its own. If one feed fails, the others and the last good data keep working.
+- Delays, early running, cancelled trips and skipped stops are added to each departure. A delay reported at one stop carries on to the following stops until the next update, as the GTFS standard describes.
+- Live vehicles are matched to routes through their trip, not their route number, because Metlink's live route numbers do not match its timetable (for example the Johnsonville line is 63 live but 6 in the timetable).
+- The feeds are checked every 30 seconds (alerts every 3 minutes) while a card is open. Metlink's trip update feed sometimes refuses requests even at gentle rates, so each feed backs off by itself, honours any "retry after" request from Metlink, and keeps showing the previous data until the next good answer. If Metlink rejects the API key, only the feed that was refused stops.
+
+### Feature - New departure board card
+
+- Search for a stop by name or stop number, choose where you are heading, and see departures counting down live, with route colours, delays, cancellations and a school-bus tag.
+- Your choice is remembered in that browser, and each card cleans up its live connection when it is removed from the dashboard.
+
+### Change - Simpler setup
+
+- Setup asks for the Metlink API key and checks it with Metlink. A busy answer from Metlink is accepted, because the key itself was accepted. An optional AISStream key can be entered, and keys can be changed later through Reconfigure.
+- Only one Metlink Explorer can be set up at a time.
+
+### Change - Development process and tests
+
+- The code is split into separate parts for the Metlink connection and backoff, the database, the timetable download, the direction and stop-pairing logic, the departures, the live feeds and the card-facing commands, each with its own tests (64 tests).
+- `AGENT_INSTRUCTIONS.md` was added. It sets out how automated assistants must work in this repository, including the release procedure used for this release.
+- Old test and debug scripts were removed. One of them contained a Metlink API key in the repository history, so that key should be treated as exposed and replaced. No keys are included in this release.
+
+### Known gaps in this release
+
+- The live map card is not yet rebuilt. Until it is, there is no map.
+- Live ferry positions (AISStream) are not yet connected. The key can be entered, but it is not used yet. The planned design is a single shared connection for the whole of Home Assistant.
+- The integration has been tested with automated tests and against the live Metlink API, but has not yet been run in a full Home Assistant installation.
+
 ## [1.0.13] - 2026-05-27
 
 ### Fix - School bus inbound/outbound departures now visible

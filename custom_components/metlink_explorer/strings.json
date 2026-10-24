@@ -2,55 +2,28 @@
   "config": {
     "step": {
       "user": {
-        "title": "Metlink Explorer Setup",
-        "description": "Enter your Metlink Open Data API key to get started. Optionally add your own AISStream API key to enable live ferry tracking.",
+        "title": "Metlink Explorer",
+        "description": "Enter your Metlink Open Data API key. The AISStream key is optional and only needed for live ferry positions.",
         "data": {
-          "api_key": "Metlink API Key",
-          "ais_api_key": "AISStream API Key (Optional)"
+          "metlink_api_key": "Metlink API key",
+          "aisstream_api_key": "AISStream API key (optional)"
         }
       },
-      "transportation_type": {
-        "title": "Select Transportation Type",
-        "description": "Choose the type of transport you want to monitor. Only transportation types with available routes are shown. At the bottom, you can optionally enter your own API keys to overwrite the currently stored keys for this setup. Enable `Save API keys only` if you want to update keys without adding a route.",
+      "reconfigure": {
+        "title": "Update API keys",
         "data": {
-          "transportation_type": "Transportation Type",
-          "api_key": "Metlink API Key (Optional Override)",
-          "ais_api_key": "AISStream API Key (Optional Override)",
-          "save_api_keys_only": "Save API keys only"
-        }
-      },
-      "route_selection": {
-        "title": "Select Route",
-        "description": "Choose the specific route you want to monitor.",
-        "data": {
-          "route_id": "Route"
+          "metlink_api_key": "Metlink API key",
+          "aisstream_api_key": "AISStream API key (optional)"
         }
       }
     },
     "error": {
-      "invalid_auth": "Invalid API key. Please check your key and try again.",
-      "cannot_connect": "Unable to connect to Metlink API. Please check your internet connection and try again.",
-      "no_routes_found": "No routes found for the selected transportation type.",
-      "no_routes_available": "No available routes for the selected transportation type. All routes may already be configured.",
-      "no_transportation_types_available": "No transportation types with available routes found. All routes may already be configured."
+      "invalid_auth": "Metlink rejected this API key.",
+      "cannot_connect": "Could not reach the Metlink API. Try again shortly."
     },
     "abort": {
-      "already_configured": "This route is already configured.",
-      "route_added_to_existing": "Route added to existing transportation integration.",
-      "api_keys_updated": "API keys updated."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Metlink Explorer Options",
-        "description": "Configure options for your Metlink Explorer integration. Enter new API keys only when you want to overwrite stored values; leaving key fields blank keeps existing saved keys.",
-        "data": {
-          "api_key": "Metlink API Key (Optional Override)",
-          "ais_api_key": "AISStream API Key (Optional)",
-          "ais_vessel_map": "Ferry Vessel Map (one per line: MMSI,NAME)"
-        }
-      }
+      "already_configured": "Metlink Explorer is already set up.",
+      "reconfigure_successful": "API keys updated."
     }
   }
 }
