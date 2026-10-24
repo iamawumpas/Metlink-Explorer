@@ -14,6 +14,7 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.loader import async_get_integration
@@ -43,6 +44,8 @@ CARD_FILES = ("metlink-departure-board-card.js", "metlink-map-card.js")
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    # Cards must load even if an entry fails to set up (for example a leftover version 1 entry).
+    await _async_register_frontend(hass)
     return True
 
 
@@ -61,6 +64,13 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if not entry.data.get(CONF_METLINK_KEY):
+        raise ConfigEntryError(
+            "This is a version 1 Metlink Explorer entry, which version 2 cannot use. "
+            "Delete it, then add Metlink Explorer again."
+        )
+    if hass.data.get(DOMAIN, {}).get("service") is not None:
+        raise ConfigEntryError("Only one Metlink Explorer entry is supported. Delete the extra entries.")
     session = async_get_clientsession(hass)
     db_path = Path(hass.config.path(STATIC_DB_FILENAME))
 

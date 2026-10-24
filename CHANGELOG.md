@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2026-10-24
+
+### Fix - Cards did not load when an old version 1 entry was present
+
+- What happened: after updating from version 1, the old entries (Ferry, Train, Bus, School Bus) were still in Home Assistant. They have no Metlink key, so setup failed with `KeyError: 'metlink_api_key'`. Because the cards were only registered after a successful setup, neither card loaded.
+- The cards are now registered as soon as the integration loads, whether or not an entry sets up successfully.
+- A leftover version 1 entry now fails with a clear message ("delete it, then add Metlink Explorer again") instead of a `KeyError`.
+- A second entry is rejected with a clear message rather than clashing with the first.
+- What you need to do: delete any old Metlink Explorer entries and add the integration again with your keys. Version 1 entries cannot be converted.
+- Why this was missed: version 2 had never been run in a real Home Assistant with version 1 entries still present. A new test now covers both cases.
+
 ## [2.1.1] - 2026-10-24
 
 ### Change - Version 2 is now on the main branch

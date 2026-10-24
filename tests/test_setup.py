@@ -23,6 +23,36 @@ def test_manifest_and_translations_are_consistent():
     assert "invalid_auth" in strings["config"]["error"]
 
 
+def test_legacy_entry_is_rejected_and_cards_register_without_an_entry():
+    import custom_components.metlink_explorer as integration
+    from homeassistant.exceptions import ConfigEntryError
+
+    class Entry:
+        data = {"transport_type": "bus"}
+
+    class Hass:
+        data = {}
+
+    try:
+        asyncio.run(integration.async_setup_entry(Hass(), Entry()))
+        raise AssertionError("legacy entry was accepted")
+    except ConfigEntryError as err:
+        assert "version 1" in str(err)
+
+    calls = []
+
+    async def fake_register(hass):
+        calls.append(hass)
+
+    original = integration._async_register_frontend
+    integration._async_register_frontend = fake_register
+    try:
+        assert asyncio.run(integration.async_setup("hass", {})) is True
+    finally:
+        integration._async_register_frontend = original
+    assert calls == ["hass"]
+
+
 def test_integration_modules_import():
     import custom_components.metlink_explorer as integration
 
