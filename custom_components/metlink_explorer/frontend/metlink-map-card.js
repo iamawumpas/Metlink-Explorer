@@ -72,6 +72,7 @@ class MetlinkMapCard extends HTMLElement {
   }
 
   getCardSize() { return 8; }
+  getGridOptions() { return { columns: 12, rows: "auto", min_columns: 3 }; }
   static getStubConfig() { return {}; }
 
   _save() { try { localStorage.setItem(this._key, JSON.stringify(this._sel)); } catch (_) { /* private mode */ } }

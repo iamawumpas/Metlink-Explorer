@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-10-24
+
+### Changed - Map card takes the full width of a dashboard section
+
+- Why: in Sections view the map card could not be widened, because it did not tell Home Assistant what size it wanted and was locked to the default width.
+- The map card now asks for the full 12-column width of its section by default, with automatic height, and can be resized down to 3 columns by dragging its handle while editing.
+- Not included: filling only the space left by other cards. A card cannot see its neighbours and Home Assistant has no "fill the remaining space" setting, so another card in the same section wraps onto its own row unless you shrink the map by hand.
+- Only applies to Sections view. Not yet confirmed in a real Home Assistant.
+
 ## [2.2.0] - 2026-10-24
 
 ### Added - Service alerts, replacement notices and cancelled trips on the map
