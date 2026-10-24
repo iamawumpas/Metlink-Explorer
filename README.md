@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-  <strong>Version:</strong> 2.0.0
+  <strong>Version:</strong> 2.1.0
     </td>
   </tr>
 </table>
@@ -25,9 +25,11 @@ A Home Assistant custom integration that brings Wellington public transport from
 - **Live information**: delays, early running, cancellations and skipped stops are merged into the timetable.
 - **Whole network timetable**: all Metlink routes and stops are downloaded once, stored on disk and checked for changes every day. Bus, train, ferry and cable car are included, and school buses are flagged.
 - **Gentle on the API**: nothing is requested from Metlink while no card is open, and one failing feed never stops another.
+- **Live map**: the `metlink-map-card` shows live buses, trains and ferries, route lines and stops on a Leaflet street map. You choose the modes and routes in the card; until you do, it is just a street map.
+- **Ferries via AISStream**: ferry positions come from one shared AISStream connection (the AISStream key is optional). It only runs while a map card is open and can never affect the bus and train data.
 - **No entities to manage**: the integration is a data service. Your choices live in the card.
 
-Still to come in version 2: the live map card and live ferry positions (AISStream). The AISStream key can be entered now, but it is not used yet.
+Add the cards from the dashboard card picker: **Metlink Departure Board** and **Metlink Map**.
 
 
 ## Why this integration?

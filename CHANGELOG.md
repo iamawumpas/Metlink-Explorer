@@ -5,6 +5,32 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-10-24
+
+### Feature - Live map card
+
+- Why: 2.0.0 shipped only the departure board. The map was the other half of the integration and the reason for the rebuild: version 1's map relied on entity attributes, which is where the connection leaks and rate limits came from.
+- New `metlink-map-card` on a Leaflet street map. Home Assistant's built-in map cannot draw route lines or stop markers, which is why Leaflet is used. It is loaded from unpkg with integrity hashes, so a tampered file would be refused.
+- It starts as a plain street map. You pick the modes (bus, train, ferry, cable car) and routes (up to 12); your choices are remembered per browser.
+- Route lines use the route colours, live vehicles show the route number and a heading arrow, and stops with a pair on opposite sides of the road appear as one marker. Clicking a stop shows its next departures.
+- Stops are only fetched for the visible area and only once you zoom in, so the card never asks for thousands of markers at once.
+- Toggles for school buses, stops and a lighter basemap.
+- Trains were already tracked: Metlink's vehicle feed covers buses, trains and the cable car, so the map shows them with no extra work.
+
+### Feature - Live ferry positions
+
+- Why: Metlink's vehicle feed does not include ferries, so they come from AISStream instead (the optional key entered during setup).
+- Only one AISStream connection exists per Home Assistant instance, however many browsers and cards are open. This is the direct fix for version 1 opening over 100 connections.
+- It connects only while a map card is subscribed and disconnects when the last one closes.
+- Failure handling is separate from the Metlink feeds: a rate limit waits two minutes, other errors retry with a growing delay (30 seconds up to 10 minutes), and a rejected key stops retrying until the key is changed. None of this affects bus or train data.
+- Updates are limited to one every 5 seconds, and a ferry not heard from for 15 minutes is removed from the map.
+- The status command now reports whether ferry tracking is connected and how many ships are tracked.
+
+### Development
+
+- 6 new tests cover the ferry parser, the single shared connection, backoff, key rejection and merging ferries into the vehicle list (70 tests in total).
+- Not yet verified: the map card in a real browser and the live AISStream feed. Both are tested for the first time by installing this version.
+
 ## [2.0.0] - 2026-10-24
 
 ### Breaking - Version 2 is a rebuild and is not compatible with version 1

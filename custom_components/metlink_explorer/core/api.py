@@ -161,9 +161,14 @@ async def subscribe_vehicles(
             send(service.vehicles(**args))
 
     unsubscribe = service.realtime.subscribe(push)
+    unsubscribe_ais = None
+    if service.ais is not None and (not args["modes"] or "ferry" in args["modes"]):
+        unsubscribe_ais = service.ais.subscribe(lambda: push("vehicles"))
 
     def stop() -> None:
         unsubscribe()
+        if unsubscribe_ais:
+            unsubscribe_ais()
 
     return stop, push
 

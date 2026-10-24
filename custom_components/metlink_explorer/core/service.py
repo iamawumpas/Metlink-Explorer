@@ -7,6 +7,7 @@ from typing import Any
 
 from ..const import DEFAULT_DEPARTURE_HORIZON_HOURS, DEFAULT_DEPARTURE_LIMIT
 from . import departures as dep
+from .ais import AisService
 from .realtime import RealtimeService, apply_delays
 from .static_sync import StaticSync
 from .store import Store
@@ -19,7 +20,10 @@ class MetlinkService:
         sync: StaticSync | None,
         realtime: RealtimeService,
         now: Callable[[], datetime],
+        ais: AisService | None = None,
     ) -> None:
+        self.ais = ais
+        self._ferry_route: str | None = None
         self.store = store
         self.sync = sync
         self.realtime = realtime
@@ -36,6 +40,7 @@ class MetlinkService:
             for rid, short, mode, school, color in await self.store.query(
                 "SELECT route_id, short_name, mode, is_school, color FROM routes")
         }
+        self._ferry_route = next((rid for rid, r in self._routes.items() if r["mode"] == "ferry"), None)
 
     def vehicles(
         self,
@@ -67,6 +72,31 @@ class MetlinkService:
                     "kind": "vehicle",
                 }
             )
+        out.extend(self._ferries(wanted, modes, bbox))
+        return out
+
+    def _ferries(self, wanted: set[str], modes: list[str] | None, bbox) -> list[dict[str, Any]]:
+        if self.ais is None or (modes and "ferry" not in modes):
+            return []
+        route_id = self._ferry_route
+        if wanted and route_id not in wanted:
+            return []
+        route = self._routes.get(route_id) if route_id else None
+        out = []
+        for ship in self.ais.vehicles():
+            if bbox and not (bbox[0] <= ship["lat"] <= bbox[2] and bbox[1] <= ship["lon"] <= bbox[3]):
+                continue
+            ship.pop("_seen", None)
+            out.append({
+                **ship,
+                "trip_id": None,
+                "route_id": route_id,
+                "route": route["route"] if route else None,
+                "mode": "ferry",
+                "is_school": False,
+                "color": route["color"] if route else None,
+                "kind": "vehicle",
+            })
         return out
 
     async def departures(
@@ -99,5 +129,6 @@ class MetlinkService:
         return {
             "static": {"feed_version": feed_version, "last_checked": checked},
             "realtime": self.realtime.status(),
+            "ais": self.ais.status() if self.ais else {"enabled": False},
             "subscribers_active": self.realtime.running,
         }

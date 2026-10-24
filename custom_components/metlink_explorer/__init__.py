@@ -20,6 +20,7 @@ from homeassistant.loader import async_get_integration
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_AIS_KEY,
     CONF_METLINK_KEY,
     DOMAIN,
     FRONTEND_URL_BASE,
@@ -27,6 +28,7 @@ from .const import (
     STATIC_CHECK_INTERVAL_HOURS,
     STATIC_DB_FILENAME,
 )
+from .core.ais import AisService
 from .core.http import MetlinkHttpClient
 from .core.realtime import RealtimeService
 from .core.service import MetlinkService
@@ -37,7 +39,7 @@ from .websocket import async_register_commands
 _LOGGER = logging.getLogger(__name__)
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
-CARD_FILES = ("metlink-departure-board-card.js",)
+CARD_FILES = ("metlink-departure-board-card.js", "metlink-map-card.js")
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -71,7 +73,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         http,
         spawn=lambda coro: entry.async_create_background_task(hass, coro, "metlink_explorer_realtime"),
     )
-    service = MetlinkService(store, sync, realtime, dt_util.now)
+    ais = AisService(
+        session,
+        entry.data.get(CONF_AIS_KEY) or "",
+        spawn=lambda coro: entry.async_create_background_task(hass, coro, "metlink_explorer_ais"),
+    )
+    service = MetlinkService(store, sync, realtime, dt_util.now, ais)
     await service.async_reload_index()
 
     async def refresh_static(_now: datetime | None = None) -> None:
@@ -101,5 +108,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     service: MetlinkService | None = hass.data.get(DOMAIN, {}).pop("service", None)
     if service is not None:
         await service.realtime.async_stop()
+        if service.ais is not None:
+            await service.ais.async_stop()
         await service.store.close()
     return True

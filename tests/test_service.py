@@ -50,6 +50,27 @@ def test_vehicles_resolved_by_trip_and_filtered(tmp_path):
     with_service(tmp_path, body)
 
 
+def test_ferries_from_ais_are_merged_and_filtered(tmp_path):
+    from custom_components.metlink_explorer.core.ais import AisService
+
+    async def body(svc, rt):
+        svc.ais = AisService(None, "key")
+        svc.ais.handle_payload({
+            "MessageType": "PositionReport", "MetaData": {"MMSI": 512003252, "ShipName": "KOTUKU"},
+            "Message": {"PositionReport": {"Latitude": -41.28, "Longitude": 174.85, "TrueHeading": 10}}})
+        rt.snapshot.vehicles = {"1": vehicle("1", "T_in_1")}
+        both = {v["id"]: v for v in svc.vehicles()}
+        assert set(both) == {"1", "ais:512003252"}
+        ship = both["ais:512003252"]
+        assert ship["mode"] == "ferry" and ship["route_id"] == "R3" and ship["name"] == "KOTUKU"
+        assert {v["id"] for v in svc.vehicles(modes=["bus"])} == {"1"}
+        assert {v["id"] for v in svc.vehicles(modes=["ferry"])} == {"ais:512003252"}
+        assert {v["id"] for v in svc.vehicles(route_ids=["R1"])} == {"1"}
+        assert (await svc.status())["ais"]["tracked"] == 1
+
+    with_service(tmp_path, body)
+
+
 def test_departures_include_live_delay(tmp_path):
     async def body(svc, rt):
         rt.snapshot.trip_updates = parse_trip_updates({"entity": [{"id": "x", "trip_update": {
