@@ -131,6 +131,24 @@ custom_components/metlink_explorer/
 6. Rewrite the cards on the websocket client.
 7. Docs, then release 2.0.0 (using the release procedure in section 1).
 
+### 3.10 Post-2.2 patch backlog (outlines only)
+Each item needs a discussion with the user before implementation. Do not implement until the user says so.
+1. Colour each mode's routes individually, and colour the filter tags to match.
+2. Mode buttons (Bus, Train, Ferry, Cable car) show all services and override the route filter. At present, selecting bus routes turns off train and ferry routes and live tracking. Wanted: all trains and ferries, but only the selected bus routes.
+3. Departure bubbles per stop get dark or light mode in the card settings. The heading accent uses the route colour. Route colours must be clearly distinct, or user-selectable.
+4. Change the basemap from the card settings.
+5. Departure board shows up to 10 stops. Load 72 hours of schedule, show the first 3-5 entries per stop, and let each scroll.
+6. Stops drawn 200% larger, possibly orange or yellow.
+7. Live tracking icon colour matches the route colour.
+8. Per-user settings so each user sees their preferred layout.
+9. Merge school buses into buses.
+10. Darken the map (opacity overlay) without changing the icons or route graphics.
+11. Stop search lists all stops, sortable by number, suburb, route or alphabetically.
+12. Alerts as bubble icons on the map that expand on click to show the information.
+13. Clicking Train or Ferry enables all their routes by default. Buses are by route filter only.
+
+Note: items 2 and 13 overlap and should be discussed together. Items 1, 3 and 7 share the route colour design. The user needs to add credit before work on these starts.
+
 ## 4. Secrets
 - Never write API keys, tokens or passwords into source, tests, logs, docs, the changelog or commit messages. Use placeholders such as `YOUR_API_KEY`.
 - Do not commit debug logs, pasted logs, `.env` files or HA config exports without checking them for keys first.

@@ -43,8 +43,8 @@ class MetlinkMapCard extends HTMLElement {
     this._sel = {
       modes: this._config.modes || saved.modes || [],
       routes: this._config.routes || saved.routes || [],
-      school: this._config.school ?? saved.school ?? false,
       stops: saved.stops ?? true,
+      dim: this._config.dim ?? saved.dim ?? 0,
       basemap: this._config.basemap || saved.basemap || "street",
     };
     this._height = this._config.height || 480;
@@ -99,9 +99,9 @@ class MetlinkMapCard extends HTMLElement {
           <summary>Filters</summary>
           <div class="chips modes"></div>
           <div class="opts">
-            <label><input type="checkbox" class="school"> School buses</label>
             <label><input type="checkbox" class="stops"> Stops</label>
             <label><input type="checkbox" class="light"> Light map</label>
+            <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
           </div>
           <input class="search" type="search" placeholder="Add routes: search by number or name…" autocomplete="off">
           <div class="hits"></div>
@@ -112,7 +112,7 @@ class MetlinkMapCard extends HTMLElement {
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { modes: q(".modes"), school: q(".school"), stops: q(".stops"), light: q(".light"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
+    this._el = { modes: q(".modes"), dim: q(".dim"), stops: q(".stops"), light: q(".light"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
     this._el.mapDiv.style.height = this._height + "px";
     this._el.modes.innerHTML = MODES.map(([id, label]) => `<button class="chip" data-mode="${id}">${label}</button>`).join("");
     this._el.modes.addEventListener("click", (e) => {
@@ -121,7 +121,7 @@ class MetlinkMapCard extends HTMLElement {
       this._sel.modes = this._sel.modes.includes(id) ? this._sel.modes.filter((m) => m !== id) : [...this._sel.modes, id];
       this._changed();
     });
-    this._el.school.addEventListener("change", () => { this._sel.school = this._el.school.checked; this._changed(); });
+    this._el.dim.addEventListener("input", () => { this._sel.dim = Number(this._el.dim.value); this._applyDim(); this._save(); });
     this._el.stops.addEventListener("change", () => { this._sel.stops = this._el.stops.checked; this._changed(); });
     this._el.light.addEventListener("change", () => { this._sel.basemap = this._el.light.checked ? "light" : "street"; this._setBasemap(); this._save(); });
     this._el.search.addEventListener("input", () => this._search());
@@ -153,7 +153,7 @@ class MetlinkMapCard extends HTMLElement {
   }
 
   _syncControls() {
-    this._el.school.checked = !!this._sel.school;
+    this._el.dim.value = this._sel.dim || 0;
     this._el.stops.checked = !!this._sel.stops;
     this._el.light.checked = this._sel.basemap === "light";
     this._el.modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", this._sel.modes.includes(b.dataset.mode)));
@@ -178,6 +178,14 @@ class MetlinkMapCard extends HTMLElement {
     this._base = L.tileLayer(url, { attribution, maxZoom: 19, maxNativeZoom: nativeZoom }).addTo(this._map);
     this._base.bringToBack();
     this._basemapName = this._sel.basemap;
+    this._applyDim();
+  }
+
+  // Filtering only the tile pane darkens the map without touching routes, stops or vehicles.
+  _applyDim() {
+    if (!this._map) return;
+    const dim = Math.min(80, Math.max(0, Number(this._sel.dim) || 0));
+    this._map.getPane("tilePane").style.filter = dim ? `brightness(${(100 - dim) / 100})` : "";
   }
 
   _status(text) { if (this._el) this._el.status.textContent = text || ""; }
@@ -188,7 +196,7 @@ class MetlinkMapCard extends HTMLElement {
     try {
       const routes = await loadRoutes(this._hass);
       const hits = routes
-        .filter((r) => (this._sel.school || !r.is_school) && (!this._sel.modes.length || this._sel.modes.includes(r.mode)))
+        .filter((r) => (!this._sel.modes.length || this._sel.modes.includes(r.mode)))
         .filter((r) => r.short_name.toLowerCase().startsWith(text) || r.long_name.toLowerCase().includes(text))
         .slice(0, 20);
       this._el.hits.innerHTML = hits.map((r) => `<button data-id="${esc(r.route_id)}" data-name="${esc(r.short_name)}">${esc(r.short_name)} <span class="muted">${esc(r.long_name)}</span></button>`).join("") || `<div class="muted">No routes found</div>`;
@@ -236,7 +244,7 @@ class MetlinkMapCard extends HTMLElement {
     if (!this._map || !this._layers) return;
     const L = window.L;
     const sel = this._sel;
-    const msg = { type: WS + "stops", include_school: !!sel.school };
+    const msg = { type: WS + "stops" };
     if (sel.routes.length) msg.route_ids = sel.routes.map((r) => r.id);
     else if (sel.modes.length === 1) msg.mode = sel.modes[0];
     else if (!sel.modes.length) { this._layers.stops.clearLayers(); return; }
@@ -253,7 +261,7 @@ class MetlinkMapCard extends HTMLElement {
       if (!sel.routes.length && sel.modes.length > 1) stops = stops.filter((s) => s.modes.some((m) => sel.modes.includes(m)));
       this._layers.stops.clearLayers();
       for (const s of stops) {
-        const marker = L.circleMarker([s.lat, s.lon], { radius: 5, weight: 2, color: "#37474f", fillColor: "#fff", fillOpacity: 1 });
+        const marker = L.circleMarker([s.lat, s.lon], { radius: 10, weight: 2, color: "#e65100", fillColor: "#ffb300", fillOpacity: 1 });
         marker.bindPopup("Loading…", { minWidth: 200 });
         marker.on("popupopen", () => this._stopPopup(marker, s));
         marker.addTo(this._layers.stops);
@@ -374,10 +382,8 @@ class MetlinkMapCard extends HTMLElement {
   _drawVehicles(vehicles) {
     if (!this._map) return;
     const L = window.L;
-    const showSchool = this._sel.school || this._sel.routes.length > 0;
     const seen = new Set();
     for (const v of vehicles) {
-      if (v.is_school && !showSchool) continue;
       seen.add(v.id);
       const color = hex(v.color, v.mode === "ferry" ? "#0277bd" : v.mode === "train" ? "#2e7d32" : "#455a64");
       const label = esc(v.route || (v.mode === "ferry" ? "⛴" : "?"));

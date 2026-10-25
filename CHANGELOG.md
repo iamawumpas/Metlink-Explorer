@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2026-10-25
+
+### Changed - School buses merged into buses, bigger stops, darken-map slider
+
+- Why: school buses were a separate checkbox that hid routes and vehicles, stops were hard to see and tap, and the map could not be dimmed so the routes stood out.
+- The School buses checkbox is gone. School routes and vehicles now appear as ordinary buses.
+- Stop markers are twice the size and orange/yellow.
+- New "Darken map" slider (0-80%) dims only the map tiles, not routes, stops or vehicle icons. It is remembered per card.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.2.1] - 2026-10-24
 
 ### Changed - Map card takes the full width of a dashboard section
