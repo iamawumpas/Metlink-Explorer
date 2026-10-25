@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.4] - 2026-10-26
+
+### Fixed - Train, ferry and cable car stops now show
+
+- Why: every kind of stop only appeared once you zoomed in close, and that was too far in to see station stops on a view of the whole region. Train stops looked as if they were missing.
+- With Train, Ferry or Cable car on, their stops now show at every zoom level. Bus stops still need zooming in, because there are thousands of them.
+
 ## [2.5.3] - 2026-10-26
 
 ### Changed - The map is limited to the Wellington region

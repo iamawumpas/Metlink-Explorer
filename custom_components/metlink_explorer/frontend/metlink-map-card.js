@@ -394,9 +394,11 @@ class MetlinkMapCard extends HTMLElement {
     if (!sel.stops || (!picked.length && !wide.length)) { this._layers.stops.clearLayers(); return; }
     const msgs = [];
     if (picked.length) msgs.push({ type: WS + "stops", route_ids: picked });
-    if (wide.length) {
+    // Train, ferry and cable car stops are few, so they show at every zoom. Bus stops need zooming in.
+    for (const mode of wide.filter((m) => m !== "bus")) msgs.push({ type: WS + "stops", mode });
+    if (wide.includes("bus")) {
       if (this._map.getZoom() < STOP_ZOOM) {
-        if (!picked.length) { this._layers.stops.clearLayers(); this._status("Zoom in to see stops."); return; }
+        if (msgs.length === 0) { this._layers.stops.clearLayers(); this._status("Zoom in to see stops."); return; }
       } else {
         const b = this._map.getBounds();
         msgs.push({ type: WS + "stops", bbox: [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()] });
@@ -406,7 +408,7 @@ class MetlinkMapCard extends HTMLElement {
     try {
       const results = await Promise.all(msgs.map(async (m) => {
         const list = await this._hass.callWS(m);
-        return m.bbox ? list.filter((s) => s.modes.some((x) => wide.includes(x))) : list;
+        return m.bbox ? list.filter((s) => s.modes.includes("bus")) : list;
       }));
       if (this._stopToken !== token) return;
       const stops = [...new Map(results.flat().map((s) => [s.id, s])).values()];
