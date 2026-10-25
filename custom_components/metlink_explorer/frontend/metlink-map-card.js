@@ -158,29 +158,47 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .aclose{position:absolute;top:2px;right:4px;background:none;border:0;font-size:20px;line-height:1;color:inherit;cursor:pointer}
           .mm-wrap .item{padding:6px 0;border-top:1px solid rgba(0,0,0,.15)}.mm-wrap .item:first-of-type{border-top:0}.mm-wrap .item p{margin:2px 0 0;white-space:pre-wrap}
           .mm-wrap .achip{display:inline-block;border-radius:10px;padding:0 7px;margin-left:4px;font-weight:600;font-size:12px}
+          .mm-wrap .mm-ctl{position:absolute;top:8px;right:8px;z-index:5;padding:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:130px}
+          .mm-wrap .mm-ctl .chips{flex-direction:column;align-items:flex-end;margin:0;gap:6px}
+          .mm-wrap .mm-ctl button.chip,.mm-wrap .mm-gear{box-shadow:0 1px 4px rgba(0,0,0,.45)}
+          .mm-wrap .mm-gear{border:1px solid var(--divider-color);border-radius:16px;padding:4px 12px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-weight:600}
+          .mm-wrap .mm-panel{position:absolute;top:0;right:0;bottom:0;width:min(340px,100%);box-sizing:border-box;z-index:7;overflow-y:auto;overscroll-behavior:contain;background:var(--card-background-color);color:var(--primary-text-color);box-shadow:-2px 0 8px rgba(0,0,0,.5);padding:10px 12px}
+          .mm-wrap .mm-panel[hidden]{display:none}
+          .mm-wrap .mm-phead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+          .mm-wrap .mm-pclose{background:none;border:0;font-size:24px;line-height:1;color:inherit;cursor:pointer}
+          .mm-wrap .mm-panel .opts{flex-direction:column;gap:10px}
+          .mm-wrap .alerts{max-width:calc(100% - 240px)}
         </style>
-        <details class="mm" open>
-          <summary>Filters</summary>
-          <div class="chips modes"></div>
-          <div class="opts">
-            <label><input type="checkbox" class="stops"> Stops</label>
-            <label>Map <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
-            <label>Stop bubbles <select class="popup"><option value="light">Light</option><option value="dark">Dark</option></select></label>
-            <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
-            <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
-            <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
+        <div class="mm-wrap">
+          <div class="alerts"></div>
+          <div class="mm mm-ctl">
+            <button class="mm-gear" title="Filters and settings" aria-label="Filters and settings">⚙ Filters</button>
+            <div class="chips modes"></div>
+            <div class="chips picked"></div>
           </div>
-          <input class="search" type="search" placeholder="Add specific bus routes. Search by number or name…" autocomplete="off">
-          <div class="hits"></div>
-          <div class="chips picked"></div>
-        </details>
-        <div class="mm-wrap"><div class="alerts"></div><div class="mm-map"></div></div>
+          <div class="mm mm-panel" hidden>
+            <div class="mm-phead"><b>Filters</b><button class="mm-pclose" aria-label="Close filters">×</button></div>
+            <div class="opts">
+              <label><input type="checkbox" class="stops"> Stops</label>
+              <label>Map <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
+              <label>Stop bubbles <select class="popup"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+              <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
+              <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
+              <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
+            </div>
+            <input class="search" type="search" placeholder="Add specific bus routes. Search by number or name…" autocomplete="off">
+            <div class="hits"></div>
+          </div>
+          <div class="mm-map"></div>
+        </div>
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), popup: q(".popup"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
+    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), popup: q(".popup"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts"), panel: q(".mm-panel") };
     this._el.mapDiv.style.height = this._height + "px";
     this._el.alerts.parentElement.style.setProperty("--mm-h", this._height + "px");
+    q(".mm-gear").addEventListener("click", () => { this._el.panel.hidden = !this._el.panel.hidden; });
+    q(".mm-pclose").addEventListener("click", () => { this._el.panel.hidden = true; });
     this._el.alerts.addEventListener("click", (e) => {
       if (e.target.closest(".ahead")) this._setAlertsOpen(!this._alertsOpen);
       else if (e.target.closest(".aclose")) this._setAlertsOpen(false);

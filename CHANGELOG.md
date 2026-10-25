@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-10-26
+
+### Changed - Filters moved into a slide-in panel so the map is bigger
+
+- Why: the Filters area sat above the map and took a lot of room, especially with several routes picked.
+- The map now starts at the top of the card. A "⚙ Filters" button on the right edge opens a panel over the right side of the map, holding stops, map type, stop bubbles, darken, stop colour and size, and the bus route search. Nothing on the map moves when it opens. Close it with the × button; tapping the map does not close it, so you can change settings while watching the map.
+- The Bus, Train, Ferry and Cable car buttons, and the chips for your picked bus routes, stay on the map at the right edge all the time. Tap a picked route's name to change its colour, as before.
+- The alert line stays centred at the top and now leaves room for the buttons.
+
 ## [2.5.4] - 2026-10-26
 
 ### Fixed - Train, ferry and cable car stops now show
