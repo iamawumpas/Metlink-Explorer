@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-10-25
+
+### Changed - Tidier stop bubbles
+
+- Why: with the coloured rows, the bubble looked lopsided, and the coloured bar beside the stop name no longer meant anything.
+- The stop name is centred and the departure rows fill the bubble's full width, so the left and right margins match.
+- The coloured bar next to the stop name is gone.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.3.0] - 2026-10-25
 
 ### Added - Pick a colour for each route

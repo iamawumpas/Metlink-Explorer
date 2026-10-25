@@ -136,7 +136,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm .hits button:hover{background:var(--secondary-background-color)}.mm .muted{color:var(--secondary-text-color)}
           .mm .opts{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0}.mm .status{font-size:.85em;min-height:1.2em}
           .mm-map{width:100%;position:relative;overflow:hidden;isolation:isolate;z-index:0}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
-          .mm-pop table{border-collapse:collapse}.mm-pop td{padding:2px 6px;border-top:1px solid rgba(128,128,128,.45);border-bottom:1px solid rgba(128,128,128,.45)}.mm-pop .warn{margin-top:4px;color:#e65100}.mm-pop .head{border-left:5px solid #607d8b;padding-left:6px;margin-bottom:4px}
+          .mm-pop table{border-collapse:collapse;width:100%}.mm-pop td{padding:2px 6px;border-top:1px solid rgba(128,128,128,.45);border-bottom:1px solid rgba(128,128,128,.45)}.mm-pop .warn{margin-top:4px;color:#e65100}.mm-pop .head{text-align:center;padding:0 14px;margin-bottom:4px}.mm-map .leaflet-popup-content{margin:12px 20px}
           .mm .pr{display:inline-flex;align-items:center;gap:6px;border-radius:16px;padding:2px 8px 2px 4px;background:var(--primary-color);color:#fff}.mm .pr input[type=color]{width:24px;height:24px;padding:0;border:0;background:none;cursor:pointer}.mm .pr button{background:none;border:0;color:inherit;cursor:pointer;padding:0 2px}
           .mm-dark .leaflet-popup-content-wrapper,.mm-dark .leaflet-popup-tip{background:#263238;color:#eceff1}.mm-dark .mm-pop .muted{color:#b0bec5}.mm-dark .mm-pop .warn{color:#ffb74d}.mm-dark .leaflet-popup-close-button{color:#eceff1}
           .mm .alerts{margin:4px 0}.mm .alerts .pin{padding:6px 8px;margin:4px 0;border-radius:6px;background:#fff3e0;color:#5d4037;border-left:4px solid #e65100}
@@ -427,8 +427,7 @@ class MetlinkMapCard extends HTMLElement {
           }).join("")}</table>`
         : "No departures soon.";
       const warn = alerts.map((a) => `<div class="warn">⚠ ${esc(a.header || "Service notice")}</div>`).join("");
-      const accent = rows[0] ? this._colorFor(rows[0].route_id, rows[0].mode, rows[0].route) : "#607d8b";
-      marker.setPopupContent(`<div class="mm-pop"><div class="head" style="border-left-color:${accent}"><b>${esc(stop.name)}</b> <span class="muted">${esc(stop.id)}</span></div>${body}${warn}</div>`);
+      marker.setPopupContent(`<div class="mm-pop"><div class="head"><b>${esc(stop.name)}</b> <span class="muted">${esc(stop.id)}</span></div>${body}${warn}</div>`);
     } catch (_) {
       marker.setPopupContent(`<div class="mm-pop"><b>${esc(stop.name)}</b><br>Departures unavailable.</div>`);
     }
