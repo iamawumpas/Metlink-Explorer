@@ -37,6 +37,7 @@ Run these steps in order. Stop and report if any step fails; do not skip steps.
    - Then one or more `### Type - Short title` subsections (Type = Feature, Fix, Change, Refactor, Docs, etc.), each followed by `-` bullets.
    - Write in plain, human-readable language describing what changed and why, including the root cause for fixes and the visible effect for users. Do NOT paste code diffs or list filenames as the explanation. Someone with no access to the code must be able to follow the history.
    - Keep the existing format and tone of earlier entries.
+   - do not write "- Not yet confirmed in a real Home Assistant."
 4. **Commit**
    - Stage all changes and commit with message `vx.y.z - <short summary>`.
    - Append this trailer to the commit message: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`

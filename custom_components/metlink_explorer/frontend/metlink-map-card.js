@@ -149,8 +149,12 @@ class MetlinkMapCard extends HTMLElement {
           @media (prefers-reduced-motion:reduce){.mm-late{animation:none}}
           .mm .pr{display:inline-flex;align-items:center;gap:6px;border-radius:16px;padding:4px 10px 4px 12px;border:1px solid rgba(128,128,128,.6);font-weight:600}.mm .pr .nm{position:relative;cursor:pointer}.mm .pr input[type=color]{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:0;padding:0}.mm .pr button{background:none;border:0;color:inherit;cursor:pointer;padding:0 2px;position:relative;z-index:1}
           .mm-dark .leaflet-popup-content-wrapper,.mm-dark .leaflet-popup-tip{background:#263238;color:#eceff1}.mm-dark .mm-pop .muted{color:#b0bec5}.mm-dark .mm-pop .warn{color:#ffb74d}.mm-dark .leaflet-popup-close-button{color:#eceff1}
-          .mm .alerts{margin:4px 0}.mm .alerts .pin{padding:6px 8px;margin:4px 0;border-radius:6px;background:#fff3e0;color:#5d4037;border-left:4px solid #e65100}
-          .mm .alerts details{margin:4px 0}.mm .alerts .item{padding:4px 0;border-top:1px solid var(--divider-color)}.mm .alerts .item p{margin:2px 0 0;font-size:.9em;white-space:pre-wrap}
+          .mm-wrap{position:relative}.mm-wrap .alerts{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;max-width:calc(100% - 100px);width:max-content;font:13px/1.35 sans-serif}
+          .mm-wrap .ahead{display:block;margin:0 auto;padding:5px 12px;border-radius:14px;border:1px solid #e65100;background:#fff3e0;color:#5d4037;font:600 13px sans-serif;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+          .mm-wrap .abody{position:relative;margin-top:6px;padding:8px 28px 8px 10px;max-height:60%;overflow:auto;border-radius:8px;background:#fff3e0;color:#3e2723;border-left:4px solid #e65100;box-shadow:0 2px 8px rgba(0,0,0,.45)}
+          .mm-wrap .aclose{position:absolute;top:2px;right:4px;background:none;border:0;font-size:20px;line-height:1;color:inherit;cursor:pointer}
+          .mm-wrap .item{padding:6px 0;border-top:1px solid rgba(0,0,0,.15)}.mm-wrap .item:first-of-type{border-top:0}.mm-wrap .item p{margin:2px 0 0;white-space:pre-wrap}
+          .mm-wrap .achip{display:inline-block;border-radius:10px;padding:0 7px;margin-left:4px;font-weight:600;font-size:12px}
         </style>
         <details class="mm" open>
           <summary>Filters</summary>
@@ -167,13 +171,19 @@ class MetlinkMapCard extends HTMLElement {
           <div class="hits"></div>
           <div class="chips picked"></div>
         </details>
-        <div class="mm"><div class="alerts"></div></div>
-        <div class="mm-map"></div>
+        <div class="mm-wrap"><div class="alerts"></div><div class="mm-map"></div></div>
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
     this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), popup: q(".popup"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
     this._el.mapDiv.style.height = this._height + "px";
+    this._el.alerts.addEventListener("click", (e) => {
+      if (e.target.closest(".ahead")) this._setAlertsOpen(!this._alertsOpen);
+      else if (e.target.closest(".aclose")) this._setAlertsOpen(false);
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (this._alertsOpen && this.isConnected && !e.composedPath().includes(this._el.alerts)) this._setAlertsOpen(false);
+    }, true);
     this._el.modes.innerHTML = MODES.map(([id, label]) => `<button class="chip" data-mode="${id}">${label}</button>`).join("");
     this._el.modes.addEventListener("click", (e) => {
       const id = e.target.dataset?.mode;
@@ -413,15 +423,31 @@ class MetlinkMapCard extends HTMLElement {
     const box = this._el && this._el.alerts;
     if (!box) return;
     const alerts = this._alerts || [];
-    if (!alerts.length) { box.innerHTML = ""; return; }
-    const pinned = alerts.filter((a) => a.replacement);
-    const item = (a) => {
-      const names = (a.routes || []).map((r) => this._sel.routes.find((p) => p.id === r)?.name).filter(Boolean);
-      return `<div class="item"><b>${esc(a.header || "Service notice")}</b>${names.length ? ` <span class="muted">${esc(names.join(", "))}</span>` : ""}${a.description ? `<p>${esc(a.description)}</p>` : ""}</div>`;
+    if (!alerts.length) { box.innerHTML = ""; this._alertsOpen = false; return; }
+    if (!this._routeIndex && this._hass) {
+      loadRoutes(this._hass).then((list) => { this._routeIndex = new Map(list.map((r) => [r.route_id, r])); this._renderAlerts(); }).catch(() => {});
+    }
+    const chip = (id) => {
+      const r = this._routeIndex?.get(id);
+      const name = this._sel.routes.find((p) => p.id === id)?.name || r?.short_name;
+      if (!name) return "";
+      const c = this._colorFor(id, r?.mode, r?.short_name);
+      return `<span class="achip" style="background:${c};color:${textOn(c)}">${esc(name)}</span>`;
     };
+    const item = (a) => {
+      const chips = (a.routes || []).map(chip).join("");
+      return `<div class="item"><b>${esc(a.header || "Service notice")}</b>${chips ? ` ${chips}` : ""}${a.description ? `<p>${esc(a.description)}</p>` : ""}</div>`;
+    };
+    const n = alerts.length;
     box.innerHTML =
-      pinned.map((a) => `<div class="pin">⚠ <b>${esc(a.header || "Replacement services")}</b></div>`).join("") +
-      `<details><summary>⚠ ${alerts.length} service alert${alerts.length === 1 ? "" : "s"}</summary>${alerts.map(item).join("")}</details>`;
+      `<button class="ahead" aria-expanded="${!!this._alertsOpen}">⚠ ${n} alert${n === 1 ? "" : "s"} may affect your travel</button>` +
+      (this._alertsOpen ? `<div class="abody"><button class="aclose" aria-label="Close alerts">×</button>${alerts.map(item).join("")}</div>` : "");
+  }
+
+  _setAlertsOpen(open) {
+    if (this._alertsOpen === open) return;
+    this._alertsOpen = open;
+    this._renderAlerts();
   }
 
   _markRoutes() {

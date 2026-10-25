@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-25
+
+### Changed - Alerts are now one line over the top of the map
+
+- Why: the alert list sat above the map and took up a lot of room.
+- All alerts are now a single line over the top of the map: "⚠ N alerts may affect your travel". It takes no extra space and shows nothing when there are no alerts.
+- Tap it to open the full text of every alert. Each alert shows a chip in the colour of the route it affects.
+- It closes when you tap the map or anywhere outside it, or with the × button.
+- The old banner for replacement bus services was removed. Those alerts are in the list like the others.
+
 ## [2.4.1] - 2026-10-25
 
 ### Fixed - Melling line drawn above the other routes
