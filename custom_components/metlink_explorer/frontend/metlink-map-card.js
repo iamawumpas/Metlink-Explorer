@@ -38,7 +38,13 @@ const isLight = (c) => {
   const n = parseInt(c.slice(1), 16);
   return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150;
 };
-const textOn = (c) => (isLight(c) ? "#000000" : "#ffffff");
+// WCAG relative luminance: text is whichever of black or white has the higher contrast with the colour.
+const luminance = (c) => {
+  const n = parseInt(c.slice(1), 16);
+  const [r, g, b] = [n >> 16, (n >> 8) & 255, n & 255].map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const textOn = (c) => (1.05 / (luminance(c) + 0.05) >= (luminance(c) + 0.05) / 0.05 ? "#ffffff" : "#000000");
 const casingColor = (c) => (isLight(c) ? "#263238" : "#ffffff");
 const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
@@ -135,7 +141,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm .hits{max-height:160px;overflow:auto}.mm .hits button{display:block;width:100%;text-align:left;padding:4px 6px;border:0;background:none;color:var(--primary-text-color);cursor:pointer}
           .mm .hits button:hover{background:var(--secondary-background-color)}.mm .muted{color:var(--secondary-text-color)}
           .mm .opts{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0}.mm .status{font-size:.85em;min-height:1.2em}
-          .mm-map{width:100%;position:relative;overflow:hidden;isolation:isolate;z-index:0}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
+          .mm-map{width:100%;position:relative;overflow:hidden;isolation:isolate;z-index:0}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45),0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
           .mm-pop table{border-collapse:collapse;width:100%}.mm-pop td{padding:2px 6px;border-top:1px solid rgba(128,128,128,.45);border-bottom:1px solid rgba(128,128,128,.45)}.mm-pop .warn{margin-top:4px;color:#e65100}.mm-pop .head{text-align:center;padding:0 14px;margin-bottom:4px}.mm-map .leaflet-popup-content{margin:12px 20px}
           .mm-pop td.t{text-align:right;white-space:nowrap;padding-right:2px}.mm-pop td.l{width:1%;white-space:nowrap}
           .mm-late{display:inline-block;background:#fff;color:#d50000;font-weight:700;border-radius:8px;padding:0 6px;animation:mm-blink 1s steps(2,start) infinite}
@@ -479,7 +485,7 @@ class MetlinkMapCard extends HTMLElement {
       const fg = textOn(color);
       const label = esc(v.route || (v.mode === "ferry" ? "⛴" : "?"));
       const rotate = typeof v.bearing === "number" ? `<div style="position:absolute;inset:-9px;transform:rotate(${Math.round(v.bearing)}deg);pointer-events:none"><div style="margin:0 auto;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid ${color};filter:drop-shadow(0 0 1px #000)"></div></div>` : "";
-      const icon = L.divIcon({ className: "", iconSize: [28, 22], iconAnchor: [14, 11], html: `<div style="position:relative">${rotate}<div class="mm-badge" style="background:${color};color:${fg};border-color:${casingColor(color)}">${label}</div></div>` });
+      const icon = L.divIcon({ className: "", iconSize: [28, 22], iconAnchor: [14, 11], html: `<div style="position:relative">${rotate}<div class="mm-badge" style="background:${color};color:${fg}">${label}</div></div>` });
       const title = (v.name || (v.route ? `Route ${v.route}` : "Vehicle")) + (v.canceled ? " (cancelled trip)" : "");
       let marker = this._vehicleMarkers.get(v.id);
       if (marker) { marker.setLatLng([v.lat, v.lon]); marker.setIcon(icon); marker.setOpacity(v.canceled ? 0.45 : 1); marker.setTooltipContent(esc(title)); }

@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.5] - 2026-10-25
+
+### Changed - Live vehicle icons: white border and higher-contrast text
+
+- Why: the vehicle icons already used the route colour in 2.3.0, but the border changed with the colour and the black or white text was a rough guess that was hard to read on mid colours such as green and red.
+- Every live vehicle badge (bus, train, ferry and cable car) now has the same white border, with a thin dark ring so a white ferry badge still shows on a light map. The fill is the route colour you picked, or the default for that mode (buses slate, each train line its own colour, ferry white, cable car black).
+- Text on the badge, route chips and stop bubble rows is now whichever of black or white has the higher contrast with the colour. All the default colours now reach at least 5:1 (the accessibility minimum is 4.5:1).
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.3.4] - 2026-10-25
 
 ### Changed - Route chips take the route colour
