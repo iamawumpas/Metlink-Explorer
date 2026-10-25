@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.2] - 2026-10-26
+
+### Fixed - The filters panel is only as tall as its contents
+
+- Why: the panel stretched down the whole height of the map even when it had little in it.
+- It now fits its contents, and scrolls only if it would be taller than the map.
+
 ## [2.6.1] - 2026-10-26
 
 ### Changed - Buttons on the map are all the same width
