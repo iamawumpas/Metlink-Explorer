@@ -18,8 +18,28 @@ const BASEMAPS = {
 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const hex = (c, fallback) => (/^[0-9a-fA-F]{6}$/.test(c || "") ? "#" + c : fallback);
-const cssColor = (c, fallback) => (/^#[0-9a-fA-F]{6}$/.test(c || "") ? c : fallback);
+const cssColor =  (c, fallback) => (/^#[0-9a-fA-F]{6}$/.test(c || "") ? c : fallback);
+// Red, orange, yellow, green, blue, indigo, violet. Picked routes take the next free one.
+const PALETTE = ["#e53935", "#fb8c00", "#fbc02d", "#43a047", "#1e88e5", "#3949ab", "#8e24aa"];
+const TRAIN_LINES = ["KPL", "HVL", "JVL", "MEL", "WRL"];
+const BUS_COLOR = "#546e7a";
+// Colour of a route nobody picked: buses are one fixed colour, each train line has its own, ferries white, cable car black.
+const modeColor = (mode, short) => {
+  if (mode === "ferry") return "#ffffff";
+  if (mode === "cable_car") return "#000000";
+  if (mode === "train") {
+    const i = TRAIN_LINES.indexOf(short);
+    const n = i >= 0 ? i : [...String(short || "")].reduce((a, c) => a + c.charCodeAt(0), 0);
+    return PALETTE[n % PALETTE.length];
+  }
+  return BUS_COLOR;
+};
+const isLight = (c) => {
+  const n = parseInt(c.slice(1), 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150;
+};
+const textOn = (c) => (isLight(c) ? "#000000" : "#ffffff");
+const casingColor = (c) => (isLight(c) ? "#263238" : "#ffffff");
 const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 let leafletPromise;
@@ -46,7 +66,7 @@ class MetlinkMapCard extends HTMLElement {
     try { saved = JSON.parse(localStorage.getItem(this._key) || "{}"); } catch (_) { /* ignore */ }
     this._sel = {
       modes: this._config.modes || saved.modes || [],
-      routes: this._config.routes || saved.routes || [],
+      routes: (this._config.routes || saved.routes || []).map((r) => ({ ...r })),
       stops: saved.stops ?? true,
       popup: this._config.popup_theme || saved.popup || "light",
       dim: this._config.dim ?? saved.dim ?? 0,
@@ -55,7 +75,25 @@ class MetlinkMapCard extends HTMLElement {
       basemap: this._config.basemap || saved.basemap || "street",
     };
     this._height = this._config.height || 480;
+    for (const r of this._sel.routes) if (!cssColor(r.color)) r.color = this._nextColor();
     if (this._built) this._apply();
+  }
+
+  _nextColor() {
+    const used = new Set(this._sel.routes.map((r) => r.color));
+    return PALETTE.find((c) => !used.has(c)) || PALETTE[this._sel.routes.length % PALETTE.length];
+  }
+
+  _colorFor(routeId, mode, short) {
+    return cssColor(this._sel.routes.find((r) => r.id === routeId)?.color) || modeColor(mode, short);
+  }
+
+  _recolour() {
+    for (const [id, lines] of this._routeLines || []) {
+      const c = this._colorFor(id);
+      for (const line of lines) line.setStyle({ color: line._casing ? casingColor(c) : c });
+    }
+    this._drawVehicles(this._lastVehicles || []);
   }
 
   set hass(hass) {
@@ -98,8 +136,9 @@ class MetlinkMapCard extends HTMLElement {
           .mm .hits button:hover{background:var(--secondary-background-color)}.mm .muted{color:var(--secondary-text-color)}
           .mm .opts{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0}.mm .status{font-size:.85em;min-height:1.2em}
           .mm-map{width:100%;position:relative;overflow:hidden;isolation:isolate;z-index:0}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
-          .mm-pop td{padding:1px 6px 1px 0}.mm-pop .late{color:#c62828}.mm-pop .warn{margin-top:4px;color:#e65100}.mm-pop .head{border-left:5px solid #607d8b;padding-left:6px;margin-bottom:4px}
-          .mm-dark .leaflet-popup-content-wrapper,.mm-dark .leaflet-popup-tip{background:#263238;color:#eceff1}.mm-dark .mm-pop .muted{color:#b0bec5}.mm-dark .mm-pop .late{color:#ff8a80}.mm-dark .mm-pop .warn{color:#ffb74d}.mm-dark .leaflet-popup-close-button{color:#eceff1}
+          .mm-pop table{border-collapse:collapse}.mm-pop td{padding:2px 6px;border-top:1px solid rgba(128,128,128,.45);border-bottom:1px solid rgba(128,128,128,.45)}.mm-pop .warn{margin-top:4px;color:#e65100}.mm-pop .head{border-left:5px solid #607d8b;padding-left:6px;margin-bottom:4px}
+          .mm .pr{display:inline-flex;align-items:center;gap:6px;border-radius:16px;padding:2px 8px 2px 4px;background:var(--primary-color);color:#fff}.mm .pr input[type=color]{width:24px;height:24px;padding:0;border:0;background:none;cursor:pointer}.mm .pr button{background:none;border:0;color:inherit;cursor:pointer;padding:0 2px}
+          .mm-dark .leaflet-popup-content-wrapper,.mm-dark .leaflet-popup-tip{background:#263238;color:#eceff1}.mm-dark .mm-pop .muted{color:#b0bec5}.mm-dark .mm-pop .warn{color:#ffb74d}.mm-dark .leaflet-popup-close-button{color:#eceff1}
           .mm .alerts{margin:4px 0}.mm .alerts .pin{padding:6px 8px;margin:4px 0;border-radius:6px;background:#fff3e0;color:#5d4037;border-left:4px solid #e65100}
           .mm .alerts details{margin:4px 0}.mm .alerts .item{padding:4px 0;border-top:1px solid var(--divider-color)}.mm .alerts .item p{margin:2px 0 0;font-size:.9em;white-space:pre-wrap}
         </style>
@@ -139,6 +178,14 @@ class MetlinkMapCard extends HTMLElement {
     this._el.dim.addEventListener("input", () => { this._sel.dim = Number(this._el.dim.value); this._applyDim(); this._save(); });
     this._el.stops.addEventListener("change", () => { this._sel.stops = this._el.stops.checked; this._changed(); });
     this._el.search.addEventListener("input", () => this._search());
+    this._el.picked.addEventListener("input", (e) => {
+      const id = e.target.dataset?.color;
+      const route = id && this._sel.routes.find((r) => r.id === id);
+      if (!route) return;
+      route.color = e.target.value;
+      this._save();
+      this._recolour();
+    });
     this._el.picked.addEventListener("click", (e) => {
       const id = e.target.dataset?.route;
       if (!id) return;
@@ -175,7 +222,7 @@ class MetlinkMapCard extends HTMLElement {
     this._el.stopSize.value = this._sel.stopSize;
     this._el.stops.checked = !!this._sel.stops;
     this._el.modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", this._sel.modes.includes(b.dataset.mode)));
-    this._el.picked.innerHTML = this._sel.routes.map((r) => `<button class="chip on" data-route="${esc(r.id)}" title="Remove">${esc(r.name)} ✕</button>`).join("");
+    this._el.picked.innerHTML = this._sel.routes.map((r) => `<span class="pr"><input type="color" data-color="${esc(r.id)}" value="${esc(cssColor(r.color, "#546e7a"))}" title="Route colour"><span>${esc(r.name)}</span><button data-route="${esc(r.id)}" title="Remove">✕</button></span>`).join("");
   }
 
   _ensureMap(L) {
@@ -231,7 +278,7 @@ class MetlinkMapCard extends HTMLElement {
       this._el.hits.innerHTML = hits.map((r) => `<button data-id="${esc(r.route_id)}" data-name="${esc(r.short_name)}">${esc(r.short_name)} <span class="muted">${esc(r.long_name)}</span></button>`).join("") || `<div class="muted">No routes found</div>`;
       this._el.hits.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
         if (this._sel.routes.length >= MAX_ROUTES) { this._status(`Up to ${MAX_ROUTES} routes at a time.`); return; }
-        if (!this._sel.routes.some((r) => r.id === b.dataset.id)) this._sel.routes.push({ id: b.dataset.id, name: b.dataset.name });
+        if (!this._sel.routes.some((r) => r.id === b.dataset.id)) this._sel.routes.push({ id: b.dataset.id, name: b.dataset.name, color: this._nextColor() });
         this._el.search.value = "";
         this._el.hits.innerHTML = "";
         this._changed();
@@ -250,16 +297,20 @@ class MetlinkMapCard extends HTMLElement {
         const route = await this._hass.callWS({ type: WS + "route", route_id: sel.id });
         const shapeIds = route.directions.flatMap((d) => d.shape_ids.slice(0, 1));
         const shapes = await Promise.all(shapeIds.map((id) => this._hass.callWS({ type: WS + "shape", shape_id: id }).catch(() => null)));
-        for (const s of shapes) if (s) lines.push({ points: s.points, color: hex(route.color, "#1976d2"), routeId: sel.id });
+        for (const s of shapes) if (s) lines.push({ points: s.points, color: this._colorFor(sel.id, route.mode, route.short_name), dashed: !!route.mode && route.mode !== "bus", routeId: sel.id });
       } catch (_) { /* a missing route must not stop the others */ }
       if (this._routeToken !== token) return;
     }
     this._layers.routes.clearLayers();
     this._routeLines = new Map();
     lines.forEach((l) => {
-      const line = L.polyline(l.points, { color: l.color, weight: 4, opacity: 0.8 }).addTo(this._layers.routes);
+      const dash = l.dashed ? "10 8" : null;
+      const casing = L.polyline(l.points, { color: casingColor(l.color), weight: 7, opacity: 0.5, dashArray: dash, lineCap: "butt" }).addTo(this._layers.routes);
+      const line = L.polyline(l.points, { color: l.color, weight: 4, opacity: 0.95, dashArray: dash, lineCap: "butt" }).addTo(this._layers.routes);
+      casing._casing = true;
+      casing._baseDash = line._baseDash = dash;
       if (!this._routeLines.has(l.routeId)) this._routeLines.set(l.routeId, []);
-      this._routeLines.get(l.routeId).push(line);
+      this._routeLines.get(l.routeId).push(casing, line);
     });
     this._markRoutes();
     if (lines.length && !this._fitted) {
@@ -352,7 +403,7 @@ class MetlinkMapCard extends HTMLElement {
     for (const [routeId, lines] of this._routeLines) {
       const notes = byRoute.get(routeId);
       for (const line of lines) {
-        line.setStyle({ dashArray: notes ? "10 8" : null });
+        line.setStyle({ dashArray: notes ? "4 6" : line._baseDash });
         line.unbindTooltip();
         if (notes) line.bindTooltip(`⚠ ${notes.map(esc).join("<br>⚠ ")}`, { sticky: true });
       }
@@ -370,11 +421,13 @@ class MetlinkMapCard extends HTMLElement {
         ? `<table>${rows.map((r) => {
             const mins = Math.round((r.timestamp_expected - now) / 60);
             const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected);
-            return `<tr><td><b>${esc(r.route)}</b></td><td>${esc(r.headsign || r.destination)}</td><td class="${r.status === "delayed" ? "late" : ""}">${esc(when)}</td></tr>`;
+            const c = this._colorFor(r.route_id, r.mode, r.route);
+            const late = r.status === "delayed" ? " (late)" : "";
+            return `<tr style="background:${c};color:${textOn(c)}"><td><b>${esc(r.route)}</b></td><td>${esc(r.headsign || r.destination)}</td><td>${esc(when)}${late}</td></tr>`;
           }).join("")}</table>`
         : "No departures soon.";
       const warn = alerts.map((a) => `<div class="warn">⚠ ${esc(a.header || "Service notice")}</div>`).join("");
-      const accent = hex(rows[0]?.color, "#607d8b");
+      const accent = rows[0] ? this._colorFor(rows[0].route_id, rows[0].mode, rows[0].route) : "#607d8b";
       marker.setPopupContent(`<div class="mm-pop"><div class="head" style="border-left-color:${accent}"><b>${esc(stop.name)}</b> <span class="muted">${esc(stop.id)}</span></div>${body}${warn}</div>`);
     } catch (_) {
       marker.setPopupContent(`<div class="mm-pop"><b>${esc(stop.name)}</b><br>Departures unavailable.</div>`);
@@ -407,18 +460,21 @@ class MetlinkMapCard extends HTMLElement {
   _clearVehicles() {
     if (this._layers) this._layers.vehicles.clearLayers();
     if (this._vehicleMarkers) this._vehicleMarkers.clear();
+    this._lastVehicles = [];
   }
 
   _drawVehicles(vehicles) {
     if (!this._map) return;
     const L = window.L;
+    this._lastVehicles = vehicles;
     const seen = new Set();
     for (const v of vehicles) {
       seen.add(v.id);
-      const color = hex(v.color, v.mode === "ferry" ? "#0277bd" : v.mode === "train" ? "#2e7d32" : "#455a64");
+      const color = this._colorFor(v.route_id, v.mode, v.route);
+      const fg = textOn(color);
       const label = esc(v.route || (v.mode === "ferry" ? "⛴" : "?"));
-      const rotate = typeof v.bearing === "number" ? `<div style="position:absolute;inset:-9px;transform:rotate(${Math.round(v.bearing)}deg);pointer-events:none"><div style="margin:0 auto;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid ${color}"></div></div>` : "";
-      const icon = L.divIcon({ className: "", iconSize: [28, 22], iconAnchor: [14, 11], html: `<div style="position:relative">${rotate}<div class="mm-badge" style="background:${color}">${label}</div></div>` });
+      const rotate = typeof v.bearing === "number" ? `<div style="position:absolute;inset:-9px;transform:rotate(${Math.round(v.bearing)}deg);pointer-events:none"><div style="margin:0 auto;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:8px solid ${color};filter:drop-shadow(0 0 1px #000)"></div></div>` : "";
+      const icon = L.divIcon({ className: "", iconSize: [28, 22], iconAnchor: [14, 11], html: `<div style="position:relative">${rotate}<div class="mm-badge" style="background:${color};color:${fg};border-color:${casingColor(color)}">${label}</div></div>` });
       const title = (v.name || (v.route ? `Route ${v.route}` : "Vehicle")) + (v.canceled ? " (cancelled trip)" : "");
       let marker = this._vehicleMarkers.get(v.id);
       if (marker) { marker.setLatLng([v.lat, v.lon]); marker.setIcon(icon); marker.setOpacity(v.canceled ? 0.45 : 1); marker.setTooltipContent(esc(title)); }

@@ -5,6 +5,19 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-10-25
+
+### Added - Pick a colour for each route
+
+- Why: Metlink's own route colours are often the same or hard to see, so selected routes were hard to tell apart.
+- Each route you add gets the next free colour from red, orange, yellow, green, blue, indigo, violet (cycling after seven). The swatch on the route chip opens a colour picker. The choice is saved per card, and `routes:` in the YAML can carry a `color`.
+- The colour is used for that route's line on the map, its live vehicle icons and arrows, the rows in a stop's departure bubble, and the bubble's heading bar. Text on a colour switches between black and white so it stays readable.
+- Routes you haven't picked: buses are one fixed slate colour. Each train line has its own colour from the same seven (KPL red, HVL orange, JVL yellow, MEL green, WRL blue). Ferry is white and cable car is black.
+- Train, ferry and cable car lines are drawn dashed. Every line now has a thin outline so white and black lines stay visible on any map.
+- Changed: a line with a service alert is now dotted instead of dashed, because dashed now means "not a bus".
+- Changed: departure rows in the stop bubble are filled with the route colour instead of a route badge. Delayed departures say "(late)" instead of using red text.
+- Not yet confirmed in a real Home Assistant. The route colours supplied by Metlink are no longer used.
+
 ## [2.2.6] - 2026-10-25
 
 ### Added - Light or dark stop bubbles, with a route-coloured heading
