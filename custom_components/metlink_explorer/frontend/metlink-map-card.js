@@ -337,6 +337,7 @@ class MetlinkMapCard extends HTMLElement {
     const map = (this._map = L.map(this._el.mapDiv, { center: CENTRE, zoom: 12, preferCanvas: true }));
     this._layers = { routes: L.layerGroup().addTo(map), stops: L.layerGroup().addTo(map), home: L.layerGroup().addTo(map), vehicles: L.layerGroup().addTo(map) };
     this._drawHome();
+    map.attributionControl.addAttribution('Metlink data © <a href="https://www.gw.govt.nz/" target="_blank" rel="noopener noreferrer">Greater Wellington Regional Council</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Live AIS via <a href="https://aisstream.io/" target="_blank" rel="noopener noreferrer">aisstream.io</a>, provided without warranty');
     this._vehicleMarkers = new Map();
     map.on("moveend", () => { clearTimeout(this._moveTimer); this._moveTimer = setTimeout(() => this._drawStops(), 400); });
     this._observer = new ResizeObserver(() => { map.invalidateSize(); this._limitView(); });

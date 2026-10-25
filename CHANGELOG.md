@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-10-26
+
+### Added - Data sources are credited on the map
+
+- Why: the Metlink timetable and live data, and the AISStream ship positions, were not acknowledged.
+- The usual attribution strip at the bottom right of the map now credits the data sources alongside the map tile credit: "Metlink data © Greater Wellington Regional Council (CC BY 4.0) · Live AIS via aisstream.io, provided without warranty", with links.
+- Metlink publishes its open data under the Creative Commons Attribution 4.0 licence, which requires crediting the Greater Wellington Regional Council. AISStream publishes no formal terms or attribution rule, so the wording follows the one other sites use for it.
+
 ## [2.7.0] - 2026-10-26
 
 ### Added - Home is shown on the map
