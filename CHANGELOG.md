@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-10-26
+
+### Changed - Buttons on the map are all the same width
+
+- Why: the Filters button, mode buttons and route chips were different widths, so the column down the right edge looked ragged.
+- They are now all the same width and line up. On a route chip the ✕ sits at the right edge with the route number centred.
+
 ## [2.6.0] - 2026-10-26
 
 ### Changed - Filters moved into a slide-in panel so the map is bigger
