@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Why: the Melling (MEL) line is short and could be hidden underneath longer routes.
 - Its line is now drawn on top of every other route.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.4.0] - 2026-10-25
 
@@ -22,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - This needs two live subscriptions at once (picked routes, plus the active modes). The card merges them.
 - The search box now only lists bus routes, and reads "Add specific bus routes. Search by number or name…".
 - Trains are currently replaced by buses, so Train shows the lines and alerts but probably no live trains.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.3.5] - 2026-10-25
 
@@ -31,7 +29,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Why: the vehicle icons already used the route colour in 2.3.0, but the border changed with the colour and the black or white text was a rough guess that was hard to read on mid colours such as green and red.
 - Every live vehicle badge (bus, train, ferry and cable car) now has the same white border, with a thin dark ring so a white ferry badge still shows on a light map. The fill is the route colour you picked, or the default for that mode (buses slate, each train line its own colour, ferry white, cable car black).
 - Text on the badge, route chips and stop bubble rows is now whichever of black or white has the higher contrast with the colour. All the default colours now reach at least 5:1 (the accessibility minimum is 4.5:1).
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.3.4] - 2026-10-25
 
@@ -39,7 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Why: the small colour box inside each route chip was fiddly and hard to read against the chip.
 - The whole chip is now filled with the route colour, with black or white text, whichever contrasts better. Click the route name to change the colour. The ✕ still removes the route.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.3.3] - 2026-10-25
 
@@ -47,7 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Why: the "late" label sat inside the time column, so times and "min" labels didn't line up between rows.
 - Times are now right-aligned in their own column, and the "late" label has a column of its own, so every "min" and every label lines up.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.3.2] - 2026-10-25
 
@@ -56,7 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Why: "(late)" in the same colour as the row was easy to miss.
 - A delayed departure now shows a red "late" label that blinks. It sits in a small white pill, because red text would disappear on a red or orange route row.
 - The blinking stops for anyone whose device is set to reduce motion.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.3.1] - 2026-10-25
 
@@ -65,7 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Why: with the coloured rows, the bubble looked lopsided, and the coloured bar beside the stop name no longer meant anything.
 - The stop name is centred and the departure rows fill the bubble's full width, so the left and right margins match.
 - The coloured bar next to the stop name is gone.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.3.0] - 2026-10-25
 
@@ -78,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Train, ferry and cable car lines are drawn dashed. Every line now has a thin outline so white and black lines stay visible on any map.
 - Changed: a line with a service alert is now dotted instead of dashed, because dashed now means "not a bus".
 - Changed: departure rows in the stop bubble are filled with the route colour instead of a route badge. Delayed departures say "(late)" instead of using red text.
-- Not yet confirmed in a real Home Assistant. The route colours supplied by Metlink are no longer used.
+- The route colours supplied by Metlink are no longer used.
 
 ## [2.2.6] - 2026-10-25
 
@@ -88,7 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filters has a new "Stop bubbles" setting, Light or Dark. It's remembered per card, and `popup_theme: dark` works in the YAML. Light stays the default.
 - The stop name in the bubble now has an accent bar in the colour of the route with the next departure (grey if the route has no colour).
 - Not included: making route colours clearly different from each other, or letting you pick them. That belongs with the route-colour patch, since many Metlink routes share colours.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.2.5] - 2026-10-25
 
@@ -98,7 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filters has a new "Map" dropdown: Street, Satellite and Topographic. The choice is remembered per card, and `basemap: satellite` (or `topo`) works in the YAML. A previously saved "light" choice falls back to Street.
 - All three are Esri tile services that load without an API key. I fetched a Wellington tile from each and checked the picture. They are sharp to at least zoom 19.
 - Left out on purpose: OpenStreetMap now serves an "Access blocked" tile to apps like this, and CARTO (the old Voyager and Positron maps) serves "API KEY REQUIRED".
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.2.4] - 2026-10-25
 
@@ -106,7 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Why: the new Darken map slider covers what the toggle was for.
 - The map always uses the street basemap unless the card YAML sets `basemap: light`. A previously saved "light" choice is ignored.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.2.3] - 2026-10-25
 
@@ -116,7 +106,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filters now has a "Stop colour" picker and a "Stop size" slider (3-20). Changes apply to the stops on the map straight away and are remembered per card.
 - They can also be set in the card YAML with `stop_color: "#ff0000"` and `stop_size: 12`.
 - The default is still amber at size 10.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.2.2] - 2026-10-25
 
@@ -126,7 +115,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The School buses checkbox is gone. School routes and vehicles now appear as ordinary buses.
 - Stop markers are twice the size and orange/yellow.
 - New "Darken map" slider (0-80%) dims only the map tiles, not routes, stops or vehicle icons. It is remembered per card.
-- Not yet confirmed in a real Home Assistant.
 
 ## [2.2.1] - 2026-10-24
 
@@ -135,7 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Why: in Sections view the map card could not be widened, because it did not tell Home Assistant what size it wanted and was locked to the default width.
 - The map card now asks for the full 12-column width of its section by default, with automatic height, and can be resized down to 3 columns by dragging its handle while editing.
 - Not included: filling only the space left by other cards. A card cannot see its neighbours and Home Assistant has no "fill the remaining space" setting, so another card in the same section wraps onto its own row unless you shrink the map by hand.
-- Only applies to Sections view. Not yet confirmed in a real Home Assistant.
+- Only applies to Sections view.
 
 ## [2.2.0] - 2026-10-24
 
