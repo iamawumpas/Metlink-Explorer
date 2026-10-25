@@ -158,9 +158,10 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .aclose{position:absolute;top:2px;right:4px;background:none;border:0;font-size:20px;line-height:1;color:inherit;cursor:pointer}
           .mm-wrap .item{padding:6px 0;border-top:1px solid rgba(0,0,0,.15)}.mm-wrap .item:first-of-type{border-top:0}.mm-wrap .item p{margin:2px 0 0;white-space:pre-wrap}
           .mm-wrap .achip{display:inline-block;border-radius:10px;padding:0 7px;margin-left:4px;font-weight:600;font-size:12px}
-          .mm-wrap .mm-ctl{position:absolute;top:8px;right:8px;z-index:5;padding:0;display:flex;flex-direction:column;align-items:stretch;gap:6px;width:110px}
+          .mm-wrap .mm-ctl{position:absolute;top:8px;right:8px;z-index:5;padding:0;display:flex;flex-direction:column;align-items:stretch;gap:6px;width:94px}
           .mm-wrap .mm-ctl .chips{flex-direction:column;align-items:stretch;margin:0;gap:6px}
-          .mm-wrap .mm-ctl .pr{box-sizing:border-box;width:100%;justify-content:space-between}
+          .mm-wrap .mm-ctl .pr{box-sizing:border-box;width:100%;justify-content:space-between;gap:8px;padding:4px 8px 4px 10px}
+          .mm-wrap .mm-ctl button.chip{white-space:nowrap;padding:4px 8px}
           .mm-wrap .mm-ctl .pr .nm{flex:1;text-align:center}
           .mm-wrap .mm-ctl button.chip,.mm-wrap .mm-gear{box-sizing:border-box;width:100%;justify-content:center;text-align:center}
           .mm-wrap .mm-ctl button.chip,.mm-wrap .mm-gear{box-shadow:0 1px 4px rgba(0,0,0,.45)}

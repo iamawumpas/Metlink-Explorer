@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.7] - 2026-10-26
+
+### Changed - Narrower buttons on the map
+
+- Why: the buttons down the right edge were a little wider than they needed to be.
+- They are now 94 pixels wide instead of 110, which still fits "Cable car". On a route chip there is a gap between the route number and the ✕.
+
 ## [2.6.6] - 2026-10-26
 
 ### Changed - Border around the filters panel
