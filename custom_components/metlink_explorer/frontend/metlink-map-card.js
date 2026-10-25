@@ -192,12 +192,14 @@ class MetlinkMapCard extends HTMLElement {
               <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
             </fieldset>
             <fieldset class="mm-grp"><legend>Stops</legend>
-              <label><input type="checkbox" class="stops"> Show stops</label>
+              <div class="mm-row">
+                <label><input type="checkbox" class="stops"> Show stops</label>
+                <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle;width:80px"></label>
+              </div>
               <div class="mm-row">
                 <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
                 <label>Stop bubbles <select class="popup"><option value="light">Light</option><option value="dark">Dark</option></select></label>
               </div>
-              <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
             </fieldset>
           </div>
           <div class="mm-map"></div>
