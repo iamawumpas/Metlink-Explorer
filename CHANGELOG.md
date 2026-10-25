@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-10-26
+
+### Changed - The map fills the screen height
+
+- Why: the map had a fixed height, so on a large display it stopped short of the bottom of the screen.
+- The map now stretches from its top edge to the bottom of the screen. It is measured when the page loads and when the screen turns between portrait and landscape, so scrolling never changes its size.
+- Setting `height:` in the card YAML still gives a fixed height. The map is never shorter than 320 pixels.
+
 ## [2.5.1] - 2026-10-25
 
 ### Fixed - Long alert lists now scroll

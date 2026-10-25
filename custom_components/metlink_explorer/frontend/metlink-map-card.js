@@ -113,6 +113,7 @@ class MetlinkMapCard extends HTMLElement {
     this._unsubscribe();
     this._unsubscribeAlerts();
     clearTimeout(this._moveTimer);
+    if (this._orient) { this._orient.removeEventListener("change", this._onOrient); this._orient = null; }
     if (this._observer) this._observer.disconnect();
     if (this._map) { this._map.remove(); this._map = null; }
     this._base = null;
@@ -248,8 +249,28 @@ class MetlinkMapCard extends HTMLElement {
     this._el.picked.innerHTML = this._sel.routes.map((r) => { const c = cssColor(r.color, "#546e7a"); return `<span class="pr" data-chip="${esc(r.id)}" style="background:${c};color:${textOn(c)}"><span class="nm" title="Change colour">${esc(r.name)}<input type="color" data-color="${esc(r.id)}" value="${esc(c)}" title="Route colour"></span><button data-route="${esc(r.id)}" title="Remove">✕</button></span>`; }).join("");
   }
 
+  // Fill the viewport below the map's top edge. Measured on load and on orientation change only, so scrolling never resizes the map.
+  _fitHeight() {
+    if (this._config.height || !this._el) return;
+    const top = this._el.mapDiv.getBoundingClientRect().top;
+    this._setHeight(Math.max(320, Math.round(window.innerHeight - top - 40)));
+  }
+
+  _setHeight(h) {
+    this._height = h;
+    this._el.mapDiv.style.height = h + "px";
+    this._el.alerts.parentElement.style.setProperty("--mm-h", h + "px");
+    if (this._map) this._map.invalidateSize();
+  }
+
   _ensureMap(L) {
     if (this._map) { setTimeout(() => this._map.invalidateSize(), 0); return; }
+    this._fitHeight();
+    if (!this._orient) {
+      this._orient = window.matchMedia("(orientation: portrait)");
+      this._onOrient = () => setTimeout(() => this._fitHeight(), 200);
+      this._orient.addEventListener("change", this._onOrient);
+    }
     const map = (this._map = L.map(this._el.mapDiv, { center: CENTRE, zoom: 12, preferCanvas: true }));
     this._layers = { routes: L.layerGroup().addTo(map), stops: L.layerGroup().addTo(map), vehicles: L.layerGroup().addTo(map) };
     this._vehicleMarkers = new Map();
