@@ -107,6 +107,24 @@ class MetlinkMapCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._built) this._build();
+    else if (this._layers) this._drawHome();
+  }
+
+  // Home Assistant's home zone, falling back to the location in the HA settings.
+  _drawHome() {
+    const zone = this._hass?.states?.["zone.home"]?.attributes;
+    const lat = zone?.latitude ?? this._hass?.config?.latitude;
+    const lon = zone?.longitude ?? this._hass?.config?.longitude;
+    const radius = zone?.radius || 0;
+    const key = `${lat},${lon},${radius}`;
+    if (key === this._homeKey) return;
+    this._homeKey = key;
+    const L = window.L;
+    this._layers.home.clearLayers();
+    if (typeof lat !== "number" || typeof lon !== "number") return;
+    if (radius) L.circle([lat, lon], { radius, color: "#03a9f4", weight: 1, fillOpacity: 0.12, interactive: false }).addTo(this._layers.home);
+    const icon = L.divIcon({ className: "", iconSize: [28, 28], iconAnchor: [14, 14], html: `<div class="mm-home" title="Home">🏠</div>` });
+    L.marker([lat, lon], { icon, keyboard: false }).bindTooltip("Home").addTo(this._layers.home);
   }
 
   connectedCallback() { if (this._built) this._apply(); }
@@ -118,6 +136,7 @@ class MetlinkMapCard extends HTMLElement {
     if (this._orient) { this._orient.removeEventListener("change", this._onOrient); this._orient = null; }
     if (this._observer) this._observer.disconnect();
     if (this._map) { this._map.remove(); this._map = null; }
+    this._homeKey = null;
     this._base = null;
     this._basemapName = null;
     this._fitted = false;
@@ -157,6 +176,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .abody{position:relative;margin-top:6px;padding:8px 28px 8px 10px;max-height:calc(var(--mm-h, 400px) - 80px);overflow-y:auto;overscroll-behavior:contain;border-radius:8px;background:#fff3e0;color:#3e2723;border-left:4px solid #e65100;box-shadow:0 2px 8px rgba(0,0,0,.45)}
           .mm-wrap .aclose{position:absolute;top:2px;right:4px;background:none;border:0;font-size:20px;line-height:1;color:inherit;cursor:pointer}
           .mm-wrap .item{padding:6px 0;border-top:1px solid rgba(0,0,0,.15)}.mm-wrap .item:first-of-type{border-top:0}.mm-wrap .item p{margin:2px 0 0;white-space:pre-wrap}
+          .mm-home{width:28px;height:28px;border-radius:50%;background:#fff;border:2px solid #03a9f4;box-shadow:0 1px 4px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1}
           .mm-wrap .achip{display:inline-block;border-radius:10px;padding:0 7px;margin-left:4px;font-weight:600;font-size:12px}
           .mm-wrap .item{border-left:5px solid #e65100;padding-left:8px;margin-left:-4px}
           .mm-wrap .item.sev-severe{border-left-color:#c62828;background:#ffebee}.mm-wrap .item.sev-warning{border-left-color:#ef6c00;background:#fff3e0}.mm-wrap .item.sev-info{border-left-color:#1565c0;background:#e3f2fd}
@@ -315,7 +335,8 @@ class MetlinkMapCard extends HTMLElement {
       this._orient.addEventListener("change", this._onOrient);
     }
     const map = (this._map = L.map(this._el.mapDiv, { center: CENTRE, zoom: 12, preferCanvas: true }));
-    this._layers = { routes: L.layerGroup().addTo(map), stops: L.layerGroup().addTo(map), vehicles: L.layerGroup().addTo(map) };
+    this._layers = { routes: L.layerGroup().addTo(map), stops: L.layerGroup().addTo(map), home: L.layerGroup().addTo(map), vehicles: L.layerGroup().addTo(map) };
+    this._drawHome();
     this._vehicleMarkers = new Map();
     map.on("moveend", () => { clearTimeout(this._moveTimer); this._moveTimer = setTimeout(() => this._drawStops(), 400); });
     this._observer = new ResizeObserver(() => { map.invalidateSize(); this._limitView(); });

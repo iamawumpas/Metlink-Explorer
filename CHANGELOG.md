@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-10-26
+
+### Added - Home is shown on the map
+
+- Why: there was no way to see where home is in relation to stops and vehicles.
+- A 🏠 marker shows the Home Assistant home zone, with a faint circle for the zone's radius. It uses the location of the `zone.home` zone and falls back to the location set in Home Assistant's general settings. If you move the zone, the marker follows.
+
 ## [2.6.11] - 2026-10-26
 
 ### Added - Alerts are colour coded by severity
