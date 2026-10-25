@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.4] - 2026-10-25
+
+### Removed - Light map toggle
+
+- Why: the new Darken map slider covers what the toggle was for.
+- The map always uses the street basemap unless the card YAML sets `basemap: light`. A previously saved "light" choice is ignored.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.2.3] - 2026-10-25
 
 ### Added - Configurable stop colour and size

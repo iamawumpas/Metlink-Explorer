@@ -48,7 +48,7 @@ class MetlinkMapCard extends HTMLElement {
       dim: this._config.dim ?? saved.dim ?? 0,
       stopColor: this._config.stop_color || saved.stopColor || "#ffb300",
       stopSize: this._config.stop_size ?? saved.stopSize ?? 10,
-      basemap: this._config.basemap || saved.basemap || "street",
+      basemap: this._config.basemap || "street",
     };
     this._height = this._config.height || 480;
     if (this._built) this._apply();
@@ -103,7 +103,6 @@ class MetlinkMapCard extends HTMLElement {
           <div class="chips modes"></div>
           <div class="opts">
             <label><input type="checkbox" class="stops"> Stops</label>
-            <label><input type="checkbox" class="light"> Light map</label>
             <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
             <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
             <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
@@ -117,7 +116,7 @@ class MetlinkMapCard extends HTMLElement {
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), light: q(".light"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
+    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
     this._el.mapDiv.style.height = this._height + "px";
     this._el.modes.innerHTML = MODES.map(([id, label]) => `<button class="chip" data-mode="${id}">${label}</button>`).join("");
     this._el.modes.addEventListener("click", (e) => {
@@ -130,7 +129,6 @@ class MetlinkMapCard extends HTMLElement {
     this._el.stopSize.addEventListener("input", () => { this._sel.stopSize = Number(this._el.stopSize.value); this._styleStops(); this._save(); });
     this._el.dim.addEventListener("input", () => { this._sel.dim = Number(this._el.dim.value); this._applyDim(); this._save(); });
     this._el.stops.addEventListener("change", () => { this._sel.stops = this._el.stops.checked; this._changed(); });
-    this._el.light.addEventListener("change", () => { this._sel.basemap = this._el.light.checked ? "light" : "street"; this._setBasemap(); this._save(); });
     this._el.search.addEventListener("input", () => this._search());
     this._el.picked.addEventListener("click", (e) => {
       const id = e.target.dataset?.route;
@@ -164,7 +162,6 @@ class MetlinkMapCard extends HTMLElement {
     this._el.stopColor.value = cssColor(this._sel.stopColor, "#ffb300");
     this._el.stopSize.value = this._sel.stopSize;
     this._el.stops.checked = !!this._sel.stops;
-    this._el.light.checked = this._sel.basemap === "light";
     this._el.modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", this._sel.modes.includes(b.dataset.mode)));
     this._el.picked.innerHTML = this._sel.routes.map((r) => `<button class="chip on" data-route="${esc(r.id)}" title="Remove">${esc(r.name)} ✕</button>`).join("");
   }
