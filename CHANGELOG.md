@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-10-25
+
+### Added - Configurable stop colour and size
+
+- Why: the new orange stops suit some maps and not others, and the right size depends on the screen.
+- Filters now has a "Stop colour" picker and a "Stop size" slider (3-20). Changes apply to the stops on the map straight away and are remembered per card.
+- They can also be set in the card YAML with `stop_color: "#ff0000"` and `stop_size: 12`.
+- The default is still amber at size 10.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.2.2] - 2026-10-25
 
 ### Changed - School buses merged into buses, bigger stops, darken-map slider

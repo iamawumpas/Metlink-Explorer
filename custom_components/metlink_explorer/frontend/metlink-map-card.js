@@ -16,6 +16,7 @@ const BASEMAPS = {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hex = (c, fallback) => (/^[0-9a-fA-F]{6}$/.test(c || "") ? "#" + c : fallback);
+const cssColor = (c, fallback) => (/^#[0-9a-fA-F]{6}$/.test(c || "") ? c : fallback);
 const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 let leafletPromise;
@@ -45,6 +46,8 @@ class MetlinkMapCard extends HTMLElement {
       routes: this._config.routes || saved.routes || [],
       stops: saved.stops ?? true,
       dim: this._config.dim ?? saved.dim ?? 0,
+      stopColor: this._config.stop_color || saved.stopColor || "#ffb300",
+      stopSize: this._config.stop_size ?? saved.stopSize ?? 10,
       basemap: this._config.basemap || saved.basemap || "street",
     };
     this._height = this._config.height || 480;
@@ -102,6 +105,8 @@ class MetlinkMapCard extends HTMLElement {
             <label><input type="checkbox" class="stops"> Stops</label>
             <label><input type="checkbox" class="light"> Light map</label>
             <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
+            <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
+            <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
           </div>
           <input class="search" type="search" placeholder="Add routes: search by number or name…" autocomplete="off">
           <div class="hits"></div>
@@ -112,7 +117,7 @@ class MetlinkMapCard extends HTMLElement {
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { modes: q(".modes"), dim: q(".dim"), stops: q(".stops"), light: q(".light"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
+    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), light: q(".light"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
     this._el.mapDiv.style.height = this._height + "px";
     this._el.modes.innerHTML = MODES.map(([id, label]) => `<button class="chip" data-mode="${id}">${label}</button>`).join("");
     this._el.modes.addEventListener("click", (e) => {
@@ -121,6 +126,8 @@ class MetlinkMapCard extends HTMLElement {
       this._sel.modes = this._sel.modes.includes(id) ? this._sel.modes.filter((m) => m !== id) : [...this._sel.modes, id];
       this._changed();
     });
+    this._el.stopColor.addEventListener("input", () => { this._sel.stopColor = this._el.stopColor.value; this._styleStops(); this._save(); });
+    this._el.stopSize.addEventListener("input", () => { this._sel.stopSize = Number(this._el.stopSize.value); this._styleStops(); this._save(); });
     this._el.dim.addEventListener("input", () => { this._sel.dim = Number(this._el.dim.value); this._applyDim(); this._save(); });
     this._el.stops.addEventListener("change", () => { this._sel.stops = this._el.stops.checked; this._changed(); });
     this._el.light.addEventListener("change", () => { this._sel.basemap = this._el.light.checked ? "light" : "street"; this._setBasemap(); this._save(); });
@@ -154,6 +161,8 @@ class MetlinkMapCard extends HTMLElement {
 
   _syncControls() {
     this._el.dim.value = this._sel.dim || 0;
+    this._el.stopColor.value = cssColor(this._sel.stopColor, "#ffb300");
+    this._el.stopSize.value = this._sel.stopSize;
     this._el.stops.checked = !!this._sel.stops;
     this._el.light.checked = this._sel.basemap === "light";
     this._el.modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", this._sel.modes.includes(b.dataset.mode)));
@@ -179,6 +188,15 @@ class MetlinkMapCard extends HTMLElement {
     this._base.bringToBack();
     this._basemapName = this._sel.basemap;
     this._applyDim();
+  }
+
+  _stopStyle() {
+    const size = Math.min(20, Math.max(3, Number(this._sel.stopSize) || 10));
+    return { radius: size, weight: 2, color: "#37474f", fillColor: cssColor(this._sel.stopColor, "#ffb300"), fillOpacity: 1 };
+  }
+
+  _styleStops() {
+    if (this._layers) this._layers.stops.eachLayer((m) => m.setStyle && m.setRadius && (m.setStyle(this._stopStyle()), m.setRadius(this._stopStyle().radius)));
   }
 
   // Filtering only the tile pane darkens the map without touching routes, stops or vehicles.
@@ -261,7 +279,7 @@ class MetlinkMapCard extends HTMLElement {
       if (!sel.routes.length && sel.modes.length > 1) stops = stops.filter((s) => s.modes.some((m) => sel.modes.includes(m)));
       this._layers.stops.clearLayers();
       for (const s of stops) {
-        const marker = L.circleMarker([s.lat, s.lon], { radius: 10, weight: 2, color: "#e65100", fillColor: "#ffb300", fillOpacity: 1 });
+        const marker = L.circleMarker([s.lat, s.lon], this._stopStyle());
         marker.bindPopup("Loading…", { minWidth: 200 });
         marker.on("popupopen", () => this._stopPopup(marker, s));
         marker.addTo(this._layers.stops);
