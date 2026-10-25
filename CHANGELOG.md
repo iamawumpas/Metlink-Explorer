@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-10-25
+
+### Changed - Late departures blink red
+
+- Why: "(late)" in the same colour as the row was easy to miss.
+- A delayed departure now shows a red "late" label that blinks. It sits in a small white pill, because red text would disappear on a red or orange route row.
+- The blinking stops for anyone whose device is set to reduce motion.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.3.1] - 2026-10-25
 
 ### Changed - Tidier stop bubbles
