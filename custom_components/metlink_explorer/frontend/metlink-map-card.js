@@ -151,7 +151,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm-dark .leaflet-popup-content-wrapper,.mm-dark .leaflet-popup-tip{background:#263238;color:#eceff1}.mm-dark .mm-pop .muted{color:#b0bec5}.mm-dark .mm-pop .warn{color:#ffb74d}.mm-dark .leaflet-popup-close-button{color:#eceff1}
           .mm-wrap{position:relative}.mm-wrap .alerts{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;max-width:calc(100% - 100px);width:max-content;font:13px/1.35 sans-serif}
           .mm-wrap .ahead{display:block;margin:0 auto;padding:5px 12px;border-radius:14px;border:1px solid #e65100;background:#fff3e0;color:#5d4037;font:600 13px sans-serif;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.4)}
-          .mm-wrap .abody{position:relative;margin-top:6px;padding:8px 28px 8px 10px;max-height:60%;overflow:auto;border-radius:8px;background:#fff3e0;color:#3e2723;border-left:4px solid #e65100;box-shadow:0 2px 8px rgba(0,0,0,.45)}
+          .mm-wrap .abody{position:relative;margin-top:6px;padding:8px 28px 8px 10px;max-height:calc(var(--mm-h, 400px) - 80px);overflow-y:auto;overscroll-behavior:contain;border-radius:8px;background:#fff3e0;color:#3e2723;border-left:4px solid #e65100;box-shadow:0 2px 8px rgba(0,0,0,.45)}
           .mm-wrap .aclose{position:absolute;top:2px;right:4px;background:none;border:0;font-size:20px;line-height:1;color:inherit;cursor:pointer}
           .mm-wrap .item{padding:6px 0;border-top:1px solid rgba(0,0,0,.15)}.mm-wrap .item:first-of-type{border-top:0}.mm-wrap .item p{margin:2px 0 0;white-space:pre-wrap}
           .mm-wrap .achip{display:inline-block;border-radius:10px;padding:0 7px;margin-left:4px;font-weight:600;font-size:12px}
@@ -177,6 +177,7 @@ class MetlinkMapCard extends HTMLElement {
     const q = (s) => this.querySelector(s);
     this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), popup: q(".popup"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
     this._el.mapDiv.style.height = this._height + "px";
+    this._el.alerts.parentElement.style.setProperty("--mm-h", this._height + "px");
     this._el.alerts.addEventListener("click", (e) => {
       if (e.target.closest(".ahead")) this._setAlertsOpen(!this._alertsOpen);
       else if (e.target.closest(".aclose")) this._setAlertsOpen(false);

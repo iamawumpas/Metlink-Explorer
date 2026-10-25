@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-10-25
+
+### Fixed - Long alert lists now scroll
+
+- Why: when there were more alerts than fitted in the box, the extra ones ran off the bottom of the map and could not be reached.
+- The alert box is now limited to the height of the map and gets a vertical scrollbar when it needs one. Scrolling it no longer scrolls the page behind it.
+
 ## [2.5.0] - 2026-10-25
 
 ### Changed - Alerts are now one line over the top of the map
