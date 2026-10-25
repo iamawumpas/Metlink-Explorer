@@ -173,6 +173,9 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .mm-panel .mm-grp{display:flex;flex-direction:column;gap:10px;margin:10px 0 0;padding:8px 10px 10px;border:1px solid var(--divider-color);border-radius:8px}
           .mm-wrap .mm-panel .mm-grp legend{padding:0 6px;font-weight:600;color:var(--secondary-text-color)}
           .mm-wrap .mm-panel .mm-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+          .mm-wrap .mm-panel .mm-row.mm-fill{flex-wrap:nowrap}
+          .mm-wrap .mm-panel .mm-grow{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
+          .mm-wrap .mm-panel .mm-grow input[type=range]{flex:1;min-width:0;width:100%}
           .mm-wrap .mm-panel .opts{flex-direction:column;gap:10px}
           .mm-wrap .alerts{max-width:calc(100% - 240px)}
         </style>
@@ -188,13 +191,15 @@ class MetlinkMapCard extends HTMLElement {
             <input class="search" type="search" placeholder="Add specific bus routes. Search by number or name…" autocomplete="off">
             <div class="hits"></div>
             <fieldset class="mm-grp"><legend>Map</legend>
-              <label>Map <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
-              <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
+              <div class="mm-row mm-fill">
+                <label>Style <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
+                <label class="mm-grow">Darken <input type="range" class="dim" min="0" max="80" step="5"></label>
+              </div>
             </fieldset>
             <fieldset class="mm-grp"><legend>Stops</legend>
-              <div class="mm-row">
+              <div class="mm-row mm-fill">
                 <label><input type="checkbox" class="stops"> Show stops</label>
-                <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle;width:80px"></label>
+                <label class="mm-grow">Stop size <input type="range" class="stopsize" min="3" max="20" step="1"></label>
               </div>
               <div class="mm-row">
                 <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>

@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.10] - 2026-10-26
+
+### Changed - Filters panel sliders fill the row
+
+- Why: the sliders were short and left empty space in the panel.
+- The stop size slider now stretches to fill the rest of the line beside Show stops.
+- The map type dropdown is renamed Style, and the darken slider now sits on the same line and fills the remaining space.
+
 ## [2.6.9] - 2026-10-26
 
 ### Changed - Stop size sits beside Show stops
