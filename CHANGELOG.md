@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.3] - 2026-10-26
+
+### Changed - The map is limited to the Wellington region
+
+- Why: you could zoom out and drag the map away from the area the services cover.
+- The map can no longer be zoomed out past, or dragged beyond, the region from Kapiti to the Wairarapa. The limit follows the card size, so a bigger card can show a little more around the edge.
+
 ## [2.5.2] - 2026-10-26
 
 ### Changed - The map fills the screen height

@@ -9,6 +9,8 @@ const MODES = [["bus", "Bus"], ["train", "Train"], ["ferry", "Ferry"], ["cable_c
 const MAX_ROUTES = 12;
 const STOP_ZOOM = 15;
 const CENTRE = [-41.2865, 174.7762];
+// South-west and north-east corners, estimated from the region the user chose.
+const REGION = [[-41.48, 174.61], [-40.80, 175.73]];
 // All Esri tile services, which need no API key. OSM and CARTO tiles were tested and are blocked or need a key.
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
 const BASEMAPS = {
@@ -275,8 +277,18 @@ class MetlinkMapCard extends HTMLElement {
     this._layers = { routes: L.layerGroup().addTo(map), stops: L.layerGroup().addTo(map), vehicles: L.layerGroup().addTo(map) };
     this._vehicleMarkers = new Map();
     map.on("moveend", () => { clearTimeout(this._moveTimer); this._moveTimer = setTimeout(() => this._drawStops(), 400); });
-    this._observer = new ResizeObserver(() => map.invalidateSize());
+    this._observer = new ResizeObserver(() => { map.invalidateSize(); this._limitView(); });
     this._observer.observe(this._el.mapDiv);
+    this._limitView();
+  }
+
+  // Keep the view inside the Wellington region: Kapiti to the Wairarapa.
+  _limitView() {
+    const map = this._map;
+    if (!map || !map.getSize().x) return;
+    const bounds = window.L.latLngBounds(REGION[0], REGION[1]);
+    map.setMaxBounds(bounds.pad(0.02));
+    map.setMinZoom(map.getBoundsZoom(bounds, false));
   }
 
   _setBasemap() {
