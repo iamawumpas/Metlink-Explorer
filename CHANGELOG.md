@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.5] - 2026-10-26
+
+### Changed - Filter options are grouped
+
+- Why: the options in the filters panel were in no particular order.
+- The route search is at the top. Below it, a "Map" group holds the map type and darken slider, and a "Stops" group holds show stops, stop colour, stop size and stop bubbles.
+
 ## [2.6.4] - 2026-10-26
 
 ### Changed - Picked route chips are sorted by number

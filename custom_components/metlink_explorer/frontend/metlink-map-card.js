@@ -169,6 +169,8 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .mm-panel[hidden]{display:none}
           .mm-wrap .mm-phead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
           .mm-wrap .mm-pclose{background:none;border:0;font-size:24px;line-height:1;color:inherit;cursor:pointer}
+          .mm-wrap .mm-panel .mm-grp{display:flex;flex-direction:column;gap:10px;margin:10px 0 0;padding:8px 10px 10px;border:1px solid var(--divider-color);border-radius:8px}
+          .mm-wrap .mm-panel .mm-grp legend{padding:0 6px;font-weight:600;color:var(--secondary-text-color)}
           .mm-wrap .mm-panel .opts{flex-direction:column;gap:10px}
           .mm-wrap .alerts{max-width:calc(100% - 240px)}
         </style>
@@ -181,16 +183,18 @@ class MetlinkMapCard extends HTMLElement {
           </div>
           <div class="mm mm-panel" hidden>
             <div class="mm-phead"><b>Filters</b><button class="mm-pclose" aria-label="Close filters">×</button></div>
-            <div class="opts">
-              <label><input type="checkbox" class="stops"> Stops</label>
-              <label>Map <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
-              <label>Stop bubbles <select class="popup"><option value="light">Light</option><option value="dark">Dark</option></select></label>
-              <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
-              <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
-              <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
-            </div>
             <input class="search" type="search" placeholder="Add specific bus routes. Search by number or name…" autocomplete="off">
             <div class="hits"></div>
+            <fieldset class="mm-grp"><legend>Map</legend>
+              <label>Map <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
+              <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
+            </fieldset>
+            <fieldset class="mm-grp"><legend>Stops</legend>
+              <label><input type="checkbox" class="stops"> Show stops</label>
+              <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
+              <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
+              <label>Stop bubbles <select class="popup"><option value="light">Light</option><option value="dark">Dark</option></select></label>
+            </fieldset>
           </div>
           <div class="mm-map"></div>
         </div>
