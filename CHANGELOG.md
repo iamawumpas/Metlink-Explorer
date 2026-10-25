@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2026-10-25
+
+### Fixed - Departure times line up in the stop bubble
+
+- Why: the "late" label sat inside the time column, so times and "min" labels didn't line up between rows.
+- Times are now right-aligned in their own column, and the "late" label has a column of its own, so every "min" and every label lines up.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.3.2] - 2026-10-25
 
 ### Changed - Late departures blink red

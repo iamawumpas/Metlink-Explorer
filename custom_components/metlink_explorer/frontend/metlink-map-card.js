@@ -137,6 +137,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm .opts{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0}.mm .status{font-size:.85em;min-height:1.2em}
           .mm-map{width:100%;position:relative;overflow:hidden;isolation:isolate;z-index:0}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
           .mm-pop table{border-collapse:collapse;width:100%}.mm-pop td{padding:2px 6px;border-top:1px solid rgba(128,128,128,.45);border-bottom:1px solid rgba(128,128,128,.45)}.mm-pop .warn{margin-top:4px;color:#e65100}.mm-pop .head{text-align:center;padding:0 14px;margin-bottom:4px}.mm-map .leaflet-popup-content{margin:12px 20px}
+          .mm-pop td.t{text-align:right;white-space:nowrap;padding-right:2px}.mm-pop td.l{width:1%;white-space:nowrap}
           .mm-late{display:inline-block;background:#fff;color:#d50000;font-weight:700;border-radius:8px;padding:0 6px;animation:mm-blink 1s steps(2,start) infinite}
           @keyframes mm-blink{to{visibility:hidden}}
           @media (prefers-reduced-motion:reduce){.mm-late{animation:none}}
@@ -425,8 +426,8 @@ class MetlinkMapCard extends HTMLElement {
             const mins = Math.round((r.timestamp_expected - now) / 60);
             const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected);
             const c = this._colorFor(r.route_id, r.mode, r.route);
-            const late = r.status === "delayed" ? ` <span class="mm-late">late</span>` : "";
-            return `<tr style="background:${c};color:${textOn(c)}"><td><b>${esc(r.route)}</b></td><td>${esc(r.headsign || r.destination)}</td><td>${esc(when)}${late}</td></tr>`;
+            const late = r.status === "delayed" ? `<span class="mm-late">late</span>` : "";
+            return `<tr style="background:${c};color:${textOn(c)}"><td><b>${esc(r.route)}</b></td><td>${esc(r.headsign || r.destination)}</td><td class="t">${esc(when)}</td><td class="l">${late}</td></tr>`;
           }).join("")}</table>`
         : "No departures soon.";
       const warn = alerts.map((a) => `<div class="warn">⚠ ${esc(a.header || "Service notice")}</div>`).join("");
