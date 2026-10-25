@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] - 2026-10-25
+
+### Changed - Route chips take the route colour
+
+- Why: the small colour box inside each route chip was fiddly and hard to read against the chip.
+- The whole chip is now filled with the route colour, with black or white text, whichever contrasts better. Click the route name to change the colour. The ✕ still removes the route.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.3.3] - 2026-10-25
 
 ### Fixed - Departure times line up in the stop bubble

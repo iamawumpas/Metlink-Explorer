@@ -141,7 +141,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm-late{display:inline-block;background:#fff;color:#d50000;font-weight:700;border-radius:8px;padding:0 6px;animation:mm-blink 1s steps(2,start) infinite}
           @keyframes mm-blink{to{visibility:hidden}}
           @media (prefers-reduced-motion:reduce){.mm-late{animation:none}}
-          .mm .pr{display:inline-flex;align-items:center;gap:6px;border-radius:16px;padding:2px 8px 2px 4px;background:var(--primary-color);color:#fff}.mm .pr input[type=color]{width:24px;height:24px;padding:0;border:0;background:none;cursor:pointer}.mm .pr button{background:none;border:0;color:inherit;cursor:pointer;padding:0 2px}
+          .mm .pr{display:inline-flex;align-items:center;gap:6px;border-radius:16px;padding:4px 10px 4px 12px;border:1px solid rgba(128,128,128,.6);font-weight:600}.mm .pr .nm{position:relative;cursor:pointer}.mm .pr input[type=color]{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:0;padding:0}.mm .pr button{background:none;border:0;color:inherit;cursor:pointer;padding:0 2px;position:relative;z-index:1}
           .mm-dark .leaflet-popup-content-wrapper,.mm-dark .leaflet-popup-tip{background:#263238;color:#eceff1}.mm-dark .mm-pop .muted{color:#b0bec5}.mm-dark .mm-pop .warn{color:#ffb74d}.mm-dark .leaflet-popup-close-button{color:#eceff1}
           .mm .alerts{margin:4px 0}.mm .alerts .pin{padding:6px 8px;margin:4px 0;border-radius:6px;background:#fff3e0;color:#5d4037;border-left:4px solid #e65100}
           .mm .alerts details{margin:4px 0}.mm .alerts .item{padding:4px 0;border-top:1px solid var(--divider-color)}.mm .alerts .item p{margin:2px 0 0;font-size:.9em;white-space:pre-wrap}
@@ -187,6 +187,8 @@ class MetlinkMapCard extends HTMLElement {
       const route = id && this._sel.routes.find((r) => r.id === id);
       if (!route) return;
       route.color = e.target.value;
+      const chip = e.target.closest(".pr");
+      if (chip) { chip.style.background = route.color; chip.style.color = textOn(route.color); }
       this._save();
       this._recolour();
     });
@@ -226,7 +228,7 @@ class MetlinkMapCard extends HTMLElement {
     this._el.stopSize.value = this._sel.stopSize;
     this._el.stops.checked = !!this._sel.stops;
     this._el.modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", this._sel.modes.includes(b.dataset.mode)));
-    this._el.picked.innerHTML = this._sel.routes.map((r) => `<span class="pr"><input type="color" data-color="${esc(r.id)}" value="${esc(cssColor(r.color, "#546e7a"))}" title="Route colour"><span>${esc(r.name)}</span><button data-route="${esc(r.id)}" title="Remove">✕</button></span>`).join("");
+    this._el.picked.innerHTML = this._sel.routes.map((r) => { const c = cssColor(r.color, "#546e7a"); return `<span class="pr" data-chip="${esc(r.id)}" style="background:${c};color:${textOn(c)}"><span class="nm" title="Change colour">${esc(r.name)}<input type="color" data-color="${esc(r.id)}" value="${esc(c)}" title="Route colour"></span><button data-route="${esc(r.id)}" title="Remove">✕</button></span>`; }).join("");
   }
 
   _ensureMap(L) {
