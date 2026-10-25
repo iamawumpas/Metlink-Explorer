@@ -1,14 +1,22 @@
-/* Metlink departure board. Stop and "Towards" are chosen in the card and remembered per browser. */
+/* Metlink departure board. Stops are picked in the card, shown as coloured chips, and remembered per browser. */
 (() => {
 "use strict";
 const WS = "metlink_explorer/";
 const STORE_KEY = "metlink_explorer_board:";
+const MAX_STOPS = 8;
+const PALETTE = ["#e53935", "#fb8c00", "#fbc02d", "#43a047", "#1e88e5", "#3949ab", "#8e24aa", "#00acc1"];
 
 let stopsCache;
 const loadStops = (hass) => (stopsCache ||= hass.callWS({ type: WS + "stops" }).catch((e) => { stopsCache = undefined; throw e; }));
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const cssColor = (c, fallback) => (/^#[0-9a-f]{6}$/i.test(c || "") ? c : fallback);
+const textOn = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#000" : "#fff";
+};
+const byName = (a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true });
 
 class MetlinkDepartureBoardCard extends HTMLElement {
   setConfig(config) {
@@ -16,9 +24,15 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     this._key = STORE_KEY + (this._config.id || "default");
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(this._key) || "{}"); } catch (_) { /* ignore */ }
-    this._sel = { stopId: this._config.stop_id || saved.stopId || "", stopName: saved.stopName || "", towards: this._config.towards ?? saved.towards ?? "" };
+    let stops = Array.isArray(saved.stops) ? saved.stops : [];
+    if (!stops.length && saved.stopId) stops = [{ id: saved.stopId, name: saved.stopName || saved.stopId, towards: saved.towards || "" }];
+    if (!stops.length && this._config.stop_id) stops = [{ id: this._config.stop_id, name: this._config.stop_id, towards: this._config.towards || "" }];
+    this._sel = { stops: stops.slice(0, MAX_STOPS).map((s, i) => ({ id: s.id, name: s.name || s.id, towards: s.towards || "", color: cssColor(s.color, PALETTE[i % PALETTE.length]) })) };
     this._limit = this._config.limit || 10;
-    if (this._built) this._refresh();
+    this._perRoute = this._config.per_route || 3;
+    const h = this._config.height;
+    this._height = h ? (typeof h === "number" || /^\d+(\.\d+)?$/.test(String(h)) ? `${h}px` : String(h)) : "";
+    if (this._built) { this._applyHeight(); this._refresh(); }
   }
 
   set hass(hass) {
@@ -42,36 +56,50 @@ class MetlinkDepartureBoardCard extends HTMLElement {
   _build() {
     this._built = true;
     this.innerHTML = `
-      <div class="mx-card" style="background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color));color:var(--primary-text-color);overflow:hidden">
+      <div class="mx-card" style="background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color));color:var(--primary-text-color);overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box">
         <style>
-          .mx{padding:12px 16px}.mx input,.mx select{width:100%;box-sizing:border-box;padding:8px;margin:4px 0;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color)}
+          .mx{padding:12px 16px;display:flex;flex-direction:column;min-height:0;flex:1}.mx input[type=search],.mx select{width:100%;box-sizing:border-box;padding:8px;margin:4px 0;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color)}
           .mx .hits button{display:block;width:100%;text-align:left;padding:6px 8px;border:0;background:none;color:var(--primary-text-color);cursor:pointer}
           .mx .hits button:hover{background:var(--secondary-background-color)}
-          .mx table{width:100%;border-collapse:collapse}.mx td{padding:6px 4px;border-top:1px solid var(--divider-color)}
+          .mx .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0}
+          .mx .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 4px 2px 10px;border-radius:14px;font-weight:600;font-size:.9em}
+          .mx .chip .nm{position:relative;cursor:pointer}.mx .chip input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;padding:0;border:0}
+          .mx .chip button{border:0;background:none;color:inherit;cursor:pointer;font-size:1em;padding:0 4px}
+          .mx .tw{display:flex;align-items:center;gap:6px}.mx .tw i{flex:none;width:10px;height:10px;border-radius:50%}
+          .mx .body{overflow-y:auto;overflow-x:hidden;flex:1;min-height:0}
+          .mx .grp{margin-top:10px}.mx .gh{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:4px}
           .mx .badge{display:inline-block;min-width:2.2em;text-align:center;padding:2px 6px;border-radius:4px;font-weight:600}
-          .mx .late{color:var(--error-color)}.mx .early{color:var(--info-color)}.mx .gone{text-decoration:line-through;opacity:.6}.mx .muted{color:var(--secondary-text-color)}
+          .mx .dep{display:flex;align-items:center;gap:8px;padding:5px 10px;margin:2px 0;border-radius:6px;color:#fff;text-shadow:0 0 3px rgba(0,0,0,.7)}
+          .mx .dep .st{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+          .mx .dep .when{text-align:right;white-space:nowrap}
+          .mx .late{color:#ff8a80}.mx .early{color:#80d8ff}.mx .gone{text-decoration:line-through;opacity:.6}.mx .muted{color:var(--secondary-text-color)}
         </style>
         <div class="mx">
-          <div class="title"></div>
-          <input class="search" type="search" placeholder="Search for a stop…" autocomplete="off">
+          <input class="search" type="search" placeholder="Add a stop. Search by name or number…" autocomplete="off">
           <div class="hits"></div>
-          <select class="towards" hidden></select>
+          <div class="chips"></div>
+          <div class="tws"></div>
           <div class="body"></div>
         </div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { title: q(".title"), search: q(".search"), hits: q(".hits"), towards: q(".towards"), body: q(".body") };
+    this._el = { card: q(".mx-card"), search: q(".search"), hits: q(".hits"), chips: q(".chips"), tws: q(".tws"), body: q(".body") };
     this._el.search.addEventListener("input", () => this._search());
-    this._el.towards.addEventListener("change", () => {
-      this._sel.towards = this._el.towards.value;
-      this._save();
-      this._subscribe();
-    });
+    this._applyHeight();
     this._refresh();
+  }
+
+  _applyHeight() {
+    this._el.card.style.height = this._height;
   }
 
   _save() {
     try { localStorage.setItem(this._key, JSON.stringify(this._sel)); } catch (_) { /* private mode */ }
+  }
+
+  _freeColor() {
+    const used = new Set(this._sel.stops.map((s) => s.color));
+    return PALETTE.find((c) => !used.has(c)) || PALETTE[this._sel.stops.length % PALETTE.length];
   }
 
   async _search() {
@@ -82,9 +110,11 @@ class MetlinkDepartureBoardCard extends HTMLElement {
       const hits = stops.filter((s) => s.name.toLowerCase().includes(text) || s.stop_ids.some((i) => i.startsWith(text))).slice(0, 12);
       this._el.hits.innerHTML = hits.map((s) => `<button data-id="${esc(s.id)}" data-name="${esc(s.name)}">${esc(s.name)} <span class="muted">${esc(s.modes.join(", "))} · ${esc(s.id)}</span></button>`).join("") || `<div class="muted">No stops found</div>`;
       this._el.hits.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-        this._sel = { stopId: b.dataset.id, stopName: b.dataset.name, towards: "" };
         this._el.search.value = "";
         this._el.hits.innerHTML = "";
+        if (this._sel.stops.some((s) => s.id === b.dataset.id)) return;
+        if (this._sel.stops.length >= MAX_STOPS) { this._el.hits.innerHTML = `<div class="muted">At most ${MAX_STOPS} stops. Remove one first.</div>`; return; }
+        this._sel.stops.push({ id: b.dataset.id, name: b.dataset.name, towards: "", color: this._freeColor() });
         this._save();
         this._refresh();
       }));
@@ -93,56 +123,119 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     }
   }
 
+  _renderChips() {
+    const stops = [...this._sel.stops].sort(byName);
+    this._el.chips.innerHTML = stops.map((s) => `<span class="chip" style="background:${esc(s.color)};color:${textOn(s.color)}"><span class="nm" title="Change colour">${esc(s.name)}<input type="color" data-color="${esc(s.id)}" value="${esc(s.color)}"></span><button data-rm="${esc(s.id)}" title="Remove">✕</button></span>`).join("");
+    this._el.chips.querySelectorAll("[data-color]").forEach((i) => i.addEventListener("input", () => {
+      const s = this._sel.stops.find((x) => x.id === i.dataset.color);
+      if (!s) return;
+      s.color = i.value;
+      i.closest(".chip").style.cssText = `background:${s.color};color:${textOn(s.color)}`;
+      this._save();
+      this._renderRows();
+    }));
+    this._el.chips.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", () => {
+      this._sel.stops = this._sel.stops.filter((s) => s.id !== b.dataset.rm);
+      this._save();
+      this._refresh();
+    }));
+  }
+
   async _refresh() {
     this._unsubscribe();
-    this._rows = null;
-    this._el.title.innerHTML = this._sel.stopId ? `<h2 style="margin:0 0 4px">${esc(this._sel.stopName || this._sel.stopId)}</h2>` : "";
-    this._el.towards.hidden = !this._sel.stopId;
-    if (!this._sel.stopId) { this._el.body.innerHTML = `<p class="muted">Search for a stop to see its departures.</p>`; return; }
-    try {
-      const dests = await this._hass.callWS({ type: WS + "destinations", stop_id: this._sel.stopId });
-      this._el.towards.innerHTML = `<option value="">Towards: anywhere</option>` + dests.map((d) => `<option value="${esc(d.stop_id)}">Towards ${esc(d.name)} (${esc(d.routes.join(", "))})</option>`).join("");
-      this._el.towards.value = dests.some((d) => d.stop_id === this._sel.towards) ? this._sel.towards : "";
-      this._sel.towards = this._el.towards.value;
-    } catch (err) {
-      this._el.body.innerHTML = `<p class="muted">Could not load this stop (${esc(err.message || err.code)}).</p>`;
-      return;
-    }
+    this._rows = {};
+    this._renderChips();
+    if (!this._sel.stops.length) { this._el.tws.innerHTML = ""; this._el.body.innerHTML = `<p class="muted">Search for a stop to see its departures.</p>`; return; }
+    this._el.body.innerHTML = `<p class="muted">Loading…</p>`;
+    const failed = [];
+    this._dests = this._dests || {};
+    await Promise.all(this._sel.stops.map(async (s) => {
+      try {
+        this._dests[s.id] = this._dests[s.id] || await this._hass.callWS({ type: WS + "destinations", stop_id: s.id });
+      } catch (err) { failed.push(s.name); this._dests[s.id] = []; }
+      if (s.towards && !this._dests[s.id].some((d) => d.stop_id === s.towards)) s.towards = "";
+    }));
+    this._renderTowards();
     this._subscribe();
   }
 
-  async _subscribe() {
+  _renderTowards() {
+    this._el.tws.innerHTML = [...this._sel.stops].sort(byName).map((s) => `<div class="tw"><i style="background:${esc(s.color)}"></i><select data-tw="${esc(s.id)}" title="${esc(s.name)}"><option value="">${esc(s.name)}: towards anywhere</option>${(this._dests[s.id] || []).map((d) => `<option value="${esc(d.stop_id)}"${d.stop_id === s.towards ? " selected" : ""}>${esc(s.name)}: towards ${esc(d.name)} (${esc(d.routes.join(", "))})</option>`).join("")}</select></div>`).join("");
+    this._el.tws.querySelectorAll("[data-tw]").forEach((sel) => sel.addEventListener("change", () => {
+      const s = this._sel.stops.find((x) => x.id === sel.dataset.tw);
+      if (!s) return;
+      s.towards = sel.value;
+      this._save();
+      this._subscribeStop(s);
+    }));
+  }
+
+  _subscribe() {
     this._unsubscribe();
-    if (!this._hass || !this._sel.stopId) return;
-    const msg = { type: WS + "subscribe_departures", stop_id: this._sel.stopId, limit: this._limit };
-    if (this._sel.towards) msg.towards = this._sel.towards;
-    const token = (this._token = {});
+    if (!this._hass) return;
+    this._unsubs = this._unsubs || {};
+    this._sel.stops.forEach((s) => this._subscribeStop(s));
+  }
+
+  async _subscribeStop(s) {
+    if (!this._hass) return;
+    this._unsubs = this._unsubs || {};
+    this._tokens = this._tokens || {};
+    if (this._unsubs[s.id]) { try { this._unsubs[s.id](); } catch (_) { /* socket closed */ } delete this._unsubs[s.id]; }
+    delete this._rows[s.id];
+    const msg = { type: WS + "subscribe_departures", stop_id: s.id, limit: this._limit };
+    if (s.towards) msg.towards = s.towards;
+    const token = (this._tokens[s.id] = {});
     try {
-      const unsub = await this._hass.connection.subscribeMessage((rows) => { this._rows = rows; this._renderRows(); }, msg);
-      if (this._token !== token) { unsub(); return; }
-      this._unsub = unsub;
+      const unsub = await this._hass.connection.subscribeMessage((rows) => { this._rows[s.id] = rows; this._renderRows(); }, msg);
+      if (this._tokens[s.id] !== token) { unsub(); return; }
+      this._unsubs[s.id] = unsub;
     } catch (err) {
-      this._el.body.innerHTML = `<p class="muted">Live departures unavailable (${esc(err.message || err.code)}).</p>`;
+      this._rows[s.id] = { error: err.message || err.code || "error" };
+      this._renderRows();
     }
   }
 
   _unsubscribe() {
-    this._token = null;
-    if (this._unsub) { try { this._unsub(); } catch (_) { /* socket closed */ } this._unsub = null; }
+    this._tokens = {};
+    Object.values(this._unsubs || {}).forEach((u) => { try { u(); } catch (_) { /* socket closed */ } });
+    this._unsubs = {};
   }
 
   _renderRows() {
     if (!this._built || !this._rows) return;
-    if (!this._rows.length) { this._el.body.innerHTML = `<p class="muted">No departures in the next 72 hours.</p>`; return; }
+    const stops = this._sel.stops;
+    if (!stops.length) return;
     const now = Date.now() / 1000;
-    const rows = this._rows.filter((r) => r.timestamp_expected > now - 60).map((r) => {
-      const mins = Math.round((r.timestamp_expected - now) / 60);
-      const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected);
-      const note = r.status === "delayed" ? `<span class="late">+${Math.round(r.delay / 60)} min</span>` : r.status === "early" ? `<span class="early">${Math.round(r.delay / 60)} min</span>` : r.status === "skipped" ? "Skipped" : "";
-      const style = r.color ? `background:#${esc(r.color)};color:${r.text_color ? "#" + esc(r.text_color) : "#fff"}` : "background:var(--primary-color);color:#fff";
-      return `<tr class="${r.status === "canceled" || r.status === "skipped" ? "gone" : ""}"><td><span class="badge" style="${style}">${esc(r.route)}</span></td><td>${esc(r.headsign || r.destination)}${r.is_school ? ' <span class="muted">school</span>' : ""}</td><td>${esc(clock(r.timestamp))}</td><td>${esc(when)} ${note}</td></tr>`;
+    const errors = [];
+    const deps = [];
+    let waiting = 0;
+    stops.forEach((s) => {
+      const rows = this._rows[s.id];
+      if (!rows) { waiting++; return; }
+      if (!Array.isArray(rows)) { errors.push(`${s.name} (${rows.error})`); return; }
+      rows.forEach((r) => { if (r.timestamp_expected > now - 60) deps.push({ r, s }); });
     });
-    this._el.body.innerHTML = `<table>${rows.join("")}</table>`;
+    if (waiting === stops.length) return;
+    const groups = new Map();
+    deps.sort((a, b) => a.r.timestamp_expected - b.r.timestamp_expected).forEach((d) => {
+      const dest = d.r.headsign || d.r.destination || "";
+      const key = `${d.r.route}\u0000${dest}`;
+      if (!groups.has(key)) groups.set(key, { route: d.r.route, dest, color: d.r.color, text: d.r.text_color, school: d.r.is_school, items: [] });
+      groups.get(key).items.push(d);
+    });
+    const html = [...groups.values()].map((g) => {
+      const style = g.color ? `background:#${esc(g.color)};color:${g.text ? "#" + esc(g.text) : "#fff"}` : "background:var(--primary-color);color:#fff";
+      const items = g.items.slice(0, this._perRoute).map(({ r, s }) => {
+        const mins = Math.round((r.timestamp_expected - now) / 60);
+        const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected);
+        const note = r.status === "delayed" ? `<span class="late">+${Math.round(r.delay / 60)} min</span>` : r.status === "early" ? `<span class="early">${Math.round(r.delay / 60)} min</span>` : r.status === "skipped" ? "Skipped" : "";
+        return `<div class="dep ${r.status === "canceled" || r.status === "skipped" ? "gone" : ""}" style="background:linear-gradient(90deg,#000,${esc(s.color)})"><span class="st">${esc(s.name)}</span><span>${esc(clock(r.timestamp))}</span><span class="when">${esc(when)} ${note}</span></div>`;
+      }).join("");
+      return `<div class="grp"><div class="gh"><span class="badge" style="${style}">${esc(g.route)}</span><span>${esc(g.dest)}${g.school ? ' <span class="muted">school</span>' : ""}</span></div>${items}</div>`;
+    });
+    const err = errors.length ? `<p class="muted">Live departures unavailable for ${esc(errors.join(", "))}.</p>` : "";
+    this._el.body.innerHTML = err + (html.length ? html.join("") : errors.length ? "" : `<p class="muted">No departures in the next 72 hours.</p>`);
   }
 }
 
@@ -150,7 +243,7 @@ const BOARD_TAG = "metlink-departure-board-card";
 if (!customElements.get(BOARD_TAG)) {
   customElements.define(BOARD_TAG, MetlinkDepartureBoardCard);
   window.customCards = window.customCards || [];
-  window.customCards.push({ type: BOARD_TAG, name: "Metlink Departure Board", description: "Scheduled and live departures for a stop, filtered by where you are going." });
+  window.customCards.push({ type: BOARD_TAG, name: "Metlink Departure Board", description: "Scheduled and live departures for several stops, grouped by route." });
   // Home Assistant has been seen discarding the definition shortly after load; keep re-registering until it holds.
   let tries = 0;
   const watch = setInterval(() => {

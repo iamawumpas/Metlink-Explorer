@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-10-26
+
+### Changed - Departure board shows several stops, grouped by route
+
+- Why: the board could show only one stop, in one long list.
+- Pick several stops (up to 8). Each is a chip, sorted alphabetically, with a colour you can change by clicking the chip. Each stop has its own "Towards" filter.
+- Departures are grouped by route and destination, soonest group first. Under each group the next 3 departures are shown (`per_route` in YAML), each on a bar that fades from black on the left to the stop's colour on the right.
+- Each stop still fetches 10 departures (`limit`). A stop that fails does not hide the others.
+- New YAML `height` (pixels, or any CSS size such as `40vh`). The list scrolls vertically inside it and the search and chips stay in view.
+- A stop saved by the old single-stop board is carried over.
+
 ## [2.7.1] - 2026-10-26
 
 ### Added - Data sources are credited on the map
