@@ -269,7 +269,7 @@ class MetlinkMapCard extends HTMLElement {
     this._el.stopSize.value = this._sel.stopSize;
     this._el.stops.checked = !!this._sel.stops;
     this._el.modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", this._sel.modes.includes(b.dataset.mode)));
-    this._el.picked.innerHTML = this._sel.routes.map((r) => { const c = cssColor(r.color, "#546e7a"); return `<span class="pr" data-chip="${esc(r.id)}" style="background:${c};color:${textOn(c)}"><span class="nm" title="Change colour">${esc(r.name)}<input type="color" data-color="${esc(r.id)}" value="${esc(c)}" title="Route colour"></span><button data-route="${esc(r.id)}" title="Remove">✕</button></span>`; }).join("");
+    this._el.picked.innerHTML = [...this._sel.routes].sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true })).map((r) => { const c = cssColor(r.color, "#546e7a"); return `<span class="pr" data-chip="${esc(r.id)}" style="background:${c};color:${textOn(c)}"><span class="nm" title="Change colour">${esc(r.name)}<input type="color" data-color="${esc(r.id)}" value="${esc(c)}" title="Route colour"></span><button data-route="${esc(r.id)}" title="Remove">✕</button></span>`; }).join("");
   }
 
   // Fill the viewport below the map's top edge. Measured on load and on orientation change only, so scrolling never resizes the map.

@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.4] - 2026-10-26
+
+### Changed - Picked route chips are sorted by number
+
+- Why: chips appeared in the order you added them, so the row looked jumbled.
+- They now always show in number order (2, 83, 84, 130, 887, then letters such as N1), whatever order you picked them in. Colours stay with each route.
+
 ## [2.6.3] - 2026-10-26
 
 ### Fixed - Bus on with routes picked now tracks every bus
