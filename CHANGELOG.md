@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.6] - 2026-10-25
+
+### Added - Light or dark stop bubbles, with a route-coloured heading
+
+- Why: the white popup that appears when you tap a stop clashed with dark dashboards, and had no link to the routes serving the stop.
+- Filters has a new "Stop bubbles" setting, Light or Dark. It's remembered per card, and `popup_theme: dark` works in the YAML. Light stays the default.
+- The stop name in the bubble now has an accent bar in the colour of the route with the next departure (grey if the route has no colour).
+- Not included: making route colours clearly different from each other, or letting you pick them. That belongs with the route-colour patch, since many Metlink routes share colours.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.2.5] - 2026-10-25
 
 ### Added - Choose the map from the card settings

@@ -48,6 +48,7 @@ class MetlinkMapCard extends HTMLElement {
       modes: this._config.modes || saved.modes || [],
       routes: this._config.routes || saved.routes || [],
       stops: saved.stops ?? true,
+      popup: this._config.popup_theme || saved.popup || "light",
       dim: this._config.dim ?? saved.dim ?? 0,
       stopColor: this._config.stop_color || saved.stopColor || "#ffb300",
       stopSize: this._config.stop_size ?? saved.stopSize ?? 10,
@@ -97,7 +98,8 @@ class MetlinkMapCard extends HTMLElement {
           .mm .hits button:hover{background:var(--secondary-background-color)}.mm .muted{color:var(--secondary-text-color)}
           .mm .opts{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0}.mm .status{font-size:.85em;min-height:1.2em}
           .mm-map{width:100%;position:relative;overflow:hidden;isolation:isolate;z-index:0}.mm-badge{display:flex;align-items:center;justify-content:center;border-radius:12px;color:#fff;font:600 11px/1 sans-serif;min-width:22px;height:22px;padding:0 4px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);box-sizing:border-box}
-          .mm-pop td{padding:1px 6px 1px 0}.mm-pop .late{color:#c62828}.mm-pop .warn{margin-top:4px;color:#e65100}
+          .mm-pop td{padding:1px 6px 1px 0}.mm-pop .late{color:#c62828}.mm-pop .warn{margin-top:4px;color:#e65100}.mm-pop .head{border-left:5px solid #607d8b;padding-left:6px;margin-bottom:4px}
+          .mm-dark .leaflet-popup-content-wrapper,.mm-dark .leaflet-popup-tip{background:#263238;color:#eceff1}.mm-dark .mm-pop .muted{color:#b0bec5}.mm-dark .mm-pop .late{color:#ff8a80}.mm-dark .mm-pop .warn{color:#ffb74d}.mm-dark .leaflet-popup-close-button{color:#eceff1}
           .mm .alerts{margin:4px 0}.mm .alerts .pin{padding:6px 8px;margin:4px 0;border-radius:6px;background:#fff3e0;color:#5d4037;border-left:4px solid #e65100}
           .mm .alerts details{margin:4px 0}.mm .alerts .item{padding:4px 0;border-top:1px solid var(--divider-color)}.mm .alerts .item p{margin:2px 0 0;font-size:.9em;white-space:pre-wrap}
         </style>
@@ -107,6 +109,7 @@ class MetlinkMapCard extends HTMLElement {
           <div class="opts">
             <label><input type="checkbox" class="stops"> Stops</label>
             <label>Map <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
+            <label>Stop bubbles <select class="popup"><option value="light">Light</option><option value="dark">Dark</option></select></label>
             <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
             <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
             <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
@@ -120,7 +123,7 @@ class MetlinkMapCard extends HTMLElement {
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
+    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), popup: q(".popup"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
     this._el.mapDiv.style.height = this._height + "px";
     this._el.modes.innerHTML = MODES.map(([id, label]) => `<button class="chip" data-mode="${id}">${label}</button>`).join("");
     this._el.modes.addEventListener("click", (e) => {
@@ -129,6 +132,7 @@ class MetlinkMapCard extends HTMLElement {
       this._sel.modes = this._sel.modes.includes(id) ? this._sel.modes.filter((m) => m !== id) : [...this._sel.modes, id];
       this._changed();
     });
+    this._el.popup.addEventListener("change", () => { this._sel.popup = this._el.popup.value; this._applyPopupTheme(); this._save(); });
     this._el.basemap.addEventListener("change", () => { this._sel.basemap = this._el.basemap.value; this._setBasemap(); this._save(); });
     this._el.stopColor.addEventListener("input", () => { this._sel.stopColor = this._el.stopColor.value; this._styleStops(); this._save(); });
     this._el.stopSize.addEventListener("input", () => { this._sel.stopSize = Number(this._el.stopSize.value); this._styleStops(); this._save(); });
@@ -163,6 +167,8 @@ class MetlinkMapCard extends HTMLElement {
   }
 
   _syncControls() {
+    this._el.popup.value = this._sel.popup === "dark" ? "dark" : "light";
+    this._applyPopupTheme();
     this._el.basemap.value = BASEMAPS[this._sel.basemap] ? this._sel.basemap : "street";
     this._el.dim.value = this._sel.dim || 0;
     this._el.stopColor.value = cssColor(this._sel.stopColor, "#ffb300");
@@ -192,6 +198,8 @@ class MetlinkMapCard extends HTMLElement {
     this._basemapName = this._sel.basemap;
     this._applyDim();
   }
+
+  _applyPopupTheme() { this._el.mapDiv.classList.toggle("mm-dark", this._sel.popup === "dark"); }
 
   _stopStyle() {
     const size = Math.min(20, Math.max(3, Number(this._sel.stopSize) || 10));
@@ -366,7 +374,8 @@ class MetlinkMapCard extends HTMLElement {
           }).join("")}</table>`
         : "No departures soon.";
       const warn = alerts.map((a) => `<div class="warn">⚠ ${esc(a.header || "Service notice")}</div>`).join("");
-      marker.setPopupContent(`<div class="mm-pop"><b>${esc(stop.name)}</b> <span class="muted">${esc(stop.id)}</span><br>${body}${warn}</div>`);
+      const accent = hex(rows[0]?.color, "#607d8b");
+      marker.setPopupContent(`<div class="mm-pop"><div class="head" style="border-left-color:${accent}"><b>${esc(stop.name)}</b> <span class="muted">${esc(stop.id)}</span></div>${body}${warn}</div>`);
     } catch (_) {
       marker.setPopupContent(`<div class="mm-pop"><b>${esc(stop.name)}</b><br>Departures unavailable.</div>`);
     }
