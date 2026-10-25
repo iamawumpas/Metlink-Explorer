@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.11] - 2026-10-26
+
+### Added - Alerts are colour coded by severity
+
+- Why: every alert looked the same, so a cancelled service was no more noticeable than a minor notice.
+- Metlink gives each alert a severity. Severe alerts have a red edge and a "Severe" tag, warnings are orange with a "Warning" tag, and information notices are blue with an "Info" tag. If Metlink gives no severity, the alert's effect (for example "no service") is used, and otherwise it stays the usual amber.
+- The most severe alerts are listed first, and the alerts line at the top of the map takes the colour of the worst one.
+
 ## [2.6.10] - 2026-10-26
 
 ### Changed - Filters panel sliders fill the row

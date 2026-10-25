@@ -158,6 +158,11 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .aclose{position:absolute;top:2px;right:4px;background:none;border:0;font-size:20px;line-height:1;color:inherit;cursor:pointer}
           .mm-wrap .item{padding:6px 0;border-top:1px solid rgba(0,0,0,.15)}.mm-wrap .item:first-of-type{border-top:0}.mm-wrap .item p{margin:2px 0 0;white-space:pre-wrap}
           .mm-wrap .achip{display:inline-block;border-radius:10px;padding:0 7px;margin-left:4px;font-weight:600;font-size:12px}
+          .mm-wrap .item{border-left:5px solid #e65100;padding-left:8px;margin-left:-4px}
+          .mm-wrap .item.sev-severe{border-left-color:#c62828;background:#ffebee}.mm-wrap .item.sev-warning{border-left-color:#ef6c00;background:#fff3e0}.mm-wrap .item.sev-info{border-left-color:#1565c0;background:#e3f2fd}
+          .mm-wrap .asev{display:inline-block;border-radius:8px;padding:0 6px;font-size:11px;font-weight:700;color:#fff;background:#e65100}
+          .mm-wrap .sev-severe .asev{background:#c62828}.mm-wrap .sev-warning .asev{background:#ef6c00}.mm-wrap .sev-info .asev{background:#1565c0}
+          .mm-wrap .ahead.sev-severe{border-color:#c62828;background:#ffebee}.mm-wrap .ahead.sev-info{border-color:#1565c0;background:#e3f2fd}
           .mm-wrap .mm-ctl{position:absolute;top:8px;right:8px;z-index:5;padding:0;display:flex;flex-direction:column;align-items:stretch;gap:6px;width:94px}
           .mm-wrap .mm-ctl .chips{flex-direction:column;align-items:stretch;margin:0;gap:6px}
           .mm-wrap .mm-ctl .pr{box-sizing:border-box;width:100%;justify-content:space-between;gap:8px;padding:4px 8px 4px 10px}
@@ -491,6 +496,17 @@ class MetlinkMapCard extends HTMLElement {
     for (const u of handle.unsubs) { try { u(); } catch (_) { /* socket closed */ } }
   }
 
+  _severity(a) {
+    const s = String(a.severity || "").toUpperCase();
+    if (s === "SEVERE") return "severe";
+    if (s === "WARNING") return "warning";
+    if (s === "INFO") return "info";
+    const e = String(a.effect || "").toUpperCase();
+    if (["NO_SERVICE", "SIGNIFICANT_DELAYS"].includes(e)) return "severe";
+    if (["REDUCED_SERVICE", "DETOUR", "MODIFIED_SERVICE", "STOP_MOVED"].includes(e)) return "warning";
+    return "other";
+  }
+
   _renderAlerts() {
     const box = this._el && this._el.alerts;
     if (!box) return;
@@ -506,14 +522,19 @@ class MetlinkMapCard extends HTMLElement {
       const c = this._colorFor(id, r?.mode, r?.short_name);
       return `<span class="achip" style="background:${c};color:${textOn(c)}">${esc(name)}</span>`;
     };
-    const item = (a) => {
+    const LABEL = { severe: "Severe", warning: "Warning", info: "Info", other: "" };
+    const rank = { severe: 3, warning: 2, info: 1, other: 0 };
+    const sorted = alerts.map((a) => ({ a, sev: this._severity(a) })).sort((x, y) => rank[y.sev] - rank[x.sev]);
+    const item = ({ a, sev }) => {
       const chips = (a.routes || []).map(chip).join("");
-      return `<div class="item"><b>${esc(a.header || "Service notice")}</b>${chips ? ` ${chips}` : ""}${a.description ? `<p>${esc(a.description)}</p>` : ""}</div>`;
+      const tag = LABEL[sev] ? `<span class="asev">${LABEL[sev]}</span> ` : "";
+      return `<div class="item sev-${sev}">${tag}<b>${esc(a.header || "Service notice")}</b>${chips ? ` ${chips}` : ""}${a.description ? `<p>${esc(a.description)}</p>` : ""}</div>`;
     };
     const n = alerts.length;
+    const worst = sorted[0].sev;
     box.innerHTML =
-      `<button class="ahead" aria-expanded="${!!this._alertsOpen}">⚠ ${n} alert${n === 1 ? "" : "s"} may affect your travel</button>` +
-      (this._alertsOpen ? `<div class="abody"><button class="aclose" aria-label="Close alerts">×</button>${alerts.map(item).join("")}</div>` : "");
+      `<button class="ahead sev-${worst}" aria-expanded="${!!this._alertsOpen}">⚠ ${n} alert${n === 1 ? "" : "s"} may affect your travel</button>` +
+      (this._alertsOpen ? `<div class="abody"><button class="aclose" aria-label="Close alerts">×</button>${sorted.map(item).join("")}</div>` : "");
   }
 
   _setAlertsOpen(open) {
