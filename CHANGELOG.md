@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.3] - 2026-10-26
+
+### Fixed - Bus on with routes picked now tracks every bus
+
+- Why: picking a bus route switched off live tracking for all the other buses, even with the Bus button on.
+- With Bus on, every bus is tracked live. Lines and stops are drawn only for the bus routes you picked, so the map stays uncluttered. Alerts also still follow your picked routes only.
+
 ## [2.6.2] - 2026-10-26
 
 ### Fixed - The filters panel is only as tall as its contents

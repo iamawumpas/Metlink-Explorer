@@ -553,11 +553,12 @@ class MetlinkMapCard extends HTMLElement {
     return { picked: routes.map((r) => r.id), wide: modes.filter((m) => m !== "bus" || !routes.length) };
   }
 
-  _scopeMsgs(type) {
+  _scopeMsgs(type, allModes = false) {
     const { picked, wide } = this._scope();
+    const modes = allModes ? this._sel.modes : wide;
     const out = [];
     if (picked.length) out.push({ type: WS + type, route_ids: picked });
-    if (wide.length) out.push({ type: WS + type, modes: wide });
+    if (modes.length) out.push({ type: WS + type, modes });
     return out;
   }
 
@@ -566,7 +567,7 @@ class MetlinkMapCard extends HTMLElement {
     this._clearVehicles();
     const handle = (this._vehicleSub = { stale: false, unsubs: [] });
     const unsubs = handle.unsubs;
-    const msgs = this._scopeMsgs("subscribe_vehicles");
+    const msgs = this._scopeMsgs("subscribe_vehicles", true);
     if (!this._hass || !msgs.length) return;
     const parts = msgs.map(() => []);
     try {
