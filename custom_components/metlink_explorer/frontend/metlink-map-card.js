@@ -165,7 +165,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .mm-ctl button.chip,.mm-wrap .mm-gear{box-sizing:border-box;width:100%;justify-content:center;text-align:center}
           .mm-wrap .mm-ctl button.chip,.mm-wrap .mm-gear{box-shadow:0 1px 4px rgba(0,0,0,.45)}
           .mm-wrap .mm-gear{border:1px solid var(--divider-color);border-radius:16px;padding:4px 12px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-weight:600}
-          .mm-wrap .mm-panel{position:absolute;top:0;right:0;width:min(340px,100%);max-height:100%;box-sizing:border-box;z-index:7;overflow-y:auto;overscroll-behavior:contain;background:var(--card-background-color);color:var(--primary-text-color);box-shadow:-2px 0 8px rgba(0,0,0,.5);padding:10px 12px}
+          .mm-wrap .mm-panel{position:absolute;top:0;right:0;width:min(340px,100%);max-height:100%;box-sizing:border-box;z-index:7;overflow-y:auto;overscroll-behavior:contain;background:var(--card-background-color);color:var(--primary-text-color);box-shadow:-2px 0 8px rgba(0,0,0,.5);border:2px solid var(--primary-color,#03a9f4);border-radius:8px;padding:10px 12px}
           .mm-wrap .mm-panel[hidden]{display:none}
           .mm-wrap .mm-phead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
           .mm-wrap .mm-pclose{background:none;border:0;font-size:24px;line-height:1;color:inherit;cursor:pointer}
