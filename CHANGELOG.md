@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-10-25
+
+### Fixed - Melling line drawn above the other routes
+
+- Why: the Melling (MEL) line is short and could be hidden underneath longer routes.
+- Its line is now drawn on top of every other route.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.4.0] - 2026-10-25
 
 ### Changed - Mode buttons now show every route of that mode, whatever bus routes are picked

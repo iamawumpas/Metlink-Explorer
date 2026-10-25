@@ -317,7 +317,7 @@ class MetlinkMapCard extends HTMLElement {
         const route = await this._hass.callWS({ type: WS + "route", route_id: sel.id });
         const shapeIds = route.directions.flatMap((d) => d.shape_ids.slice(0, 1));
         const shapes = await Promise.all(shapeIds.map((id) => this._hass.callWS({ type: WS + "shape", shape_id: id }).catch(() => null)));
-        for (const s of shapes) if (s) lines.push({ points: s.points, color: this._colorFor(sel.id, route.mode, route.short_name), dashed: !!route.mode && route.mode !== "bus", routeId: sel.id });
+        for (const s of shapes) if (s) lines.push({ points: s.points, color: this._colorFor(sel.id, route.mode, route.short_name), dashed: !!route.mode && route.mode !== "bus", routeId: sel.id, short: route.short_name });
       } catch (_) { /* a missing route must not stop the others */ }
       if (this._routeToken !== token) return;
     }
@@ -332,6 +332,8 @@ class MetlinkMapCard extends HTMLElement {
       if (!this._routeLines.has(l.routeId)) this._routeLines.set(l.routeId, []);
       this._routeLines.get(l.routeId).push(casing, line);
     });
+    // The Melling line is short, so lift it above every other route to keep it visible.
+    lines.filter((l) => l.short === "MEL").forEach((l) => this._routeLines.get(l.routeId).forEach((p) => p.bringToFront()));
     this._markRoutes();
     if (lines.length && !this._fitted) {
       this._map.fitBounds(L.latLngBounds(lines.flatMap((l) => l.points)), { padding: [20, 20] });
