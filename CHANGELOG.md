@@ -5,6 +5,16 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.5] - 2026-10-25
+
+### Added - Choose the map from the card settings
+
+- Why: the card only had street and (until 2.2.4) light maps, and you wanted more choices without API keys.
+- Filters has a new "Map" dropdown: Street, Satellite and Topographic. The choice is remembered per card, and `basemap: satellite` (or `topo`) works in the YAML. A previously saved "light" choice falls back to Street.
+- All three are Esri tile services that load without an API key. I fetched a Wellington tile from each and checked the picture. They are sharp to at least zoom 19.
+- Left out on purpose: OpenStreetMap now serves an "Access blocked" tile to apps like this, and CARTO (the old Voyager and Positron maps) serves "API KEY REQUIRED".
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.2.4] - 2026-10-25
 
 ### Removed - Light map toggle

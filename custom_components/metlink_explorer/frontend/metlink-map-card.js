@@ -9,9 +9,12 @@ const MODES = [["bus", "Bus"], ["train", "Train"], ["ferry", "Ferry"], ["cable_c
 const MAX_ROUTES = 12;
 const STOP_ZOOM = 15;
 const CENTRE = [-41.2865, 174.7762];
+// All Esri tile services, which need no API key. OSM and CARTO tiles were tested and are blocked or need a key.
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
 const BASEMAPS = {
-  street: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", "Tiles © Esri", 19],
-  light: ["https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", "Tiles © Esri", 16],
+  street: ["Street", ESRI + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", "Tiles © Esri", 19],
+  satellite: ["Satellite", ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", "Tiles © Esri", 19],
+  topo: ["Topographic", ESRI + "World_Topo_Map/MapServer/tile/{z}/{y}/{x}", "Tiles © Esri", 19],
 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -48,7 +51,7 @@ class MetlinkMapCard extends HTMLElement {
       dim: this._config.dim ?? saved.dim ?? 0,
       stopColor: this._config.stop_color || saved.stopColor || "#ffb300",
       stopSize: this._config.stop_size ?? saved.stopSize ?? 10,
-      basemap: this._config.basemap || "street",
+      basemap: this._config.basemap || saved.basemap || "street",
     };
     this._height = this._config.height || 480;
     if (this._built) this._apply();
@@ -103,6 +106,7 @@ class MetlinkMapCard extends HTMLElement {
           <div class="chips modes"></div>
           <div class="opts">
             <label><input type="checkbox" class="stops"> Stops</label>
+            <label>Map <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
             <label>Darken map <input type="range" class="dim" min="0" max="80" step="5" style="vertical-align:middle"></label>
             <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
             <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
@@ -116,7 +120,7 @@ class MetlinkMapCard extends HTMLElement {
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
+    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts") };
     this._el.mapDiv.style.height = this._height + "px";
     this._el.modes.innerHTML = MODES.map(([id, label]) => `<button class="chip" data-mode="${id}">${label}</button>`).join("");
     this._el.modes.addEventListener("click", (e) => {
@@ -125,6 +129,7 @@ class MetlinkMapCard extends HTMLElement {
       this._sel.modes = this._sel.modes.includes(id) ? this._sel.modes.filter((m) => m !== id) : [...this._sel.modes, id];
       this._changed();
     });
+    this._el.basemap.addEventListener("change", () => { this._sel.basemap = this._el.basemap.value; this._setBasemap(); this._save(); });
     this._el.stopColor.addEventListener("input", () => { this._sel.stopColor = this._el.stopColor.value; this._styleStops(); this._save(); });
     this._el.stopSize.addEventListener("input", () => { this._sel.stopSize = Number(this._el.stopSize.value); this._styleStops(); this._save(); });
     this._el.dim.addEventListener("input", () => { this._sel.dim = Number(this._el.dim.value); this._applyDim(); this._save(); });
@@ -158,6 +163,7 @@ class MetlinkMapCard extends HTMLElement {
   }
 
   _syncControls() {
+    this._el.basemap.value = BASEMAPS[this._sel.basemap] ? this._sel.basemap : "street";
     this._el.dim.value = this._sel.dim || 0;
     this._el.stopColor.value = cssColor(this._sel.stopColor, "#ffb300");
     this._el.stopSize.value = this._sel.stopSize;
@@ -180,7 +186,7 @@ class MetlinkMapCard extends HTMLElement {
     const L = window.L;
     if (!this._map || this._basemapName === this._sel.basemap) return;
     if (this._base) this._map.removeLayer(this._base);
-    const [url, attribution, nativeZoom] = BASEMAPS[this._sel.basemap] || BASEMAPS.street;
+    const [, url, attribution, nativeZoom] = BASEMAPS[this._sel.basemap] || BASEMAPS.street;
     this._base = L.tileLayer(url, { attribution, maxZoom: 19, maxNativeZoom: nativeZoom }).addTo(this._map);
     this._base.bringToBack();
     this._basemapName = this._sel.basemap;
