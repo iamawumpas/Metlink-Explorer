@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.8] - 2026-10-26
+
+### Changed - Stop bubbles setting sits beside stop colour
+
+- Why: the two stop settings that take the least room were on separate lines.
+- "Stop bubbles" now sits on the same line as "Stop colour" in the filters panel. On a very narrow screen it wraps to the next line.
+
 ## [2.6.7] - 2026-10-26
 
 ### Changed - Narrower buttons on the map
