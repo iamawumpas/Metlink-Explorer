@@ -5,6 +5,17 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-10-25
+
+### Changed - Mode buttons now show every route of that mode, whatever bus routes are picked
+
+- Why: picking a bus route hid everything else, even with Train, Ferry or Cable car switched on.
+- With Train, Ferry or Cable car on, all their routes, stops, alerts and live vehicles show. Picked bus routes show as well. With Bus on and no routes picked, all buses show. With Bus on and routes picked, only those buses show.
+- This needs two live subscriptions at once (picked routes, plus the active modes). The card merges them.
+- The search box now only lists bus routes, and reads "Add specific bus routes. Search by number or name…".
+- Trains are currently replaced by buses, so Train shows the lines and alerts but probably no live trains.
+- Not yet confirmed in a real Home Assistant.
+
 ## [2.3.5] - 2026-10-25
 
 ### Changed - Live vehicle icons: white border and higher-contrast text

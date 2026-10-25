@@ -163,7 +163,7 @@ class MetlinkMapCard extends HTMLElement {
             <label>Stop colour <input type="color" class="stopcolor" style="vertical-align:middle"></label>
             <label>Stop size <input type="range" class="stopsize" min="3" max="20" step="1" style="vertical-align:middle"></label>
           </div>
-          <input class="search" type="search" placeholder="Add routes: search by number or name…" autocomplete="off">
+          <input class="search" type="search" placeholder="Add specific bus routes. Search by number or name…" autocomplete="off">
           <div class="hits"></div>
           <div class="chips picked"></div>
         </details>
@@ -284,7 +284,7 @@ class MetlinkMapCard extends HTMLElement {
     try {
       const routes = await loadRoutes(this._hass);
       const hits = routes
-        .filter((r) => (!this._sel.modes.length || this._sel.modes.includes(r.mode)))
+        .filter((r) => r.mode === "bus")
         .filter((r) => r.short_name.toLowerCase().startsWith(text) || r.long_name.toLowerCase().includes(text))
         .slice(0, 20);
       this._el.hits.innerHTML = hits.map((r) => `<button data-id="${esc(r.route_id)}" data-name="${esc(r.short_name)}">${esc(r.short_name)} <span class="muted">${esc(r.long_name)}</span></button>`).join("") || `<div class="muted">No routes found</div>`;
@@ -304,7 +304,15 @@ class MetlinkMapCard extends HTMLElement {
     const L = window.L;
     const token = (this._routeToken = {});
     const lines = [];
-    for (const sel of this._sel.routes) {
+    const targets = this._sel.routes.map((r) => ({ id: r.id }));
+    const wideModes = this._scope().wide.filter((m) => m !== "bus");
+    if (wideModes.length) {
+      try {
+        const all = await loadRoutes(this._hass);
+        for (const r of all) if (wideModes.includes(r.mode) && !targets.some((t) => t.id === r.route_id)) targets.push({ id: r.route_id });
+      } catch (_) { /* timetable not ready */ }
+    }
+    for (const sel of targets) {
       try {
         const route = await this._hass.callWS({ type: WS + "route", route_id: sel.id });
         const shapeIds = route.directions.flatMap((d) => d.shape_ids.slice(0, 1));
@@ -336,21 +344,26 @@ class MetlinkMapCard extends HTMLElement {
     if (!this._map || !this._layers) return;
     const L = window.L;
     const sel = this._sel;
-    const msg = { type: WS + "stops" };
-    if (sel.routes.length) msg.route_ids = sel.routes.map((r) => r.id);
-    else if (sel.modes.length === 1) msg.mode = sel.modes[0];
-    else if (!sel.modes.length) { this._layers.stops.clearLayers(); return; }
-    if (!sel.stops) { this._layers.stops.clearLayers(); return; }
-    if (!sel.routes.length) {
-      if (this._map.getZoom() < STOP_ZOOM) { this._layers.stops.clearLayers(); this._status("Zoom in to see stops."); return; }
-      const b = this._map.getBounds();
-      msg.bbox = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()];
+    const { picked, wide } = this._scope();
+    if (!sel.stops || (!picked.length && !wide.length)) { this._layers.stops.clearLayers(); return; }
+    const msgs = [];
+    if (picked.length) msgs.push({ type: WS + "stops", route_ids: picked });
+    if (wide.length) {
+      if (this._map.getZoom() < STOP_ZOOM) {
+        if (!picked.length) { this._layers.stops.clearLayers(); this._status("Zoom in to see stops."); return; }
+      } else {
+        const b = this._map.getBounds();
+        msgs.push({ type: WS + "stops", bbox: [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()] });
+      }
     }
     const token = (this._stopToken = {});
     try {
-      let stops = await this._hass.callWS(msg);
+      const results = await Promise.all(msgs.map(async (m) => {
+        const list = await this._hass.callWS(m);
+        return m.bbox ? list.filter((s) => s.modes.some((x) => wide.includes(x))) : list;
+      }));
       if (this._stopToken !== token) return;
-      if (!sel.routes.length && sel.modes.length > 1) stops = stops.filter((s) => s.modes.some((m) => sel.modes.includes(m)));
+      const stops = [...new Map(results.flat().map((s) => [s.id, s])).values()];
       this._layers.stops.clearLayers();
       for (const s of stops) {
         const marker = L.circleMarker([s.lat, s.lon], this._stopStyle());
@@ -366,28 +379,32 @@ class MetlinkMapCard extends HTMLElement {
 
   async _subscribeAlerts() {
     this._unsubscribeAlerts();
-    const sel = this._sel;
     this._alerts = [];
     this._renderAlerts();
-    if (!this._hass || (!sel.routes.length && !sel.modes.length)) return;
-    const msg = { type: WS + "subscribe_alerts" };
-    if (sel.routes.length) msg.route_ids = sel.routes.map((r) => r.id);
-    else msg.modes = sel.modes;
-    const token = (this._alertToken = {});
+    const handle = (this._alertSub = { stale: false, unsubs: [] });
+    const msgs = this._scopeMsgs("subscribe_alerts");
+    if (!this._hass || !msgs.length) return;
+    const parts = msgs.map(() => []);
     try {
-      const unsub = await this._hass.connection.subscribeMessage((alerts) => {
-        this._alerts = alerts;
-        this._renderAlerts();
-        this._markRoutes();
-      }, msg);
-      if (this._alertToken !== token) { unsub(); return; }
-      this._unsubAlerts = unsub;
+      for (const [i, msg] of msgs.entries()) {
+        const unsub = await this._hass.connection.subscribeMessage((alerts) => {
+          parts[i] = alerts;
+          this._alerts = [...new Map(parts.flat().map((a) => [a.id, a])).values()];
+          this._renderAlerts();
+          this._markRoutes();
+        }, msg);
+        if (handle.stale) { unsub(); return; }
+        handle.unsubs.push(unsub);
+      }
     } catch (_) { /* alerts are optional; the map still works */ }
   }
 
   _unsubscribeAlerts() {
-    this._alertToken = null;
-    if (this._unsubAlerts) { try { this._unsubAlerts(); } catch (_) { /* socket closed */ } this._unsubAlerts = null; }
+    const handle = this._alertSub;
+    this._alertSub = null;
+    if (!handle) return;
+    handle.stale = true;
+    for (const u of handle.unsubs) { try { u(); } catch (_) { /* socket closed */ } }
   }
 
   _renderAlerts() {
@@ -445,27 +462,48 @@ class MetlinkMapCard extends HTMLElement {
     }
   }
 
+  // Picked bus routes are shown on their own. Each other active mode shows every route it has. Bus with nothing picked shows all buses.
+  _scope() {
+    const { routes, modes } = this._sel;
+    return { picked: routes.map((r) => r.id), wide: modes.filter((m) => m !== "bus" || !routes.length) };
+  }
+
+  _scopeMsgs(type) {
+    const { picked, wide } = this._scope();
+    const out = [];
+    if (picked.length) out.push({ type: WS + type, route_ids: picked });
+    if (wide.length) out.push({ type: WS + type, modes: wide });
+    return out;
+  }
+
   async _subscribe() {
     this._unsubscribe();
-    const sel = this._sel;
     this._clearVehicles();
-    if (!this._hass || (!sel.routes.length && !sel.modes.length)) return;
-    const msg = { type: WS + "subscribe_vehicles" };
-    if (sel.routes.length) msg.route_ids = sel.routes.map((r) => r.id);
-    else msg.modes = sel.modes;
-    const token = (this._subToken = {});
+    const handle = (this._vehicleSub = { stale: false, unsubs: [] });
+    const unsubs = handle.unsubs;
+    const msgs = this._scopeMsgs("subscribe_vehicles");
+    if (!this._hass || !msgs.length) return;
+    const parts = msgs.map(() => []);
     try {
-      const unsub = await this._hass.connection.subscribeMessage((vehicles) => this._drawVehicles(vehicles), msg);
-      if (this._subToken !== token) { unsub(); return; }
-      this._unsub = unsub;
+      for (const [i, msg] of msgs.entries()) {
+        const unsub = await this._hass.connection.subscribeMessage((vehicles) => {
+          parts[i] = vehicles;
+          this._drawVehicles([...new Map(parts.flat().map((v) => [v.id, v])).values()]);
+        }, msg);
+        if (handle.stale) { unsub(); return; }
+        unsubs.push(unsub);
+      }
     } catch (err) {
       this._status(`Live vehicles unavailable (${err.message || err.code}).`);
     }
   }
 
   _unsubscribe() {
-    this._subToken = null;
-    if (this._unsub) { try { this._unsub(); } catch (_) { /* socket closed */ } this._unsub = null; }
+    const handle = this._vehicleSub;
+    this._vehicleSub = null;
+    if (!handle) return;
+    handle.stale = true;
+    for (const u of handle.unsubs) { try { u(); } catch (_) { /* socket closed */ } }
   }
 
   _clearVehicles() {
