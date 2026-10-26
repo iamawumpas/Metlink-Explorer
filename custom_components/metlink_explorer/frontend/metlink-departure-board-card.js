@@ -33,7 +33,6 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     if (!stops.length && this._config.stop_id) stops = [{ id: this._config.stop_id, name: this._config.stop_id, towards: this._config.towards || "" }];
     this._sel = { stops: stops.slice(0, MAX_STOPS).map((s, i) => ({ id: s.id, name: s.name || s.id, towards: s.towards || "", color: cssColor(s.color, PALETTE[i % PALETTE.length]) })), height: Number(saved.height) > 0 ? Number(saved.height) : 0, routeColors: saved.routeColors && typeof saved.routeColors === "object" ? saved.routeColors : {} };
     this._limit = this._config.limit || 10;
-    this._perRoute = this._config.per_route || 3;
     const h = this._config.height;
     this._height = h ? (typeof h === "number" || /^\d+(\.\d+)?$/.test(String(h)) ? `${h}px` : String(h)) : "";
     if (this._built) { this._applyHeight(); this._refresh(); }
@@ -247,28 +246,26 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     });
     if (waiting === stops.length) return;
     const mapColors = this._mapColors();
-    const groups = new Map();
-    deps.sort((a, b) => a.r.timestamp_expected - b.r.timestamp_expected).forEach((d) => {
-      const dest = d.r.headsign || d.r.destination || "";
-      const key = `${d.r.route_id || d.r.route}\u0000${dest}`;
-      if (!groups.has(key)) groups.set(key, { route: d.r.route, rid: String(d.r.route_id || d.r.route), dest, color: d.r.color, text: d.r.text_color, school: d.r.is_school, items: [] });
-      groups.get(key).items.push(d);
-    });
-    const html = [...groups.values()].map((g) => {
-      const mapC = mapColors.get(g.rid);
-      const own = mapC || cssColor(this._sel.routeColors[g.rid], "") || (g.color ? "#" + g.color : "");
-      const style = own && /^#[0-9a-f]{6}$/i.test(own) ? `background:${esc(own)};color:${mapC || this._sel.routeColors[g.rid] ? textOn(own) : g.text ? "#" + esc(g.text) : textOn(own)}` : "background:var(--primary-color);color:#fff";
-      const pick = mapC ? "" : `<input type="color" data-rc="${esc(g.rid)}" value="${esc(own && /^#[0-9a-f]{6}$/i.test(own) ? own : "#546e7a")}">`;
-      const items = g.items.slice(0, this._perRoute).map(({ r, s }) => {
+    const html = [...stops].sort(byName).map((s) => {
+      const items = deps.filter((d) => d.s === s).sort((a, b) => a.r.timestamp_expected - b.r.timestamp_expected).map(({ r }) => {
+        const rid = String(r.route_id || r.route);
+        const mapC = mapColors.get(rid);
+        const own = mapC || cssColor(this._sel.routeColors[rid], "") || (r.color ? "#" + r.color : "");
+        const hasOwn = /^#[0-9a-f]{6}$/i.test(own);
+        const style = hasOwn ? `background:${esc(own)};color:${mapC || this._sel.routeColors[rid] ? textOn(own) : r.text_color ? "#" + esc(r.text_color) : textOn(own)}` : "background:var(--primary-color);color:#fff";
+        const pick = mapC ? "" : `<input type="color" data-rc="${esc(rid)}" value="${hasOwn ? esc(own) : "#546e7a"}">`;
         const mins = Math.round((r.timestamp_expected - now) / 60);
         const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected);
         const note = r.status === "delayed" ? `<span class="late">+${Math.round(r.delay / 60)} min</span>` : r.status === "early" ? `<span class="early">${Math.round(r.delay / 60)} min</span>` : r.status === "skipped" ? "Skipped" : "";
-        return `<div class="dep ${r.status === "canceled" || r.status === "skipped" ? "gone" : ""}" style="background:linear-gradient(90deg,#000,${esc(s.color)})"><span class="st">${esc(s.name)}</span><span>${esc(clock(r.timestamp))}</span><span class="when">${esc(when)} ${note}</span></div>`;
+        return `<div class="dep ${r.status === "canceled" || r.status === "skipped" ? "gone" : ""}" style="background:linear-gradient(90deg,#000,${esc(s.color)})"><span class="badge" style="${style}" title="${mapC ? "Colour set on the map card" : "Change colour"}">${esc(r.route)}${pick}</span><span class="st">${esc(r.headsign || r.destination)}${r.is_school ? " (school)" : ""}</span><span>${esc(clock(r.timestamp))}</span><span class="when">${esc(when)} ${note}</span></div>`;
       }).join("");
-      return `<div class="grp"><div class="gh"><span class="badge" style="${style}" title="${mapC ? "Colour set on the map card" : "Change colour"}">${esc(g.route)}${pick}</span><span>${esc(g.dest)}${g.school ? ' <span class="muted">school</span>' : ""}</span></div>${items}</div>`;
+      const failed = this._rows[s.id] && !Array.isArray(this._rows[s.id]);
+      const body = items || (failed || !this._rows[s.id] ? "" : `<p class="muted">No departures in the next 72 hours.</p>`);
+      const towards = s.towards ? (this._dests[s.id] || []).find((d) => d.stop_id === s.towards) : null;
+      return `<div class="grp"><div class="gh" style="border-left:6px solid ${esc(s.color)};padding-left:8px">${esc(s.name)}${towards ? ` <span class="muted">towards ${esc(towards.name)}</span>` : ""}</div>${body}</div>`;
     });
     const err = errors.length ? `<p class="muted">Live departures unavailable for ${esc(errors.join(", "))}.</p>` : "";
-    this._el.body.innerHTML = err + (html.length ? html.join("") : errors.length ? "" : `<p class="muted">No departures in the next 72 hours.</p>`);
+    this._el.body.innerHTML = err + html.join("");
     this._el.body.querySelectorAll("[data-rc]").forEach((i) => i.addEventListener("change", () => {
       this._sel.routeColors[i.dataset.rc] = i.value;
       this._save();
@@ -281,7 +278,7 @@ const BOARD_TAG = "metlink-departure-board-card";
 if (!customElements.get(BOARD_TAG)) {
   customElements.define(BOARD_TAG, MetlinkDepartureBoardCard);
   window.customCards = window.customCards || [];
-  window.customCards.push({ type: BOARD_TAG, name: "Metlink Departure Board", description: "Scheduled and live departures for several stops, grouped by route." });
+  window.customCards.push({ type: BOARD_TAG, name: "Metlink Departure Board", description: "Scheduled and live departures for several stops, grouped by stop." });
   // Home Assistant has been seen discarding the definition shortly after load; keep re-registering until it holds.
   let tries = 0;
   const watch = setInterval(() => {

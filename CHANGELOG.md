@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.4] - 2026-10-26
+
+### Changed - Departure board is grouped by stop
+
+- Why: grouping by route split one stop's departures across many small lists.
+- Each stop now has its own heading (stop name, its colour, and the Towards choice if one is set), sorted alphabetically like the chips. Under it are all of that stop's departures in time order, each row showing the route badge, destination, time and countdown. The Towards filter still sets the direction.
+- Every stop shows up to `limit` departures (default 10). The `per_route` setting is gone.
+- Route badge colours behave as before (map colour, or click to choose).
+
 ## [2.8.3] - 2026-10-26
 
 ### Changed - Departures after midnight show the day
