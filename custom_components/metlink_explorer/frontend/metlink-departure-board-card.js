@@ -27,7 +27,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     let stops = Array.isArray(saved.stops) ? saved.stops : [];
     if (!stops.length && saved.stopId) stops = [{ id: saved.stopId, name: saved.stopName || saved.stopId, towards: saved.towards || "" }];
     if (!stops.length && this._config.stop_id) stops = [{ id: this._config.stop_id, name: this._config.stop_id, towards: this._config.towards || "" }];
-    this._sel = { stops: stops.slice(0, MAX_STOPS).map((s, i) => ({ id: s.id, name: s.name || s.id, towards: s.towards || "", color: cssColor(s.color, PALETTE[i % PALETTE.length]) })) };
+    this._sel = { stops: stops.slice(0, MAX_STOPS).map((s, i) => ({ id: s.id, name: s.name || s.id, towards: s.towards || "", color: cssColor(s.color, PALETTE[i % PALETTE.length]) })), height: Number(saved.height) > 0 ? Number(saved.height) : 0 };
     this._limit = this._config.limit || 10;
     this._perRoute = this._config.per_route || 3;
     const h = this._config.height;
@@ -42,11 +42,12 @@ class MetlinkDepartureBoardCard extends HTMLElement {
 
   connectedCallback() {
     this._tick = setInterval(() => this._renderRows(), 30000);
-    if (this._built) this._subscribe();
+    if (this._built) { document.addEventListener("pointerup", this._onUp); this._subscribe(); }
   }
 
   disconnectedCallback() {
     clearInterval(this._tick);
+    document.removeEventListener("pointerup", this._onUp);
     this._unsubscribe();
   }
 
@@ -56,7 +57,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
   _build() {
     this._built = true;
     this.innerHTML = `
-      <div class="mx-card" style="background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color));color:var(--primary-text-color);overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box">
+      <div class="mx-card" style="background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none);border:var(--ha-card-border-width,1px) solid var(--ha-card-border-color,var(--divider-color));color:var(--primary-text-color);overflow:hidden;resize:vertical;min-height:160px;display:flex;flex-direction:column;box-sizing:border-box">
         <style>
           .mx{padding:12px 16px;display:flex;flex-direction:column;min-height:0;flex:1}.mx input[type=search],.mx select{width:100%;box-sizing:border-box;padding:8px;margin:4px 0;border:1px solid var(--divider-color);border-radius:6px;background:var(--card-background-color);color:var(--primary-text-color)}
           .mx .hits button{display:block;width:100%;text-align:left;padding:6px 8px;border:0;background:none;color:var(--primary-text-color);cursor:pointer}
@@ -72,7 +73,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
           .mx .dep{display:flex;align-items:center;gap:8px;padding:5px 10px;margin:2px 0;border-radius:6px;color:#fff;text-shadow:0 0 3px rgba(0,0,0,.7)}
           .mx .dep .st{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
           .mx .dep .when{text-align:right;white-space:nowrap}
-          .mx .late{color:#ff8a80}.mx .early{color:#80d8ff}.mx .gone{text-decoration:line-through;opacity:.6}.mx .muted{color:var(--secondary-text-color)}
+          .mx .late,.mx .early{padding:0 6px;border-radius:8px;background:rgba(0,0,0,.65);font-weight:600}.mx .late{color:#ff8a80}.mx .early{color:#80d8ff}.mx .gone{text-decoration:line-through;opacity:.6}.mx .muted{color:var(--secondary-text-color)}
         </style>
         <div class="mx">
           <input class="search" type="search" placeholder="Add a stop. Search by name or number…" autocomplete="off">
@@ -86,11 +87,26 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     this._el = { card: q(".mx-card"), search: q(".search"), hits: q(".hits"), chips: q(".chips"), tws: q(".tws"), body: q(".body") };
     this._el.search.addEventListener("input", () => this._search());
     this._applyHeight();
+    this._el.card.addEventListener("pointerdown", (e) => {
+      if (this._height || e.target.closest("input,select,button")) return;
+      this._el.card.style.maxHeight = "none";
+      this._el.card.style.height = `${this._el.card.offsetHeight}px`;
+      this._dragging = true;
+    });
+    this._onUp = () => {
+      if (!this._dragging) return;
+      this._dragging = false;
+      this._sel.height = Math.round(this._el.card.offsetHeight);
+      this._save();
+    };
+    document.addEventListener("pointerup", this._onUp);
     this._refresh();
   }
 
   _applyHeight() {
-    this._el.card.style.height = this._height;
+    const px = this._height ? 0 : this._sel.height;
+    this._el.card.style.height = this._height || (px ? `${px}px` : "");
+    this._el.card.style.maxHeight = this._height || px ? "none" : "70vh";
   }
 
   _save() {

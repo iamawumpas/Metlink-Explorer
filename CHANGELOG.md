@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] - 2026-10-26
+
+### Fixed - Departure board scrolls, can be resized, and delays are readable
+
+- Why: with no `height` set the card just grew, so there was never a scrollbar. The "+2 min" delay was hard to read on the orange bars.
+- The card now stops growing at 70% of the screen height and the list scrolls inside it (vertical scrollbar only).
+- Drag the bottom-right corner of the card to set its height by hand. The size is remembered in your browser. A YAML `height` still overrides this.
+- Delay and early notes sit on a dark pill, so they read on any stop colour.
+
 ## [2.8.0] - 2026-10-26
 
 ### Changed - Departure board shows several stops, grouped by route
