@@ -63,9 +63,6 @@ Run these steps in order. Stop and report if any step fails; do not skip steps.
 - HACS installs only `custom_components/metlink_explorer/`, so root files like this one are never delivered to users. `hacs.json` and `manifest.json` have no exclude option. Do not add one.
 - Keep this file in the repository root. Never place it inside `custom_components/`.
 
-## 3. v2 roadmap (do not forget)
-
-Goal: rebuild as version 2.x.x with clean code and new entity IDs. There are no existing users, so no migration is needed. Work on a `v2` branch and keep the old code in a legacy folder for reference until it is replaced.
 
 ### 3.1 Design principles
 - Fetch each upstream feed once per interval, share the result, and filter late.

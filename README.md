@@ -10,26 +10,57 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-  <strong>Version:</strong> 2.8.5
+  <strong>Version:</strong> 2.8.6
     </td>
   </tr>
 </table>
 
 A Home Assistant custom integration that brings Wellington public transport from the Metlink Open Data API into Home Assistant as a data service for dashboard cards.
 
-> **Version 2 is a rebuild and is not compatible with version 1.** Entities, setup options and card configuration have all changed. See the [changelog](CHANGELOG.md) for what changed and why. The version 1 code is kept in the `legacy` folder for reference only.
+> **Version 2 is a rebuild and is not compatible with version 1.** Entities, setup options and card configuration have all changed. See the [changelog](CHANGELOG.md) for what changed and why. Version 1 code is no longer included in this repository.
 
 ## Features
 
-- **Pick your stop in the card**: search for a stop, then choose where you are heading ("Towards Courtenay Place"). You only see trips that really go there, so you always get the schedule for the right direction.
-- **Live information**: delays, early running, cancellations and skipped stops are merged into the timetable.
+- **Departure board**: search for several stops (up to 8), each shown as a coloured chip, and choose where you are heading from each ("Towards Courtenay Place"). Departures are grouped by stop, with every route and the destination on each row. Delays, early running, cancellations and skipped stops are merged in, and departures after today show the day ("Tue 08:43 AM").
 - **Whole network timetable**: all Metlink routes and stops are downloaded once, stored on disk and checked for changes every day. Bus, train, ferry and cable car are included, and school buses are flagged.
 - **Gentle on the API**: nothing is requested from Metlink while no card is open, and one failing feed never stops another.
-- **Live map**: the `metlink-map-card` shows live buses, trains and ferries, route lines and stops on a Leaflet street map. You choose the modes and routes in the card; until you do, it is just a street map.
+- **Live map**: the `metlink-map-card` shows live buses, trains and ferries, route lines and stops on a Leaflet map limited to the Wellington region. Use the mode buttons (Bus, Train, Ferry, Cable car) and the Filters panel to choose routes, route colours, stop colour and size, the map style and how much to darken it. Your Home Assistant home zone is shown. Until you choose something, it is just a map.
+- **Service alerts**: the map shows an alerts button when alerts affect your selection. Alerts are colour coded by severity.
 - **Ferries via AISStream**: ferry positions come from one shared AISStream connection (the AISStream key is optional). It only runs while a map card is open and can never affect the bus and train data.
-- **No entities to manage**: the integration is a data service. Your choices live in the card.
+- **No entities to manage**: the integration is a data service. Your choices live in the card and are saved in your browser, so they are per device.
 
 Add the cards from the dashboard card picker: **Metlink Departure Board** and **Metlink Map**.
+
+### Card options (YAML)
+
+All options are optional.
+
+**Metlink Departure Board** (`custom:metlink-departure-board-card`)
+
+| Option | Meaning |
+|---|---|
+| `height` | Card height in pixels (`500`) or any CSS size (`60vh`). Without it, drag the bottom-right corner to resize. |
+| `records` | Show only the next N departures for each stop, for example `3`. |
+| `limit` | Departures fetched per stop. Default 10. |
+| `id` | Gives this card its own saved choices if you use more than one. |
+| `map_id` | The `id` of the map card whose route colours the board should follow. |
+
+**Metlink Map** (`custom:metlink-map-card`)
+
+| Option | Meaning |
+|---|---|
+| `height` | Fixed height. Without it, the map fills the screen height. |
+| `basemap` | Map style. |
+| `popup_theme` | Popup theme. |
+| `dim` | How much to darken the map. |
+| `stop_color`, `stop_size` | Stop marker colour and size. |
+| `routes` | Routes to show at start. |
+| `modes` | Modes to show at start, for example `[bus, train]`. |
+| `id` | Gives this card its own saved choices if you use more than one. |
+
+## Data sources
+
+Metlink data is published by the Greater Wellington Regional Council under the Creative Commons Attribution 4.0 licence. Live ferry positions come from [AISStream](https://aisstream.io/), which publishes no formal terms. The map credits both.
 
 
 ## Why this integration?

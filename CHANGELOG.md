@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.6] - 2026-10-26
+
+### Removed - Legacy version 1 files
+
+- Why: the version 1 integration and its troubleshooting material were no longer needed after the version 2 rebuild.
+- Removed the archived version 1 integration, its old cards and marker images, and troubleshooting documents for the retired implementation. The active version 2 integration, its logo and current tests remain.
+
 ## [2.8.5] - 2026-10-26
 
 ### Added - `records` option on the departure board
