@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.5] - 2026-10-26
+
+### Added - `records` option on the departure board
+
+- Why: to cap how many departures each stop shows.
+- `records: 3` in the card YAML shows only the next 3 departures for each stop. Leave it out to show all that were fetched (`limit`, default 10). If `records` is larger than `limit`, more are fetched to match.
+
 ## [2.8.4] - 2026-10-26
 
 ### Changed - Departure board is grouped by stop

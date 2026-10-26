@@ -32,7 +32,8 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     if (!stops.length && saved.stopId) stops = [{ id: saved.stopId, name: saved.stopName || saved.stopId, towards: saved.towards || "" }];
     if (!stops.length && this._config.stop_id) stops = [{ id: this._config.stop_id, name: this._config.stop_id, towards: this._config.towards || "" }];
     this._sel = { stops: stops.slice(0, MAX_STOPS).map((s, i) => ({ id: s.id, name: s.name || s.id, towards: s.towards || "", color: cssColor(s.color, PALETTE[i % PALETTE.length]) })), height: Number(saved.height) > 0 ? Number(saved.height) : 0, routeColors: saved.routeColors && typeof saved.routeColors === "object" ? saved.routeColors : {} };
-    this._limit = this._config.limit || 10;
+    this._records = Math.max(0, parseInt(this._config.records, 10) || 0);
+    this._limit = Math.max(this._config.limit || 10, this._records);
     const h = this._config.height;
     this._height = h ? (typeof h === "number" || /^\d+(\.\d+)?$/.test(String(h)) ? `${h}px` : String(h)) : "";
     if (this._built) { this._applyHeight(); this._refresh(); }
@@ -247,7 +248,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     if (waiting === stops.length) return;
     const mapColors = this._mapColors();
     const html = [...stops].sort(byName).map((s) => {
-      const items = deps.filter((d) => d.s === s).sort((a, b) => a.r.timestamp_expected - b.r.timestamp_expected).map(({ r }) => {
+      const items = deps.filter((d) => d.s === s).sort((a, b) => a.r.timestamp_expected - b.r.timestamp_expected).slice(0, this._records || undefined).map(({ r }) => {
         const rid = String(r.route_id || r.route);
         const mapC = mapColors.get(rid);
         const own = mapC || cssColor(this._sel.routeColors[rid], "") || (r.color ? "#" + r.color : "");
