@@ -8,7 +8,7 @@ const LEAFLET_SRI = { css: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
 const MODES = [["bus", "Bus"], ["train", "Train"], ["ferry", "Ferry"], ["cable_car", "Cable car"]];
 const MAX_ROUTES = 12;
 const STOP_ZOOM = 15;
-const CENTRE = [-41.2865, 174.7762];
+const CENTRE = [-41.26, 174.84];
 // South-west and north-east corners, estimated from the region the user chose.
 const REGION = [[-41.48, 174.61], [-40.80, 175.73]];
 // All Esri tile services, which need no API key. OSM and CARTO tiles were tested and are blocked or need a key.

@@ -256,7 +256,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
         const style = hasOwn ? `background:${esc(own)};color:${mapC || this._sel.routeColors[rid] ? textOn(own) : r.text_color ? "#" + esc(r.text_color) : textOn(own)}` : "background:var(--primary-color);color:#fff";
         const pick = mapC ? "" : `<input type="color" data-rc="${esc(rid)}" value="${hasOwn ? esc(own) : "#546e7a"}">`;
         const mins = Math.round((r.timestamp_expected - now) / 60);
-        const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected);
+        const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected) === clock(r.timestamp) ? "" : clock(r.timestamp_expected);
         const note = r.status === "delayed" ? `<span class="late">+${Math.round(r.delay / 60)} min</span>` : r.status === "early" ? `<span class="early">${Math.round(r.delay / 60)} min</span>` : r.status === "skipped" ? "Skipped" : "";
         return `<div class="dep ${r.status === "canceled" || r.status === "skipped" ? "gone" : ""}" style="background:linear-gradient(90deg,#000,${esc(s.color)})"><span class="badge" style="${style}" title="${mapC ? "Colour set on the map card" : "Change colour"}">${esc(r.route)}${pick}</span><span class="st">${esc(r.headsign || r.destination)}${r.is_school ? " (school)" : ""}</span><span>${esc(clock(r.timestamp))}</span><span class="when">${esc(when)} ${note}</span></div>`;
       }).join("");

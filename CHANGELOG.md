@@ -5,6 +5,18 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.7] - 2026-10-26
+
+### Fixed - Departure board no longer repeats the time
+
+- Why: for a departure more than an hour away, the board showed the same clock time twice in one row.
+- The scheduled time is shown once. If the live time differs (a delay or early running), the live time still appears next to it.
+
+### Changed - Map opens on the Wellington harbour view
+
+- Why: the map opened centred on the city, with the Hutt and Eastbourne side of the harbour cut off.
+- The starting view is now centred on the harbour at the same zoom as before, so the city, Eastbourne and the Hutt Valley are all in view. Panning and zooming are unchanged.
+
 ## [2.8.6] - 2026-10-26
 
 ### Removed - Legacy version 1 files
