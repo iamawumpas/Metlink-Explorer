@@ -8,7 +8,8 @@ const LEAFLET_SRI = { css: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
 const MODES = [["bus", "Bus"], ["train", "Train"], ["ferry", "Ferry"], ["cable_car", "Cable car"]];
 const MAX_ROUTES = 12;
 const STOP_ZOOM = 15;
-const CENTRE = [-41.26, 174.84];
+const CENTRE = [-41.2865, 174.7762];
+const HOME_ZOOM = 14;
 // South-west and north-east corners, estimated from the region the user chose.
 const REGION = [[-41.48, 174.61], [-40.80, 175.73]];
 // All Esri tile services, which need no API key. OSM and CARTO tiles were tested and are blocked or need a key.
@@ -115,17 +116,22 @@ class MetlinkMapCard extends HTMLElement {
   }
 
   // Home Assistant's home zone, falling back to the location in the HA settings.
-  _drawHome() {
+  _homePoint() {
     const zone = this._hass?.states?.["zone.home"]?.attributes;
     const lat = zone?.latitude ?? this._hass?.config?.latitude;
     const lon = zone?.longitude ?? this._hass?.config?.longitude;
-    const radius = zone?.radius || 0;
-    const key = `${lat},${lon},${radius}`;
+    return typeof lat === "number" && typeof lon === "number" ? { lat, lon, radius: zone?.radius || 0 } : null;
+  }
+
+  _drawHome() {
+    const home = this._homePoint();
+    const key = home ? `${home.lat},${home.lon},${home.radius}` : "none";
     if (key === this._homeKey) return;
     this._homeKey = key;
     const L = window.L;
     this._layers.home.clearLayers();
-    if (typeof lat !== "number" || typeof lon !== "number") return;
+    if (!home) return;
+    const { lat, lon, radius } = home;
     if (radius) L.circle([lat, lon], { radius, color: "#03a9f4", weight: 1, fillOpacity: 0.12, interactive: false }).addTo(this._layers.home);
     const icon = L.divIcon({ className: "", iconSize: [28, 28], iconAnchor: [14, 14], html: `<div class="mm-home" title="Home">🏠</div>` });
     L.marker([lat, lon], { icon, keyboard: false }).bindTooltip("Home").addTo(this._layers.home);
@@ -338,7 +344,9 @@ class MetlinkMapCard extends HTMLElement {
       this._onOrient = () => setTimeout(() => this._fitHeight(), 200);
       this._orient.addEventListener("change", this._onOrient);
     }
-    const map = (this._map = L.map(this._el.mapDiv, { center: CENTRE, zoom: 12, preferCanvas: true }));
+    const home = this._homePoint();
+    this._homeStart = !!home;
+    const map = (this._map = L.map(this._el.mapDiv, { center: home ? [home.lat, home.lon] : CENTRE, zoom: home ? HOME_ZOOM : 12, preferCanvas: true }));
     this._layers = { routes: L.layerGroup().addTo(map), stops: L.layerGroup().addTo(map), home: L.layerGroup().addTo(map), vehicles: L.layerGroup().addTo(map) };
     this._drawHome();
     map.attributionControl.addAttribution('Metlink data © <a href="https://www.gw.govt.nz/" target="_blank" rel="noopener noreferrer">Greater Wellington Regional Council</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Live AIS via <a href="https://aisstream.io/" target="_blank" rel="noopener noreferrer">aisstream.io</a>, provided without warranty');
@@ -446,7 +454,7 @@ class MetlinkMapCard extends HTMLElement {
     // The Melling line is short, so lift it above every other route to keep it visible.
     lines.filter((l) => l.short === "MEL").forEach((l) => this._routeLines.get(l.routeId).forEach((p) => p.bringToFront()));
     this._markRoutes();
-    if (lines.length && !this._fitted) {
+    if (lines.length && !this._fitted && !this._homeStart) {
       this._map.fitBounds(L.latLngBounds(lines.flatMap((l) => l.points)), { padding: [20, 20] });
       this._fitted = true;
     }

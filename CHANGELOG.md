@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.8] - 2026-10-26
+
+### Changed - Map opens centred on your home
+
+- Why: the map opened on a wide harbour view, which was too far out to be useful.
+- The map now starts at zoom 14 centred on your Home Assistant home zone (or the home location in your settings). If no home location is set, it opens on central Wellington at zoom 12 as before.
+- The map no longer jumps to fit the selected routes when it opens, so the home view stays. Pan and zoom as usual.
+
 ## [2.8.7] - 2026-10-26
 
 ### Fixed - Departure board no longer repeats the time
