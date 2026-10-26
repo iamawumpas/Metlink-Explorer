@@ -86,6 +86,7 @@ class MetlinkMapCard extends HTMLElement {
       stopColor: this._config.stop_color || saved.stopColor || "#ffb300",
       stopSize: this._config.stop_size ?? saved.stopSize ?? 10,
       basemap: this._config.basemap || saved.basemap || "street",
+      zoom: Math.min(19, Math.max(8, Math.round(Number(this._config.start_zoom ?? saved.zoom) || HOME_ZOOM))),
     };
     this._height = this._config.height || 480;
     for (const r of this._sel.routes) if (!cssColor(r.color)) r.color = this._nextColor();
@@ -230,6 +231,9 @@ class MetlinkMapCard extends HTMLElement {
                 <label>Style <select class="basemap">${Object.entries(BASEMAPS).map(([id, b]) => `<option value="${id}">${b[0]}</option>`).join("")}</select></label>
                 <label class="mm-grow">Darken <input type="range" class="dim" min="0" max="80" step="5"></label>
               </div>
+              <div class="mm-row">
+                <label>Starting zoom <input type="number" class="startzoom" min="8" max="19" step="1" style="width:4.5em"></label>
+              </div>
             </fieldset>
             <fieldset class="mm-grp"><legend>Stops</legend>
               <div class="mm-row mm-fill">
@@ -247,7 +251,7 @@ class MetlinkMapCard extends HTMLElement {
         <div class="mm"><div class="status muted"></div></div>
       </div>`;
     const q = (s) => this.querySelector(s);
-    this._el = { modes: q(".modes"), dim: q(".dim"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), popup: q(".popup"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts"), panel: q(".mm-panel") };
+    this._el = { modes: q(".modes"), dim: q(".dim"), startZoom: q(".startzoom"), stopColor: q(".stopcolor"), stopSize: q(".stopsize"), stops: q(".stops"), basemap: q(".basemap"), popup: q(".popup"), search: q(".search"), hits: q(".hits"), picked: q(".picked"), mapDiv: q(".mm-map"), status: q(".status"), alerts: q(".alerts"), panel: q(".mm-panel") };
     this._el.mapDiv.style.height = this._height + "px";
     this._el.alerts.parentElement.style.setProperty("--mm-h", this._height + "px");
     q(".mm-gear").addEventListener("click", () => { this._el.panel.hidden = !this._el.panel.hidden; });
@@ -271,6 +275,12 @@ class MetlinkMapCard extends HTMLElement {
     this._el.stopColor.addEventListener("input", () => { this._sel.stopColor = this._el.stopColor.value; this._styleStops(); this._save(); });
     this._el.stopSize.addEventListener("input", () => { this._sel.stopSize = Number(this._el.stopSize.value); this._styleStops(); this._save(); });
     this._el.dim.addEventListener("input", () => { this._sel.dim = Number(this._el.dim.value); this._applyDim(); this._save(); });
+    this._el.startZoom.addEventListener("change", () => {
+      const z = Math.min(19, Math.max(8, Math.round(Number(this._el.startZoom.value) || HOME_ZOOM)));
+      this._sel.zoom = z;
+      this._el.startZoom.value = z;
+      this._save();
+    });
     this._el.stops.addEventListener("change", () => { this._sel.stops = this._el.stops.checked; this._changed(); });
     this._el.search.addEventListener("input", () => this._search());
     this._el.picked.addEventListener("input", (e) => {
@@ -315,6 +325,7 @@ class MetlinkMapCard extends HTMLElement {
     this._applyPopupTheme();
     this._el.basemap.value = BASEMAPS[this._sel.basemap] ? this._sel.basemap : "street";
     this._el.dim.value = this._sel.dim || 0;
+    this._el.startZoom.value = this._sel.zoom;
     this._el.stopColor.value = cssColor(this._sel.stopColor, "#ffb300");
     this._el.stopSize.value = this._sel.stopSize;
     this._el.stops.checked = !!this._sel.stops;
@@ -346,7 +357,7 @@ class MetlinkMapCard extends HTMLElement {
     }
     const home = this._homePoint();
     this._homeStart = !!home;
-    const map = (this._map = L.map(this._el.mapDiv, { center: home ? [home.lat, home.lon] : CENTRE, zoom: home ? HOME_ZOOM : 12, preferCanvas: true }));
+    const map = (this._map = L.map(this._el.mapDiv, { center: home ? [home.lat, home.lon] : CENTRE, zoom: this._sel.zoom, preferCanvas: true }));
     this._layers = { routes: L.layerGroup().addTo(map), stops: L.layerGroup().addTo(map), home: L.layerGroup().addTo(map), vehicles: L.layerGroup().addTo(map) };
     this._drawHome();
     map.attributionControl.addAttribution('Metlink data © <a href="https://www.gw.govt.nz/" target="_blank" rel="noopener noreferrer">Greater Wellington Regional Council</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>) · Live AIS via <a href="https://aisstream.io/" target="_blank" rel="noopener noreferrer">aisstream.io</a>, provided without warranty');

@@ -5,6 +5,14 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.9] - 2026-10-26
+
+### Added - Starting zoom setting
+
+- Why: the zoom the map opens at was fixed.
+- A "Starting zoom" number box (with up and down arrows) in the Map group of the Filters panel, from 8 to 19, default 14. The map opens at this zoom, centred on your home. The choice is remembered in your browser and takes effect the next time the map opens. In YAML it is `start_zoom`.
+- Without a home location the map opens on central Wellington at this zoom.
+
 ## [2.8.8] - 2026-10-26
 
 ### Changed - Map opens centred on your home

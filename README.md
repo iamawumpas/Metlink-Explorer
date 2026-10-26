@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-  <strong>Version:</strong> 2.8.8
+  <strong>Version:</strong> 2.8.9
     </td>
   </tr>
 </table>
@@ -53,6 +53,7 @@ All options are optional.
 | `basemap` | Map style. |
 | `popup_theme` | Popup theme. |
 | `dim` | How much to darken the map. |
+| `start_zoom` | Zoom the map opens at (8 to 19, default 14), centred on your home. |
 | `stop_color`, `stop_size` | Stop marker colour and size. |
 | `routes` | Routes to show at start. |
 | `modes` | Modes to show at start, for example `[bus, train]`. |
