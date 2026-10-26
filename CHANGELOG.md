@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.3] - 2026-10-26
+
+### Changed - Departures after midnight show the day
+
+- Why: departures for tomorrow or later looked the same as today's.
+- Any departure not on today's date now shows the short day name before the time, for example "Tue 08:43 AM". Today's stay as plain times. This applies to the departure board and to the stop popups on the map.
+
 ## [2.8.2] - 2026-10-26
 
 ### Changed - Departure board route colours follow the map

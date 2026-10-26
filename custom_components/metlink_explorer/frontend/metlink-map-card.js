@@ -48,7 +48,11 @@ const luminance = (c) => {
 };
 const textOn = (c) => (1.05 / (luminance(c) + 0.05) >= (luminance(c) + 0.05) / 0.05 ? "#ffffff" : "#000000");
 const casingColor = (c) => (isLight(c) ? "#263238" : "#ffffff");
-const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const clock = (ts) => {
+  const d = new Date(ts * 1000);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+};
 
 let leafletPromise;
 function loadLeaflet() {

@@ -10,7 +10,11 @@ let stopsCache;
 const loadStops = (hass) => (stopsCache ||= hass.callWS({ type: WS + "stops" }).catch((e) => { stopsCache = undefined; throw e; }));
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const clock = (ts) => new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const clock = (ts) => {
+  const d = new Date(ts * 1000);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+};
 const cssColor = (c, fallback) => (/^#[0-9a-f]{6}$/i.test(c || "") ? c : fallback);
 const textOn = (hex) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
