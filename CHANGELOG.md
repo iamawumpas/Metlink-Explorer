@@ -5,6 +5,19 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.2] - 2026-10-26
+
+### Changed - Departure board route colours follow the map
+
+- Why: the same route could be one colour on the map and another on the board.
+- A route you have picked on the map card now uses that chip colour on the board. For any other route, click its badge on the board to choose a colour (remembered in your browser). Until you do, it keeps the Metlink colour.
+- If you use a map card with a YAML `id`, set `map_id` with the same value on the board so it reads that map's colours.
+
+### Fixed - Departure board height in a Sections dashboard
+
+- Why: setting `height` in YAML had no visible effect in a Sections view, because the card did not declare its grid sizing and the grid kept its own row height.
+- The card now asks the grid for automatic row height (as the map card does) and is a block element, so `height: 500` (pixels) or `height: 60vh` is honoured.
+
 ## [2.8.1] - 2026-10-26
 
 ### Fixed - Departure board scrolls, can be resized, and delays are readable

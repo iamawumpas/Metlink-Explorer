@@ -27,7 +27,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     let stops = Array.isArray(saved.stops) ? saved.stops : [];
     if (!stops.length && saved.stopId) stops = [{ id: saved.stopId, name: saved.stopName || saved.stopId, towards: saved.towards || "" }];
     if (!stops.length && this._config.stop_id) stops = [{ id: this._config.stop_id, name: this._config.stop_id, towards: this._config.towards || "" }];
-    this._sel = { stops: stops.slice(0, MAX_STOPS).map((s, i) => ({ id: s.id, name: s.name || s.id, towards: s.towards || "", color: cssColor(s.color, PALETTE[i % PALETTE.length]) })), height: Number(saved.height) > 0 ? Number(saved.height) : 0 };
+    this._sel = { stops: stops.slice(0, MAX_STOPS).map((s, i) => ({ id: s.id, name: s.name || s.id, towards: s.towards || "", color: cssColor(s.color, PALETTE[i % PALETTE.length]) })), height: Number(saved.height) > 0 ? Number(saved.height) : 0, routeColors: saved.routeColors && typeof saved.routeColors === "object" ? saved.routeColors : {} };
     this._limit = this._config.limit || 10;
     this._perRoute = this._config.per_route || 3;
     const h = this._config.height;
@@ -41,6 +41,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
   }
 
   connectedCallback() {
+    this.style.display = "block";
     this._tick = setInterval(() => this._renderRows(), 30000);
     if (this._built) { document.addEventListener("pointerup", this._onUp); this._subscribe(); }
   }
@@ -52,6 +53,7 @@ class MetlinkDepartureBoardCard extends HTMLElement {
   }
 
   getCardSize() { return 6; }
+  getGridOptions() { return { columns: 12, rows: "auto", min_columns: 3 }; }
   static getStubConfig() { return { limit: 10 }; }
 
   _build() {
@@ -69,11 +71,11 @@ class MetlinkDepartureBoardCard extends HTMLElement {
           .mx .tw{display:flex;align-items:center;gap:6px}.mx .tw i{flex:none;width:10px;height:10px;border-radius:50%}
           .mx .body{overflow-y:auto;overflow-x:hidden;flex:1;min-height:0}
           .mx .grp{margin-top:10px}.mx .gh{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:4px}
-          .mx .badge{display:inline-block;min-width:2.2em;text-align:center;padding:2px 6px;border-radius:4px;font-weight:600}
+          .mx .badge{position:relative;display:inline-block;min-width:2.2em;text-align:center;padding:2px 6px;border-radius:4px;font-weight:600}
           .mx .dep{display:flex;align-items:center;gap:8px;padding:5px 10px;margin:2px 0;border-radius:6px;color:#fff;text-shadow:0 0 3px rgba(0,0,0,.7)}
           .mx .dep .st{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
           .mx .dep .when{text-align:right;white-space:nowrap}
-          .mx .late,.mx .early{padding:0 6px;border-radius:8px;background:rgba(0,0,0,.65);font-weight:600}.mx .late{color:#ff8a80}.mx .early{color:#80d8ff}.mx .gone{text-decoration:line-through;opacity:.6}.mx .muted{color:var(--secondary-text-color)}
+          .mx .badge input{position:absolute;inset:0;width:100%;height:100%;opacity:0;padding:0;border:0;cursor:pointer}.mx .late,.mx .early{padding:0 6px;border-radius:8px;background:rgba(0,0,0,.65);font-weight:600}.mx .late{color:#ff8a80}.mx .early{color:#80d8ff}.mx .gone{text-decoration:line-through;opacity:.6}.mx .muted{color:var(--secondary-text-color)}
         </style>
         <div class="mx">
           <input class="search" type="search" placeholder="Add a stop. Search by name or number…" autocomplete="off">
@@ -111,6 +113,13 @@ class MetlinkDepartureBoardCard extends HTMLElement {
 
   _save() {
     try { localStorage.setItem(this._key, JSON.stringify(this._sel)); } catch (_) { /* private mode */ }
+  }
+
+  _mapColors() {
+    try {
+      const m = JSON.parse(localStorage.getItem("metlink_explorer_map:" + (this._config.map_id || "default")) || "{}");
+      return new Map((m.routes || []).filter((r) => /^#[0-9a-f]{6}$/i.test(r.color || "")).map((r) => [String(r.id), r.color]));
+    } catch (_) { return new Map(); }
   }
 
   _freeColor() {
@@ -233,25 +242,34 @@ class MetlinkDepartureBoardCard extends HTMLElement {
       rows.forEach((r) => { if (r.timestamp_expected > now - 60) deps.push({ r, s }); });
     });
     if (waiting === stops.length) return;
+    const mapColors = this._mapColors();
     const groups = new Map();
     deps.sort((a, b) => a.r.timestamp_expected - b.r.timestamp_expected).forEach((d) => {
       const dest = d.r.headsign || d.r.destination || "";
-      const key = `${d.r.route}\u0000${dest}`;
-      if (!groups.has(key)) groups.set(key, { route: d.r.route, dest, color: d.r.color, text: d.r.text_color, school: d.r.is_school, items: [] });
+      const key = `${d.r.route_id || d.r.route}\u0000${dest}`;
+      if (!groups.has(key)) groups.set(key, { route: d.r.route, rid: String(d.r.route_id || d.r.route), dest, color: d.r.color, text: d.r.text_color, school: d.r.is_school, items: [] });
       groups.get(key).items.push(d);
     });
     const html = [...groups.values()].map((g) => {
-      const style = g.color ? `background:#${esc(g.color)};color:${g.text ? "#" + esc(g.text) : "#fff"}` : "background:var(--primary-color);color:#fff";
+      const mapC = mapColors.get(g.rid);
+      const own = mapC || cssColor(this._sel.routeColors[g.rid], "") || (g.color ? "#" + g.color : "");
+      const style = own && /^#[0-9a-f]{6}$/i.test(own) ? `background:${esc(own)};color:${mapC || this._sel.routeColors[g.rid] ? textOn(own) : g.text ? "#" + esc(g.text) : textOn(own)}` : "background:var(--primary-color);color:#fff";
+      const pick = mapC ? "" : `<input type="color" data-rc="${esc(g.rid)}" value="${esc(own && /^#[0-9a-f]{6}$/i.test(own) ? own : "#546e7a")}">`;
       const items = g.items.slice(0, this._perRoute).map(({ r, s }) => {
         const mins = Math.round((r.timestamp_expected - now) / 60);
         const when = r.status === "canceled" ? "Cancelled" : mins < 1 ? "Due" : mins < 60 ? `${mins} min` : clock(r.timestamp_expected);
         const note = r.status === "delayed" ? `<span class="late">+${Math.round(r.delay / 60)} min</span>` : r.status === "early" ? `<span class="early">${Math.round(r.delay / 60)} min</span>` : r.status === "skipped" ? "Skipped" : "";
         return `<div class="dep ${r.status === "canceled" || r.status === "skipped" ? "gone" : ""}" style="background:linear-gradient(90deg,#000,${esc(s.color)})"><span class="st">${esc(s.name)}</span><span>${esc(clock(r.timestamp))}</span><span class="when">${esc(when)} ${note}</span></div>`;
       }).join("");
-      return `<div class="grp"><div class="gh"><span class="badge" style="${style}">${esc(g.route)}</span><span>${esc(g.dest)}${g.school ? ' <span class="muted">school</span>' : ""}</span></div>${items}</div>`;
+      return `<div class="grp"><div class="gh"><span class="badge" style="${style}" title="${mapC ? "Colour set on the map card" : "Change colour"}">${esc(g.route)}${pick}</span><span>${esc(g.dest)}${g.school ? ' <span class="muted">school</span>' : ""}</span></div>${items}</div>`;
     });
     const err = errors.length ? `<p class="muted">Live departures unavailable for ${esc(errors.join(", "))}.</p>` : "";
     this._el.body.innerHTML = err + (html.length ? html.join("") : errors.length ? "" : `<p class="muted">No departures in the next 72 hours.</p>`);
+    this._el.body.querySelectorAll("[data-rc]").forEach((i) => i.addEventListener("change", () => {
+      this._sel.routeColors[i.dataset.rc] = i.value;
+      this._save();
+      this._renderRows();
+    }));
   }
 }
 
