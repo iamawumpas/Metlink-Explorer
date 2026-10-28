@@ -91,7 +91,7 @@ def service(script, **kw):
 def test_one_feed_failing_does_not_affect_others():
     async def main():
         svc = service({PATHS["v"]: MetlinkRequestError("boom"), PATHS["t"]: UPDATES, PATHS["a"]: ALERTS})
-        assert await svc.poll_once("vehicles") == 30.0
+        assert await svc.poll_once("vehicles") == 10.0
         await svc.poll_once("trip_updates")
         await svc.poll_once("alerts")
         st = svc.status()

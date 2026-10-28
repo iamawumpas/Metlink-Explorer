@@ -23,7 +23,7 @@ FEEDS = {
     "trip_updates": "/gtfs-rt/tripupdates",
     "alerts": "/gtfs-rt/servicealerts",
 }
-DEFAULT_INTERVALS = {"vehicles": 30.0, "trip_updates": 30.0, "alerts": 180.0}
+DEFAULT_INTERVALS = {"vehicles": 10.0, "trip_updates": 30.0, "alerts": 180.0}
 SKIPPED = 1
 CANCELED = 3
 

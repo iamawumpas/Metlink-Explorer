@@ -5,6 +5,15 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.10] - 2026-10-28
+
+### Changed - Vehicle positions refresh every 10 seconds
+
+- Why: Metlink updates its vehicle feed every 4 to 8 seconds, but the map only asked for it every 30, so positions were on average about 15 seconds older than they needed to be.
+- Vehicle positions are now fetched every 10 seconds while a card is open. Trip updates (30 seconds) and alerts (3 minutes) are unchanged.
+- Each fetch is about 50 KB and took about 0.14 seconds when tested. Nothing is fetched when no card is open.
+- Some vehicles still show positions a minute or two old. That delay comes from Metlink, not from this integration.
+
 ## [2.8.9] - 2026-10-26
 
 ### Added - Starting zoom setting
