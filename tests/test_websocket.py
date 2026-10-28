@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 
 from custom_components.metlink_explorer import websocket as ws
 from custom_components.metlink_explorer.const import DOMAIN
@@ -17,8 +18,9 @@ class FakeHass:
 
 
 class FakeConnection:
-    def __init__(self):
+    def __init__(self, user_id="test-user"):
         self.log, self.subscriptions = [], {}
+        self.user = SimpleNamespace(id=user_id)
 
     def send_result(self, id, result=None):
         self.log.append(("result", id, result))
@@ -76,5 +78,44 @@ def test_not_ready_when_service_missing():
         hass, conn = FakeHass(), FakeConnection()
         await call(hass, conn, "routes", {})
         assert conn.log == [("error", 7, "not_ready")]
+
+    asyncio.run(main())
+
+
+def test_settings_are_scoped_to_the_authenticated_user():
+    class Settings:
+        values = {}
+
+        async def async_get(self, user_id):
+            return dict(self.values.get(user_id, {}))
+
+        async def async_set(self, user_id, key, value):
+            self.values.setdefault(user_id, {})[key] = value
+
+    async def main():
+        settings = Settings()
+        hass = FakeHass()
+        hass.data[DOMAIN] = {"user_settings": settings}
+        first = FakeConnection("first-user")
+        second = FakeConnection("second-user")
+
+        await call(hass, first, "save_settings", {"key": "metlink_explorer_map:default", "value": {"dim": 25}})
+        await call(hass, second, "get_settings", {})
+        assert first.log == [("result", 7, None)]
+        assert second.log == [("result", 7, {})]
+
+        await call(hass, first, "get_settings", {})
+        assert first.log[-1] == ("result", 7, {"metlink_explorer_map:default": {"dim": 25}})
+
+    asyncio.run(main())
+
+
+def test_settings_require_an_authenticated_user():
+    async def main():
+        hass = FakeHass()
+        hass.data[DOMAIN] = {"user_settings": object()}
+        conn = FakeConnection(user_id=None)
+        await call(hass, conn, "get_settings", {})
+        assert conn.log == [("error", 7, "unauthorized")]
 
     asyncio.run(main())

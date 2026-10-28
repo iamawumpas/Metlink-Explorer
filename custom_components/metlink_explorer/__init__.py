@@ -35,12 +35,13 @@ from .core.realtime import RealtimeService
 from .core.service import MetlinkService
 from .core.static_sync import StaticSync
 from .core.store import Store
+from .user_settings import UserSettings
 from .websocket import async_register_commands
 
 _LOGGER = logging.getLogger(__name__)
 
 FRONTEND_DIR = Path(__file__).parent / "frontend"
-CARD_FILES = ("metlink-departure-board-card.js", "metlink-map-card.js")
+CARD_FILES = ("metlink-settings.js", "metlink-departure-board-card.js", "metlink-map-card.js")
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -51,6 +52,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
     domain_data = hass.data.setdefault(DOMAIN, {})
+    domain_data.setdefault("user_settings", UserSettings(hass))
     if domain_data.get("frontend"):
         return
     version = (await async_get_integration(hass, DOMAIN)).version

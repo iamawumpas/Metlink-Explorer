@@ -5,6 +5,12 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-10-28
+
+### Changed - Settings follow your Home Assistant user
+
+- Card choices are saved per Home Assistant user instead of per browser, so they follow that user across devices. Existing browser-saved choices are imported the first time that user opens a card.
+
 ## [2.8.10] - 2026-10-28
 
 ### Changed - Vehicle positions refresh every 10 seconds

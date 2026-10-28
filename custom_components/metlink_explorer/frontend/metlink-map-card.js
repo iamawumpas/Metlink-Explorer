@@ -1,8 +1,9 @@
-/* Metlink map. Shows nothing but a street map until you pick modes or routes; choices are remembered per browser. */
+/* Metlink map. Shows nothing but a street map until you pick modes or routes; choices are remembered per Home Assistant user. */
 (() => {
 "use strict";
 const WS = "metlink_explorer/";
 const STORE_KEY = "metlink_explorer_map:";
+const Settings = () => window.MetlinkExplorerSettings;
 const LEAFLET = "https://unpkg.com/leaflet@1.9.4/dist/leaflet";
 const LEAFLET_SRI = { css: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=", js: "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" };
 const MODES = [["bus", "Bus"], ["train", "Train"], ["ferry", "Ferry"], ["cable_car", "Cable car"]];
@@ -75,8 +76,13 @@ class MetlinkMapCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._key = STORE_KEY + (this._config.id || "default");
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(this._key) || "{}"); } catch (_) { /* ignore */ }
+    this._configure();
+    this._loadSettings();
+    if (this._built) this._apply();
+  }
+
+  _configure() {
+    const saved = this._saved || {};
     this._sel = {
       modes: this._config.modes || saved.modes || [],
       routes: (this._config.routes || saved.routes || []).map((r) => ({ ...r })),
@@ -90,7 +96,28 @@ class MetlinkMapCard extends HTMLElement {
     };
     this._height = this._config.height || 480;
     for (const r of this._sel.routes) if (!cssColor(r.color)) r.color = this._nextColor();
-    if (this._built) this._apply();
+  }
+
+  _loadSettings() {
+    const key = this._key;
+    if (!this._hass || !key || this._settingsRequest === key || this._settingsLoaded === key) return;
+    this._settingsRequest = key;
+    Settings().load(this._hass, key).then((saved) => {
+      if (key !== this._key) return;
+      this._saved = saved;
+      this._settingsLoaded = key;
+      this._configure();
+      if (!this._built) this._build();
+      else this._apply();
+    }).catch((err) => {
+      if (key !== this._key) return;
+      console.error("Metlink map could not load user settings", err);
+      this._saved = {};
+      this._settingsLoaded = key;
+      this._configure();
+      if (!this._built) this._build();
+      else this._apply();
+    });
   }
 
   _nextColor() {
@@ -112,8 +139,8 @@ class MetlinkMapCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._built) this._build();
-    else if (this._layers) this._drawHome();
+    this._loadSettings();
+    if (this._layers) this._drawHome();
   }
 
   // Home Assistant's home zone, falling back to the location in the HA settings.
@@ -159,7 +186,10 @@ class MetlinkMapCard extends HTMLElement {
   getGridOptions() { return { columns: 12, rows: "auto", min_columns: 3 }; }
   static getStubConfig() { return {}; }
 
-  _save() { try { localStorage.setItem(this._key, JSON.stringify(this._sel)); } catch (_) { /* private mode */ } }
+  _save() {
+    Settings().save(this._hass, this._key, this._sel)
+      .catch((err) => console.error("Metlink map could not save user settings", err));
+  }
 
   _build() {
     this._built = true;

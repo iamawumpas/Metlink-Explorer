@@ -1,8 +1,9 @@
-/* Metlink departure board. Stops are picked in the card, shown as coloured chips, and remembered per browser. */
+/* Metlink departure board. Stops are picked in the card and remembered per Home Assistant user. */
 (() => {
 "use strict";
 const WS = "metlink_explorer/";
 const STORE_KEY = "metlink_explorer_board:";
+const Settings = () => window.MetlinkExplorerSettings;
 const MAX_STOPS = 8;
 const PALETTE = ["#e53935", "#fb8c00", "#fbc02d", "#43a047", "#1e88e5", "#3949ab", "#8e24aa", "#00acc1"];
 
@@ -26,8 +27,13 @@ class MetlinkDepartureBoardCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._key = STORE_KEY + (this._config.id || "default");
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(this._key) || "{}"); } catch (_) { /* ignore */ }
+    this._configure();
+    this._loadSettings();
+    if (this._built) { this._applyHeight(); this._refresh(); }
+  }
+
+  _configure() {
+    const saved = this._saved || {};
     let stops = Array.isArray(saved.stops) ? saved.stops : [];
     if (!stops.length && saved.stopId) stops = [{ id: saved.stopId, name: saved.stopName || saved.stopId, towards: saved.towards || "" }];
     if (!stops.length && this._config.stop_id) stops = [{ id: this._config.stop_id, name: this._config.stop_id, towards: this._config.towards || "" }];
@@ -36,12 +42,33 @@ class MetlinkDepartureBoardCard extends HTMLElement {
     this._limit = Math.max(this._config.limit || 10, this._records);
     const h = this._config.height;
     this._height = h ? (typeof h === "number" || /^\d+(\.\d+)?$/.test(String(h)) ? `${h}px` : String(h)) : "";
-    if (this._built) { this._applyHeight(); this._refresh(); }
+  }
+
+  _loadSettings() {
+    const key = this._key;
+    if (!this._hass || !key || this._settingsRequest === key || this._settingsLoaded === key) return;
+    this._settingsRequest = key;
+    Settings().load(this._hass, key).then((saved) => {
+      if (key !== this._key) return;
+      this._saved = saved;
+      this._settingsLoaded = key;
+      this._configure();
+      if (!this._built) this._build();
+      else { this._applyHeight(); this._refresh(); }
+    }).catch((err) => {
+      if (key !== this._key) return;
+      console.error("Metlink departure board could not load user settings", err);
+      this._saved = {};
+      this._settingsLoaded = key;
+      this._configure();
+      if (!this._built) this._build();
+      else { this._applyHeight(); this._refresh(); }
+    });
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._built) this._build();
+    this._loadSettings();
   }
 
   connectedCallback() {
@@ -116,14 +143,13 @@ class MetlinkDepartureBoardCard extends HTMLElement {
   }
 
   _save() {
-    try { localStorage.setItem(this._key, JSON.stringify(this._sel)); } catch (_) { /* private mode */ }
+    Settings().save(this._hass, this._key, this._sel)
+      .catch((err) => console.error("Metlink departure board could not save user settings", err));
   }
 
   _mapColors() {
-    try {
-      const m = JSON.parse(localStorage.getItem("metlink_explorer_map:" + (this._config.map_id || "default")) || "{}");
-      return new Map((m.routes || []).filter((r) => /^#[0-9a-f]{6}$/i.test(r.color || "")).map((r) => [String(r.id), r.color]));
-    } catch (_) { return new Map(); }
+    const m = Settings().peek(this._hass, "metlink_explorer_map:" + (this._config.map_id || "default"));
+    return new Map((m?.routes || []).filter((r) => /^#[0-9a-f]{6}$/i.test(r.color || "")).map((r) => [String(r.id), r.color]));
   }
 
   _freeColor() {

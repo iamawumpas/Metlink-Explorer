@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-  <strong>Version:</strong> 2.8.10
+  <strong>Version:</strong> 2.9.0
     </td>
   </tr>
 </table>
@@ -27,7 +27,7 @@ A Home Assistant custom integration that brings Wellington public transport from
 - **Live map**: the `metlink-map-card` shows live buses, trains and ferries, route lines and stops on a Leaflet map limited to the Wellington region. Use the mode buttons (Bus, Train, Ferry, Cable car) and the Filters panel to choose routes, route colours, stop colour and size, the map style and how much to darken it. Your Home Assistant home zone is shown. Until you choose something, it is just a map.
 - **Service alerts**: the map shows an alerts button when alerts affect your selection. Alerts are colour coded by severity.
 - **Ferries via AISStream**: ferry positions come from one shared AISStream connection (the AISStream key is optional). It only runs while a map card is open and can never affect the bus and train data.
-- **No entities to manage**: the integration is a data service. Your choices live in the card and are saved in your browser, so they are per device.
+- **No entities to manage**: the integration is a data service. Your choices are saved to your Home Assistant user, so they follow you between browsers and devices. Existing browser-saved choices are imported the first time that user opens a card.
 
 Add the cards from the dashboard card picker: **Metlink Departure Board** and **Metlink Map**.
 

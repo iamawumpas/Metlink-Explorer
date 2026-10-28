@@ -15,6 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 PREFIX = f"{DOMAIN}/"
 SUBSCRIPTIONS = ("subscribe_vehicles", "subscribe_departures", "subscribe_alerts")
+SETTINGS_COMMANDS = ("get_settings", "save_settings")
 
 
 def _service(hass: HomeAssistant) -> MetlinkService | None:
@@ -23,6 +24,28 @@ def _service(hass: HomeAssistant) -> MetlinkService | None:
 
 def _make_handler(command: str):
     async def handler(hass: HomeAssistant, connection: Any, msg: dict[str, Any]) -> None:
+        if command in SETTINGS_COMMANDS:
+            settings = hass.data.get(DOMAIN, {}).get("user_settings")
+            user_id = getattr(getattr(connection, "user", None), "id", None)
+            if settings is None:
+                connection.send_error(msg["id"], "not_ready", "Metlink Explorer settings are not ready")
+                return
+            if not isinstance(user_id, str) or not user_id:
+                connection.send_error(msg["id"], "unauthorized", "An authenticated Home Assistant user is required")
+                return
+            try:
+                if command == "get_settings":
+                    connection.send_result(msg["id"], await settings.async_get(user_id))
+                else:
+                    await settings.async_set(user_id, msg.get("key"), msg.get("value"))
+                    connection.send_result(msg["id"])
+            except ValueError as err:
+                connection.send_error(msg["id"], "invalid_format", str(err))
+            except Exception:
+                _LOGGER.exception("Metlink user settings command failed")
+                connection.send_error(msg["id"], "unknown_error", "Request failed")
+            return
+
         service = _service(hass)
         if service is None:
             connection.send_error(msg["id"], "not_ready", "Metlink Explorer is not set up")
@@ -74,5 +97,5 @@ def _accept(msg: dict[str, Any]) -> dict[str, Any]:
 
 
 def async_register_commands(hass: HomeAssistant) -> None:
-    for name in (*api.COMMANDS, *SUBSCRIPTIONS):
+    for name in (*api.COMMANDS, *SUBSCRIPTIONS, *SETTINGS_COMMANDS):
         websocket_api.async_register_command(hass, PREFIX + name, _make_handler(name), schema=_accept)
