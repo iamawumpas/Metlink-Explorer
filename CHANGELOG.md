@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.2] - 2026-11-17
+
+### Fixed - Map chips stay within the screen
+
+- Why: on mobile devices, a long column of mode and route chips could extend past the edge of the screen.
+- The chip column now scrolls within the available map and viewport height, while the Filters button stays in place.
+
 ## [2.9.1] - 2026-11-17
 
 ### Added - Toggle selected routes on the map

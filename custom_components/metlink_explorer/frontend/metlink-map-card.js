@@ -224,7 +224,8 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .asev{display:inline-block;border-radius:8px;padding:0 6px;font-size:11px;font-weight:700;color:#fff;background:#e65100}
           .mm-wrap .sev-severe .asev{background:#c62828}.mm-wrap .sev-warning .asev{background:#ef6c00}.mm-wrap .sev-info .asev{background:#1565c0}
           .mm-wrap .ahead.sev-severe{border-color:#c62828;background:#ffebee}.mm-wrap .ahead.sev-info{border-color:#1565c0;background:#e3f2fd}
-          .mm-wrap .mm-ctl{position:absolute;top:8px;right:8px;z-index:5;padding:0;display:flex;flex-direction:column;align-items:stretch;gap:6px;width:94px}
+          .mm-wrap .mm-ctl{position:absolute;top:8px;right:8px;z-index:5;padding:0;display:flex;flex-direction:column;align-items:stretch;gap:6px;width:94px;max-height:calc(var(--mm-h, 100vh) - 16px);max-height:min(calc(var(--mm-h, 100vh) - 16px),calc(100dvh - 16px))}
+          .mm-wrap .mm-ctl-list{display:flex;flex-direction:column;gap:6px;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
           .mm-wrap .mm-ctl .chips{flex-direction:column;align-items:stretch;margin:0;gap:6px}
           .mm-wrap .mm-ctl .pr{box-sizing:border-box;width:100%;justify-content:space-between;gap:8px;padding:4px 8px 4px 10px}
           .mm-wrap .mm-ctl button.chip{white-space:nowrap;padding:4px 8px}
@@ -249,8 +250,10 @@ class MetlinkMapCard extends HTMLElement {
           <div class="alerts"></div>
           <div class="mm mm-ctl">
             <button class="mm-gear" title="Filters and settings" aria-label="Filters and settings">⚙ Filters</button>
-            <div class="chips modes"></div>
-            <div class="chips picked"></div>
+            <div class="mm-ctl-list">
+              <div class="chips modes"></div>
+              <div class="chips picked"></div>
+            </div>
           </div>
           <div class="mm mm-panel" hidden>
             <div class="mm-phead"><b>Filters</b><button class="mm-pclose" aria-label="Close filters">×</button></div>
