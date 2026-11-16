@@ -85,7 +85,7 @@ class MetlinkMapCard extends HTMLElement {
     const saved = this._saved || {};
     this._sel = {
       modes: this._config.modes || saved.modes || [],
-      routes: (this._config.routes || saved.routes || []).map((r) => ({ ...r })),
+      routes: (this._config.routes || saved.routes || []).map((r) => ({ ...r, enabled: r.enabled !== false })),
       stops: saved.stops ?? true,
       popup: this._config.popup_theme || saved.popup || "light",
       dim: this._config.dim ?? saved.dim ?? 0,
@@ -210,7 +210,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm-late{display:inline-block;background:#fff;color:#d50000;font-weight:700;border-radius:8px;padding:0 6px;animation:mm-blink 1s steps(2,start) infinite}
           @keyframes mm-blink{to{visibility:hidden}}
           @media (prefers-reduced-motion:reduce){.mm-late{animation:none}}
-          .mm .pr{display:inline-flex;align-items:center;gap:6px;border-radius:16px;padding:4px 10px 4px 12px;border:1px solid rgba(128,128,128,.6);font-weight:600}.mm .pr .nm{position:relative;cursor:pointer}.mm .pr input[type=color]{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);opacity:0;cursor:pointer;border:0;padding:0}.mm .pr button{background:none;border:0;color:inherit;cursor:pointer;padding:0 2px;position:relative;z-index:1}
+          .mm .pr{display:inline-flex;align-items:center;gap:6px;border-radius:16px;padding:4px 10px 4px 12px;border:1px solid rgba(128,128,128,.6);font-weight:600}.mm .pr-toggle,.mm .pr button{background:none;border:0;color:inherit;cursor:pointer;padding:0 2px;position:relative;z-index:1}.mm .pr-toggle{flex:1;min-width:0;text-align:center;font:inherit}.mm .pr-color{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 16px;cursor:pointer;line-height:1}.mm .pr-color input[type=color]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}.mm .pr-color:has(input:focus-visible){outline:2px solid currentColor;outline-offset:2px}
           .mm-dark .leaflet-popup-content-wrapper,.mm-dark .leaflet-popup-tip{background:#263238;color:#eceff1}.mm-dark .mm-pop .muted{color:#b0bec5}.mm-dark .mm-pop .warn{color:#ffb74d}.mm-dark .leaflet-popup-close-button{color:#eceff1}
           .mm-wrap{position:relative}.mm-wrap .alerts{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:5;max-width:calc(100% - 100px);width:max-content;font:13px/1.35 sans-serif}
           .mm-wrap .ahead{display:block;margin:0 auto;padding:5px 12px;border-radius:14px;border:1px solid #e65100;background:#fff3e0;color:#5d4037;font:600 13px sans-serif;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.4)}
@@ -228,7 +228,7 @@ class MetlinkMapCard extends HTMLElement {
           .mm-wrap .mm-ctl .chips{flex-direction:column;align-items:stretch;margin:0;gap:6px}
           .mm-wrap .mm-ctl .pr{box-sizing:border-box;width:100%;justify-content:space-between;gap:8px;padding:4px 8px 4px 10px}
           .mm-wrap .mm-ctl button.chip{white-space:nowrap;padding:4px 8px}
-          .mm-wrap .mm-ctl .pr .nm{flex:1;text-align:center}
+          .mm-wrap .mm-ctl .pr-toggle{white-space:nowrap}
           .mm-wrap .mm-ctl button.chip,.mm-wrap .mm-gear{box-sizing:border-box;width:100%;justify-content:center;text-align:center}
           .mm-wrap .mm-ctl button.chip,.mm-wrap .mm-gear{box-shadow:0 1px 4px rgba(0,0,0,.45)}
           .mm-wrap .mm-gear{border:1px solid var(--divider-color);border-radius:16px;padding:4px 12px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-weight:600}
@@ -319,11 +319,24 @@ class MetlinkMapCard extends HTMLElement {
       if (!route) return;
       route.color = e.target.value;
       const chip = e.target.closest(".pr");
-      if (chip) { chip.style.background = route.color; chip.style.color = textOn(route.color); }
+      if (chip) {
+        const enabled = route.enabled !== false;
+        chip.style.background = enabled ? route.color : "var(--secondary-background-color)";
+        chip.style.color = enabled ? textOn(route.color) : "var(--secondary-text-color)";
+        chip.style.borderColor = route.color;
+      }
       this._save();
       this._recolour();
     });
     this._el.picked.addEventListener("click", (e) => {
+      const toggleId = e.target.dataset?.toggle;
+      if (toggleId) {
+        const route = this._sel.routes.find((r) => r.id === toggleId);
+        if (!route) return;
+        route.enabled = route.enabled === false;
+        this._changed();
+        return;
+      }
       const id = e.target.dataset?.route;
       if (!id) return;
       this._sel.routes = this._sel.routes.filter((r) => r.id !== id);
@@ -360,7 +373,14 @@ class MetlinkMapCard extends HTMLElement {
     this._el.stopSize.value = this._sel.stopSize;
     this._el.stops.checked = !!this._sel.stops;
     this._el.modes.querySelectorAll("button").forEach((b) => b.classList.toggle("on", this._sel.modes.includes(b.dataset.mode)));
-    this._el.picked.innerHTML = [...this._sel.routes].sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true })).map((r) => { const c = cssColor(r.color, "#546e7a"); return `<span class="pr" data-chip="${esc(r.id)}" style="background:${c};color:${textOn(c)}"><span class="nm" title="Change colour">${esc(r.name)}<input type="color" data-color="${esc(r.id)}" value="${esc(c)}" title="Route colour"></span><button data-route="${esc(r.id)}" title="Remove">✕</button></span>`; }).join("");
+    this._el.picked.innerHTML = [...this._sel.routes].sort((a, b) => String(a.name).localeCompare(String(b.name), undefined, { numeric: true })).map((r) => {
+      const c = cssColor(r.color, "#546e7a");
+      const enabled = r.enabled !== false;
+      const bg = enabled ? c : "var(--secondary-background-color)";
+      const fg = enabled ? textOn(c) : "var(--secondary-text-color)";
+      const action = enabled ? "Disable" : "Enable";
+      return `<span class="pr" data-chip="${esc(r.id)}" style="background:${bg};color:${fg};border-color:${c}"><button type="button" class="pr-toggle" data-toggle="${esc(r.id)}" aria-label="${action} route ${esc(r.name)}" aria-pressed="${enabled}" title="${action} route">${esc(r.name)}</button><label class="pr-color" title="Change route colour"><span aria-hidden="true">🎨</span><input type="color" data-color="${esc(r.id)}" value="${esc(c)}" aria-label="Change colour for route ${esc(r.name)}"></label><button type="button" data-route="${esc(r.id)}" aria-label="Remove route ${esc(r.name)}" title="Remove">✕</button></span>`;
+    }).join("");
   }
 
   // Fill the viewport below the map's top edge. Measured on load and on orientation change only, so scrolling never resizes the map.
@@ -464,7 +484,7 @@ class MetlinkMapCard extends HTMLElement {
     const L = window.L;
     const token = (this._routeToken = {});
     const lines = [];
-    const targets = this._sel.routes.map((r) => ({ id: r.id }));
+    const targets = this._scope().picked.map((id) => ({ id }));
     const wideModes = this._scope().wide.filter((m) => m !== "bus");
     if (wideModes.length) {
       try {
@@ -661,15 +681,17 @@ class MetlinkMapCard extends HTMLElement {
   // Picked bus routes are shown on their own. Each other active mode shows every route it has. Bus with nothing picked shows all buses.
   _scope() {
     const { routes, modes } = this._sel;
-    return { picked: routes.map((r) => r.id), wide: modes.filter((m) => m !== "bus" || !routes.length) };
+    return {
+      picked: routes.filter((r) => r.enabled !== false).map((r) => r.id),
+      wide: modes.filter((m) => m !== "bus" || !routes.length),
+    };
   }
 
-  _scopeMsgs(type, allModes = false) {
+  _scopeMsgs(type) {
     const { picked, wide } = this._scope();
-    const modes = allModes ? this._sel.modes : wide;
     const out = [];
     if (picked.length) out.push({ type: WS + type, route_ids: picked });
-    if (modes.length) out.push({ type: WS + type, modes });
+    if (wide.length) out.push({ type: WS + type, modes: wide });
     return out;
   }
 
@@ -678,7 +700,7 @@ class MetlinkMapCard extends HTMLElement {
     this._clearVehicles();
     const handle = (this._vehicleSub = { stale: false, unsubs: [] });
     const unsubs = handle.unsubs;
-    const msgs = this._scopeMsgs("subscribe_vehicles", true);
+    const msgs = this._scopeMsgs("subscribe_vehicles");
     if (!this._hass || !msgs.length) return;
     const parts = msgs.map(() => []);
     try {

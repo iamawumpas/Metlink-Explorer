@@ -5,6 +5,13 @@ All notable changes to the Metlink Explorer Home Assistant integration will be d
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-11-17
+
+### Added - Toggle selected routes on the map
+
+- Why: turning a route off meant removing it, so adding it back also meant searching for it again.
+- Click a selected route chip to hide or show that route on the map. Its colour and selection are kept while it is off; use the palette icon to change its colour or × to remove it. This only affects the map card and does not filter the departure board.
+
 ## [2.9.0] - 2026-10-28
 
 ### Changed - Settings follow your Home Assistant user

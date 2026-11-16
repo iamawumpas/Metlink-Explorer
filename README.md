@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td colspan="2" style="border: none; padding-top: 0.5em;">
-  <strong>Version:</strong> 2.9.0
+  <strong>Version:</strong> 2.9.1
     </td>
   </tr>
 </table>
@@ -24,7 +24,7 @@ A Home Assistant custom integration that brings Wellington public transport from
 - **Departure board**: search for several stops (up to 8), each shown as a coloured chip, and choose where you are heading from each ("Towards Courtenay Place"). Departures are grouped by stop, with every route and the destination on each row. Delays, early running, cancellations and skipped stops are merged in, and departures after today show the day ("Tue 08:43 AM").
 - **Whole network timetable**: all Metlink routes and stops are downloaded once, stored on disk and checked for changes every day. Bus, train, ferry and cable car are included, and school buses are flagged.
 - **Gentle on the API**: nothing is requested from Metlink while no card is open, and one failing feed never stops another.
-- **Live map**: the `metlink-map-card` shows live buses, trains and ferries, route lines and stops on a Leaflet map limited to the Wellington region. Use the mode buttons (Bus, Train, Ferry, Cable car) and the Filters panel to choose routes, route colours, stop colour and size, the map style and how much to darken it. Your Home Assistant home zone is shown. Until you choose something, it is just a map.
+- **Live map**: the `metlink-map-card` shows live buses, trains and ferries, route lines and stops on a Leaflet map limited to the Wellington region. Use the mode buttons (Bus, Train, Ferry, Cable car) and the Filters panel to choose routes, route colours, stop colour and size, the map style and how much to darken it. Toggle a selected bus-route chip to show or hide that route; use its palette icon to change its colour or × to remove it. Your Home Assistant home zone is shown. Until you choose something, it is just a map.
 - **Service alerts**: the map shows an alerts button when alerts affect your selection. Alerts are colour coded by severity.
 - **Ferries via AISStream**: ferry positions come from one shared AISStream connection (the AISStream key is optional). It only runs while a map card is open and can never affect the bus and train data.
 - **No entities to manage**: the integration is a data service. Your choices are saved to your Home Assistant user, so they follow you between browsers and devices. Existing browser-saved choices are imported the first time that user opens a card.
